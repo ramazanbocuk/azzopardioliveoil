@@ -157,6 +157,25 @@ describe("checkout", () => {
     const variant = await db.variant.findUniqueOrThrow({ where: { sku: "t-500" } });
     expect([variant.stock, variant.reserved]).toEqual([10, 2]); // held, not yet sold
     expect((await c.gql<{ cart: { itemCount: number } }>(`{ cart { itemCount } }`)).data?.cart.itemCount).toBe(0);
+
+    // The invoice goes to the delivery address unless told otherwise, and VAT is recorded per line and for shipping.
+    const order = await db.order.findFirstOrThrow({ include: { items: true } });
+    expect(order).toMatchObject({ billFirstName: order.shipFirstName, billLine1: order.shipLine1, billCountryCode: "BE", billCompany: null, fulfilmentStatus: "UNFULFILLED" });
+    expect(order.items[0]).toMatchObject({ taxRateBps: 600, weightGrams: 950, shippedQuantity: 0 });
+    expect((order.items[0].taxCents ?? 0) + (order.shippingTaxCents ?? 0)).toBe(order.taxCents);
+  });
+
+  it("bills to a separate company address when one is given", async () => {
+    const c = client();
+    await c.gql(`mutation { cartAdd(sku: "t-500", quantity: 1) { itemCount } }`);
+    const billing = { firstName: "Ada", lastName: "Accounts", company: "Trattoria Test BV", vatNumber: "BE0123456789", line1: "Kantoorlaan 9", postalCode: "2000", city: "Antwerp", countryCode: "be" };
+    const placed = await c.gql(CHECKOUT, { input: { email: "chef@example.com", shippingRateId: rates.standardRateId, address: ADDRESS, billing } });
+    expect(placed.errors).toBeUndefined();
+    expect(await db.order.findFirstOrThrow()).toMatchObject({ billCompany: "Trattoria Test BV", billVatNumber: "BE0123456789", billLine1: "Kantoorlaan 9", billCity: "Antwerp", billCountryCode: "BE", shipCity: ADDRESS.city });
+
+    await c.gql(`mutation { cartAdd(sku: "t-500", quantity: 1) { itemCount } }`);
+    const bad = await c.gql(CHECKOUT, { input: { email: "chef@example.com", shippingRateId: rates.standardRateId, address: ADDRESS, billing: { ...billing, line1: " " } } });
+    expect(code(bad)).toBe("BAD_INPUT");
   });
 
   it("accepts explicit nulls for optional fields, as a browser client sends them", async () => {

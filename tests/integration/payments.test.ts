@@ -153,11 +153,30 @@ describe("Stripe webhook", () => {
     const { c, number, accessToken, totalCents } = await placeOrder();
     await c.gql(PAY, { n: number, t: accessToken });
     const pending = sessionEvent("checkout.session.completed", { id: `cs_test_${number}`, amount_total: totalCents, currency: "eur", payment_status: "unpaid" });
-    expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(pending.payload, pending.signature))).toBe("ignored");
-    expect((await db.order.findFirstOrThrow()).paymentStatus).toBe("UNPAID");
+    expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(pending.payload, pending.signature))).toBe("processing");
+    expect(await db.order.findFirstOrThrow()).toMatchObject({ paymentStatus: "PROCESSING", status: "PAYMENT_PROCESSING", paidAt: null });
+    expect(await db.outboxJob.count()).toBe(0); // nobody is told an order is paid before it is
+
+    // The held stock is not handed to someone else while the bank is still deciding.
+    expect(await releaseExpiredReservations(db, new Date(Date.now() + 48 * 3600_000))).toBe(0);
 
     const settled = sessionEvent("checkout.session.async_payment_succeeded", { id: `cs_test_${number}`, amount_total: totalCents, currency: "eur", payment_status: "paid" });
     expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(settled.payload, settled.signature))).toBe("paid");
+    expect(await db.order.findFirstOrThrow()).toMatchObject({ paymentStatus: "PAID", status: "PAID" });
+    expect(await stockOf("t-500")).toEqual([8, 0]);
+  });
+
+  it("returns an order to pending payment when a delayed payment fails", async () => {
+    const { c, number, accessToken, totalCents } = await placeOrder();
+    await c.gql(PAY, { n: number, t: accessToken });
+    const pending = sessionEvent("checkout.session.completed", { id: `cs_test_${number}`, amount_total: totalCents, currency: "eur", payment_status: "unpaid" });
+    await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(pending.payload, pending.signature));
+    const failed = sessionEvent("checkout.session.async_payment_failed", { id: `cs_test_${number}`, amount_total: totalCents, currency: "eur", payment_status: "unpaid" });
+    expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(failed.payload, failed.signature))).toBe("failed");
+    expect(await db.order.findFirstOrThrow()).toMatchObject({ paymentStatus: "FAILED", status: "PENDING_PAYMENT" });
+    // Now that the payment is dead, the lapsed reservation is released like any other.
+    expect(await releaseExpiredReservations(db, new Date(Date.now() + 48 * 3600_000))).toBe(1);
+    expect(await stockOf("t-500")).toEqual([10, 0]);
   });
 
   it("ignores events for payments it never created, and unrelated event types", async () => {

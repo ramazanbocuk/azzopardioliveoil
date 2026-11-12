@@ -27,6 +27,7 @@ No error-tracking service (such as Sentry) is installed. Adding one means allowi
 | Orders stay "awaiting payment" after customers pay | Stripe dashboard → Webhooks: are deliveries failing? Check `STRIPE_WEBHOOK_SECRET`. Stripe retries for days; once fixed, orders update themselves. Never mark an order paid by hand in the database. |
 | No notifications | Admin → Notifications: "skipped" names the missing setting; "failed" shows the provider's error. Fix, then Retry. Confirm the scheduler is calling `/api/cron/jobs`. |
 | Stock looks wrong | Each change is in the inventory ledger (`InventoryMovement`) with who and why. Correct through Products → Update stock, never directly in the database. |
+| A staff member cannot sign in | Five wrong passwords lock sign-in for 15 minutes. Changing `SEED_ADMIN_PASSWORD` after the account exists does nothing by itself: the seed only creates the first administrator. To set a new password, put it in `SEED_ADMIN_PASSWORD` and run `npm run admin:set-password`; this also signs that person out everywhere and clears the lock. |
 | Site down | `/api/health`. If 503, the database is unreachable: check the database host's status. If the build failed, redeploy the previous build. |
 | Suspected break-in | Deactivate affected staff accounts; rotate `APP_SECRET` (invalidates outstanding reset links), the Stripe keys and any exposed provider key; review the audit log; assess whether a personal-data breach must be reported to the Belgian Data Protection Authority within 72 hours. |
 

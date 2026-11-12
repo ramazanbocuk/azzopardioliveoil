@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicableRates, computeTotals, discountAmount, discountProblem, includedTaxCents, orderNumber, subtotalCents, totalWeightGrams, type DiscountRule, type RateRule } from "@/server/pricing";
+import { allocateCents, taxBreakdown, applicableRates, computeTotals, discountAmount, discountProblem, includedTaxCents, orderNumber, subtotalCents, totalWeightGrams, type DiscountRule, type RateRule } from "@/server/pricing";
 
 const lines = [
   { unitPriceCents: 1800, quantity: 2, weightGrams: 950 },
@@ -55,6 +55,26 @@ describe("pricing", () => {
   it("computes totals, with VAT null when no rate is configured", () => {
     expect(computeTotals({ lines, discount: discount(), shippingCents: 695, taxRateBps: 600 })).toEqual({ subtotalCents: 6800, discountCents: 680, shippingCents: 695, taxCents: includedTaxCents(6815, 600), totalCents: 6815 });
     expect(computeTotals({ lines, discount: null, shippingCents: 0, taxRateBps: null }).taxCents).toBeNull();
+  });
+
+  it("splits an amount into whole cents that always add up", () => {
+    expect(allocateCents(100, [1, 1, 1])).toEqual([34, 33, 33]);
+    expect(allocateCents(680, [3600, 3200])).toEqual([360, 320]);
+    expect(allocateCents(0, [5, 5])).toEqual([0, 0]);
+    expect(allocateCents(50, [0, 0])).toEqual([0, 0]);
+    for (const total of [1, 7, 999, 12345]) expect(allocateCents(total, [3, 7, 11, 13]).reduce((a, b) => a + b, 0)).toBe(total);
+  });
+
+  it("breaks VAT down per line and shipping, adding up to the order's VAT exactly", () => {
+    for (const [discountCents, shippingCents, taxRateBps] of [[0, 695, 600], [680, 695, 600], [680, 0, 2100], [333, 1495, 2100], [6800, 695, 600]] as const) {
+      const breakdown = taxBreakdown({ lines, discountCents, shippingCents, taxRateBps });
+      const total = includedTaxCents(6800 - discountCents + shippingCents, taxRateBps);
+      expect(breakdown.lineNetCents.reduce((a, b) => a + b, 0)).toBe(6800 - discountCents);
+      expect(breakdown.lineTaxCents.reduce<number>((a, b) => a + (b ?? 0), 0) + (breakdown.shippingTaxCents ?? 0)).toBe(total);
+      expect(breakdown.lineTaxCents.every((value) => value !== null && value >= 0)).toBe(true);
+    }
+    expect(taxBreakdown({ lines, discountCents: 0, shippingCents: 695, taxRateBps: 600 })).toMatchObject({ lineNetCents: [3600, 3200], shippingTaxCents: 39 });
+    expect(taxBreakdown({ lines, discountCents: 0, shippingCents: 695, taxRateBps: null })).toEqual({ lineNetCents: [3600, 3200], lineTaxCents: [null, null], shippingTaxCents: null });
   });
 
   it("formats order numbers", () => {

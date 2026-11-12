@@ -4,7 +4,7 @@ import type { Ctx } from "./context";
 import { hashToken, newToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError, parse } from "./errors";
-import { applicableRates, computeTotals, orderNumber } from "./pricing";
+import { applicableRates, computeTotals, orderNumber, taxBreakdown } from "./pricing";
 import { enforce } from "./rateLimit";
 
 /** How long stock stays held for an order that has not been paid yet. */
@@ -26,6 +26,21 @@ const checkoutInput = z.object({
     countryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, "Choose a country."),
     phone: z.string().trim().max(40).nullish(),
   }),
+  /** Omitted = bill to the delivery address. */
+  billing: z
+    .object({
+      firstName: text(80),
+      lastName: text(80),
+      company: z.string().trim().max(160).nullish(),
+      vatNumber: z.string().trim().max(40).nullish(),
+      line1: text(160),
+      line2: z.string().trim().max(160).nullish(),
+      postalCode: text(20),
+      city: text(120),
+      region: z.string().trim().max(120).nullish(),
+      countryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, "Choose a country."),
+    })
+    .nullish(),
   customerNote: z.string().trim().max(500).nullish(),
   // GraphQL sends null for omitted optional inputs, so every optional field accepts it.
   locale: z.string().max(10).nullish().transform((value) => value ?? "en"),
@@ -81,6 +96,9 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
   const tax = await ctx.db.taxRate.findFirst({ where: { countryCode: data.address.countryCode, isActive: true } });
   const totals = computeTotals({ lines, discount, shippingCents: rate.priceCents, taxRateBps: tax?.rateBps ?? null });
 
+  const breakdown = taxBreakdown({ lines, discountCents: totals.discountCents, shippingCents: totals.shippingCents, taxRateBps: tax?.rateBps ?? null });
+  const billing = data.billing ?? { ...data.address, company: null, vatNumber: null };
+
   const accessToken = newToken();
 
   const order = await ctx.db.$transaction(async (tx) => {
@@ -108,6 +126,7 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
         shippingCents: totals.shippingCents,
         taxCents: totals.taxCents,
         taxRateBps: tax?.rateBps ?? null,
+        shippingTaxCents: breakdown.shippingTaxCents,
         totalCents: totals.totalCents,
         discountCode: discount?.code ?? null,
         shippingRateName: rate.name,
@@ -122,11 +141,21 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
         shipRegion: data.address.region || null,
         shipCountryCode: data.address.countryCode,
         shipPhone: data.address.phone || null,
+        billFirstName: billing.firstName,
+        billLastName: billing.lastName,
+        billCompany: billing.company || null,
+        billVatNumber: billing.vatNumber || null,
+        billLine1: billing.line1,
+        billLine2: billing.line2 || null,
+        billPostalCode: billing.postalCode,
+        billCity: billing.city,
+        billRegion: billing.region || null,
+        billCountryCode: billing.countryCode,
         customerNote: data.customerNote || null,
         reservedUntil: new Date(Date.now() + RESERVATION_MINUTES * 60_000),
         accessTokenHash: hashToken(accessToken),
         items: {
-          create: cart.items.map((item) => ({
+          create: cart.items.map((item, index) => ({
             variantId: item.variantId,
             sku: item.variant.sku,
             productName: item.variant.product.name,
@@ -134,6 +163,11 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
             unitPriceCents: item.variant.priceCents,
             quantity: item.quantity,
             lineTotalCents: item.variant.priceCents * item.quantity,
+            taxRateBps: tax?.rateBps ?? null,
+            taxCents: breakdown.lineTaxCents[index],
+            weightGrams: item.variant.weightGrams,
+            hsCode: item.variant.product.hsCode,
+            originCountry: item.variant.product.originCountry,
           })),
         },
         events: { create: { kind: "placed", message: "Order placed, awaiting payment." } },
@@ -155,12 +189,13 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
  * to sale. Safe to run repeatedly; called by a scheduled job.
  */
 export async function releaseExpiredReservations(db: Db, now = new Date()): Promise<number> {
-  const expired = await db.order.findMany({ where: { status: "PENDING_PAYMENT", reservedUntil: { lt: now } }, include: { items: true } });
+  // An order whose payment is still being processed by the bank keeps its stock until the provider answers.
+  const expired = await db.order.findMany({ where: { paymentStatus: { in: ["UNPAID", "FAILED"] }, cancelledAt: null, reservedUntil: { lt: now } }, include: { items: true } });
   let released = 0;
   for (const order of expired) {
     await db.$transaction(async (tx) => {
       // Re-check inside the transaction: a webhook may have paid it meanwhile.
-      const claimed = await tx.order.updateMany({ where: { id: order.id, status: "PENDING_PAYMENT" }, data: { status: "CANCELLED", cancelledAt: now, reservedUntil: null } });
+      const claimed = await tx.order.updateMany({ where: { id: order.id, paymentStatus: { in: ["UNPAID", "FAILED"] }, cancelledAt: null }, data: { status: "CANCELLED", cancelledAt: now, reservedUntil: null } });
       if (claimed.count !== 1) return;
       for (const item of order.items) {
         if (item.variantId) await tx.$executeRaw`UPDATE "Variant" SET "reserved" = GREATEST("reserved" - ${item.quantity}, 0) WHERE "id" = ${item.variantId}`;
@@ -173,7 +208,8 @@ export async function releaseExpiredReservations(db: Db, now = new Date()): Prom
   return released;
 }
 
-const orderInclude = { items: true, events: { orderBy: { createdAt: "asc" } }, shipments: true } as const;
+// Customers never see staff-only timeline entries.
+const orderInclude = { items: true, events: { where: { isInternal: false }, orderBy: { createdAt: "asc" } }, shipments: true } as const;
 
 /** Guest lookup. Number and email must both match; the answer is the same for "wrong number" and "wrong email". */
 export async function findOrderForGuest(ctx: Ctx, number: string, email: string) {

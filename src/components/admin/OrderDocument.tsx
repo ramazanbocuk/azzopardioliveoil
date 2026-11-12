@@ -3,6 +3,7 @@ import { date, money } from "./ui";
 import { PrintButton } from "./PrintButton";
 
 type Store = Record<string, string | boolean | null>;
+const rate = (bps: number) => `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
 
 /**
  * Printable invoice or packing slip. Seller details come from Settings; a
@@ -36,18 +37,36 @@ export function OrderDocument({ kind, order, store }: { kind: "invoice" | "packi
         </div>
       </header>
 
-      <section className="mt-6">
-        <h2 className="text-label text-stone-700">Deliver to</h2>
-        <address className="mt-2 not-italic">
-          {order.shipFirstName} {order.shipLastName}
-          <span className="block">{order.shipLine1}</span>
-          {order.shipLine2 && <span className="block">{order.shipLine2}</span>}
-          <span className="block">
-            {order.shipPostalCode} {order.shipCity}
-          </span>
-          <span className="block">{order.shipCountryCode}</span>
-        </address>
-        {!invoice && order.customerNote && <p className="mt-3">Note: {order.customerNote}</p>}
+      <section className="mt-6 grid gap-8 sm:grid-cols-2">
+        {invoice && (
+          <div>
+            <h2 className="text-label text-stone-700">Bill to</h2>
+            <address className="mt-2 not-italic">
+              {order.billCompany && <span className="block">{order.billCompany}</span>}
+              {order.billFirstName} {order.billLastName}
+              <span className="block">{order.billLine1}</span>
+              {order.billLine2 && <span className="block">{order.billLine2}</span>}
+              <span className="block">
+                {order.billPostalCode} {order.billCity}
+              </span>
+              <span className="block">{order.billCountryCode}</span>
+              {order.billVatNumber && <span className="block">VAT {order.billVatNumber}</span>}
+            </address>
+          </div>
+        )}
+        <div>
+          <h2 className="text-label text-stone-700">Deliver to</h2>
+          <address className="mt-2 not-italic">
+            {order.shipFirstName} {order.shipLastName}
+            <span className="block">{order.shipLine1}</span>
+            {order.shipLine2 && <span className="block">{order.shipLine2}</span>}
+            <span className="block">
+              {order.shipPostalCode} {order.shipCity}
+            </span>
+            <span className="block">{order.shipCountryCode}</span>
+          </address>
+          {!invoice && order.customerNote && <p className="mt-3">Note: {order.customerNote}</p>}
+        </div>
       </section>
 
       <table className="mt-8 w-full border-collapse text-left">
@@ -79,15 +98,21 @@ export function OrderDocument({ kind, order, store }: { kind: "invoice" | "packi
       </table>
 
       {invoice && (
-        <dl className="ml-auto mt-6 w-72 space-y-1.5">
+        <dl className="ml-auto mt-6 w-80 space-y-1.5">
           <div className="flex justify-between"><dt>Subtotal</dt><dd className="tabular-nums">{money(order.subtotalCents)}</dd></div>
           {order.discountCents > 0 && <div className="flex justify-between"><dt>Discount</dt><dd className="tabular-nums">−{money(order.discountCents)}</dd></div>}
           <div className="flex justify-between"><dt>Shipping</dt><dd className="tabular-nums">{money(order.shippingCents)}</dd></div>
           <div className="flex justify-between border-t border-ink/30 pt-2 font-medium"><dt>Total paid</dt><dd className="tabular-nums">{money(order.totalCents)}</dd></div>
-          <div className="flex justify-between text-stone-700">
-            <dt>Of which VAT{order.taxRateBps !== null ? ` (${(order.taxRateBps / 100).toFixed(order.taxRateBps % 100 ? 2 : 0)}%)` : ""}</dt>
-            <dd className="tabular-nums">{order.taxCents === null ? "[no VAT rate set]" : money(order.taxCents)}</dd>
-          </div>
+          {order.taxCents === null || order.taxRateBps === null ? (
+            <div className="flex justify-between text-stone-700"><dt>VAT</dt><dd>[no VAT rate set]</dd></div>
+          ) : (
+            <div className="space-y-1 pt-1 text-stone-700">
+              <div className="flex justify-between"><dt>Total excluding VAT</dt><dd className="tabular-nums">{money(order.totalCents - order.taxCents)}</dd></div>
+              <div className="flex justify-between"><dt>VAT {rate(order.taxRateBps)} on goods</dt><dd className="tabular-nums">{money(order.taxCents - (order.shippingTaxCents ?? 0))}</dd></div>
+              <div className="flex justify-between"><dt>VAT {rate(order.taxRateBps)} on shipping</dt><dd className="tabular-nums">{order.shippingTaxCents === null ? "—" : money(order.shippingTaxCents)}</dd></div>
+              <div className="flex justify-between"><dt>VAT total</dt><dd className="tabular-nums">{money(order.taxCents)}</dd></div>
+            </div>
+          )}
         </dl>
       )}
 

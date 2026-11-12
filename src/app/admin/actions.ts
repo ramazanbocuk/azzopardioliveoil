@@ -3,6 +3,7 @@
 import { updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
+import * as fulfilment from "@/server/fulfilment";
 import { formData, run } from "@/server/adminSession";
 import { afterResponse } from "@/server/afterResponse";
 import { adminLogin, adminLogout, requireAdmin } from "@/server/auth";
@@ -37,18 +38,72 @@ export async function setLot(orderId: string, itemId: string, form: FormData) {
 }
 
 export async function startPacking(orderId: string) {
-  await run(`/admin/orders/${orderId}`, (ctx) => admin.startFulfilment(ctx, orderId), "Order moved to packing.");
+  await run(`/admin/orders/${orderId}`, (ctx) => admin.startFulfilment(ctx, orderId), "Order moved to processing.");
 }
 
+export async function markReady(orderId: string) {
+  await run(`/admin/orders/${orderId}`, (ctx) => admin.markReady(ctx, orderId), "Order marked ready for fulfilment.");
+}
+
+/** Reads the shipment form: units per line, and identical boxes described once (kg and cm, as people measure them). */
 export async function ship(orderId: string, form: FormData) {
   await run(
     `/admin/orders/${orderId}`,
     async (ctx) => {
-      await admin.markShipped(ctx, orderId, formData(form));
+      const number = (key: string) => Number(text(form, key).trim().replace(",", "."));
+      const items = [...form.keys()].filter((key) => key.startsWith("qty:")).map((key) => ({ orderItemId: key.slice(4), quantity: Math.round(number(key)) || 0 }));
+      const boxes = Math.min(20, Math.max(1, Math.round(number("boxes")) || 1));
+      const kg = number("weightKg");
+      const mm = (key: string) => (text(form, key).trim() ? Math.round(number(key) * 10) : null);
+      const parcels = kg > 0 ? Array.from({ length: boxes }, () => ({ weightGrams: Math.round(kg * 1000), lengthMm: mm("lengthCm"), widthMm: mm("widthCm"), heightMm: mm("heightCm") })) : null;
+      await admin.createShipment(ctx, orderId, { carrier: text(form, "carrier"), service: text(form, "service"), trackingNumber: text(form, "trackingNumber"), trackingUrl: text(form, "trackingUrl"), items: items.length ? items : null, parcels });
       afterResponse(() => processJobs(getPrisma()), "run after shipping");
     },
-    "Order marked as shipped.",
+    "Shipment recorded.",
   );
+}
+
+const boxesFrom = (form: FormData) => {
+  const number = (key: string) => Number(text(form, key).trim().replace(",", "."));
+  const count = Math.min(20, Math.max(1, Math.round(number("boxes")) || 1));
+  const mm = (key: string) => (text(form, key).trim() ? Math.round(number(key) * 10) : null);
+  return Array.from({ length: count }, () => ({ weightGrams: Math.round(number("weightKg") * 1000), lengthMm: mm("lengthCm"), widthMm: mm("widthCm"), heightMm: mm("heightCm") }));
+};
+
+/** Books a label with a carrier. The choice arrives as "carrier|service" from the rate table or the service list. */
+export async function bookCarrierLabel(orderId: string, form: FormData) {
+  await run(
+    `/admin/orders/${orderId}`,
+    async (ctx) => {
+      const [carrier, ...service] = text(form, "choice").split("|");
+      await fulfilment.bookLabel(ctx, orderId, { carrier, service: service.join("|"), boxes: boxesFrom(form) });
+      afterResponse(() => processJobs(getPrisma()), "run after booking");
+    },
+    "Label booked. Print it from the shipment below.",
+  );
+}
+
+export async function cancelShipment(orderId: string, shipmentId: string) {
+  await run(`/admin/orders/${orderId}`, async (ctx) => {
+    const result = await fulfilment.cancelBooking(ctx, shipmentId);
+    const url = new URL(`/admin/orders/${orderId}`, "http://admin.local");
+    url.searchParams.set("ok", result.cancelledWithCarrier ? "Shipment cancelled with the carrier." : "Shipment cancelled here. This carrier has no cancellation API: do not hand the parcel over, and void the label in the carrier's own portal if it offers that.");
+    return `${url.pathname}${url.search}`;
+  });
+}
+
+export async function saveShipping(form: FormData) {
+  await run("/admin/settings", (ctx) => admin.saveSetting(ctx, "shipping", formData(form)), "Shipping origin saved.");
+}
+
+export async function bulkOrders(backTo: string, form: FormData) {
+  await run(backTo, async (ctx) => {
+    const result = await admin.bulkUpdateOrders(ctx, form.getAll("ids").map(String), text(form, "action"));
+    const skipped = result.skipped.length ? ` Skipped ${result.skipped.length}: ${result.skipped.slice(0, 5).map((row) => `${row.number} (${row.reason})`).join("; ")}${result.skipped.length > 5 ? "…" : ""}` : "";
+    const url = new URL(backTo, "http://admin.local");
+    url.searchParams.set(result.done.length ? "ok" : "error", `${result.done.length} order${result.done.length === 1 ? "" : "s"} updated.${skipped}`);
+    return `${url.pathname}${url.search}`;
+  });
 }
 
 export async function deliver(orderId: string) {

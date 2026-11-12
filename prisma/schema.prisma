@@ -48,27 +48,31 @@ model CategoryTranslation {
 }
 
 model Product {
-  id             String    @id @default(cuid())
-  slug           String    @unique
-  name           String
-  blurb          String    @default("")
-  description    String    @default("")
-  categoryId     String
-  isVisible      Boolean   @default(false)
-  isFeatured     Boolean   @default(false)
-  position       Int       @default(0)
-  seoTitle       String?
-  seoDescription String?
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  name               String
+  blurb              String    @default("")
+  description        String    @default("")
+  categoryId         String
+  isVisible          Boolean   @default(false)
+  isFeatured         Boolean   @default(false)
+  position           Int       @default(0)
+  seoTitle           String?
+  seoDescription     String?
   // Administrator-entered label facts. Null = not yet recorded.
-  origin         String?
-  cultivar       String?
-  ingredients    String?
-  storage        String?
+  origin             String?
+  cultivar           String?
+  ingredients        String?
+  storage            String?
   /// [{ label, value }] per 100 ml, as printed on the label.
-  nutrition      Json?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
+  nutrition          Json?
+  // Customs facts for shipments leaving the EU. Administrator-entered; null = not yet recorded.
+  hsCode             String?
+  customsDescription String?
+  originCountry      String?   @db.Char(2)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   category     Category             @relation(fields: [categoryId], references: [id])
   variants     Variant[]
@@ -411,18 +415,34 @@ model TaxRate {
 
 // ───────────────────────────── Orders ─────────────────────────────
 
+/// One headline state, derived from payment and fulfilment by `deriveOrderStatus`. Never set by hand.
 enum OrderStatus {
   PENDING_PAYMENT
+  PAYMENT_PROCESSING
   PAID
-  FULFILLING
+  PROCESSING
+  READY_FOR_FULFILMENT
+  PARTIALLY_SHIPPED
   SHIPPED
   DELIVERED
   CANCELLED
   REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum FulfilmentStatus {
+  UNFULFILLED
+  PROCESSING
+  READY
+  PARTIALLY_SHIPPED
+  SHIPPED
+  DELIVERED
 }
 
 enum PaymentStatus {
   UNPAID
+  /// The customer finished checkout with a delayed method; the money has not arrived yet.
+  PROCESSING
   PAID
   PARTIALLY_REFUNDED
   REFUNDED
@@ -430,46 +450,60 @@ enum PaymentStatus {
 }
 
 model Order {
-  id                 String        @id @default(cuid())
+  id               String           @id @default(cuid())
   /// Human number is derived from this: AZZ-{1000 + sequence}.
-  sequence           Int           @unique @default(autoincrement())
-  number             String?       @unique
-  customerId         String?
-  email              String
-  status             OrderStatus   @default(PENDING_PAYMENT)
-  paymentStatus      PaymentStatus @default(UNPAID)
-  currency           String        @default("EUR") @db.Char(3)
-  locale             String        @default("en")
-  subtotalCents      Int
-  discountCents      Int           @default(0)
-  shippingCents      Int
+  sequence         Int              @unique @default(autoincrement())
+  number           String?          @unique
+  customerId       String?
+  email            String
+  status           OrderStatus      @default(PENDING_PAYMENT)
+  paymentStatus    PaymentStatus    @default(UNPAID)
+  fulfilmentStatus FulfilmentStatus @default(UNFULFILLED)
+  currency         String           @default("EUR") @db.Char(3)
+  locale           String           @default("en")
+  subtotalCents    Int
+  discountCents    Int              @default(0)
+  shippingCents    Int
   /// VAT contained in the total. Null when no rate was configured for the destination.
-  taxCents           Int?
-  taxRateBps         Int?
-  totalCents         Int
-  discountCode       String?
-  shippingRateName   String
-  shippingCarrier    String?
-  weightGrams        Int
+  taxCents         Int?
+  taxRateBps       Int?
+  /// VAT contained in the shipping charge. Part of taxCents.
+  shippingTaxCents Int?
+  totalCents       Int
+  discountCode     String?
+  shippingRateName String
+  shippingCarrier  String?
+  weightGrams      Int
   // Delivery address snapshot
-  shipFirstName      String
-  shipLastName       String
-  shipLine1          String
-  shipLine2          String?
-  shipPostalCode     String
-  shipCity           String
-  shipRegion         String?
-  shipCountryCode    String        @db.Char(2)
-  shipPhone          String?
-  customerNote       String?
+  shipFirstName    String
+  shipLastName     String
+  shipLine1        String
+  shipLine2        String?
+  shipPostalCode   String
+  shipCity         String
+  shipRegion       String?
+  shipCountryCode  String           @db.Char(2)
+  shipPhone        String?
+  // Billing address snapshot (equal to delivery unless the customer gave another)
+  billFirstName    String
+  billLastName     String
+  billCompany      String?
+  billVatNumber    String?
+  billLine1        String
+  billLine2        String?
+  billPostalCode   String
+  billCity         String
+  billRegion       String?
+  billCountryCode  String           @db.Char(2)
+  customerNote     String?
   /// Hash of the link token that lets a guest open their own order page.
-  accessTokenHash    String?
+  accessTokenHash  String?
   /// Reservation is released if still unpaid after this moment.
-  reservedUntil      DateTime?
-  placedAt           DateTime      @default(now())
-  paidAt             DateTime?
-  cancelledAt        DateTime?
-  updatedAt          DateTime      @updatedAt
+  reservedUntil    DateTime?
+  placedAt         DateTime         @default(now())
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+  updatedAt        DateTime         @updatedAt
 
   customer  Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items     OrderItem[]
@@ -481,33 +515,49 @@ model Order {
 
   @@index([customerId, placedAt])
   @@index([status, placedAt])
+  @@index([fulfilmentStatus, placedAt])
   @@index([email])
 }
 
 model OrderItem {
-  id             String  @id @default(cuid())
-  orderId        String
-  variantId      String?
-  sku            String
-  productName    String
-  variantLabel   String
-  lotNumber      String?
-  unitPriceCents Int
-  quantity       Int
-  lineTotalCents Int
-  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id              String         @id @default(cuid())
+  orderId         String
+  variantId       String?
+  sku             String
+  productName     String
+  variantLabel    String
+  lotNumber       String?
+  unitPriceCents  Int
+  quantity        Int
+  lineTotalCents  Int
+  /// VAT rate applied to this line (percent × 100) and the VAT contained in it after discount.
+  taxRateBps      Int?
+  taxCents        Int?
+  /// Units of this line already sent in a shipment.
+  shippedQuantity Int            @default(0)
+  // Customs snapshot, needed on labels for destinations outside the EU
+  weightGrams     Int            @default(0)
+  hsCode          String?
+  originCountry   String?        @db.Char(2)
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shipmentItems   ShipmentItem[]
 
   @@index([orderId])
 }
 
 /// Customer-visible timeline.
 model OrderEvent {
-  id        String   @id @default(cuid())
-  orderId   String
-  kind      String
-  message   String
-  createdAt DateTime @default(now())
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id          String     @id @default(cuid())
+  orderId     String
+  kind        String
+  message     String
+  /// The staff member who caused it; null for the customer, the payment provider or the system.
+  adminUserId String?
+  /// Internal events are shown to staff only, never on the customer's order page.
+  isInternal  Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor       AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
 
   @@index([orderId, createdAt])
 }
@@ -582,22 +632,81 @@ enum ShipmentStatus {
   DELIVERED
   RETURNED
   FAILED
+  CANCELLED
 }
 
 model Shipment {
-  id             String         @id @default(cuid())
-  orderId        String
-  carrier        String
-  trackingNumber String?
-  trackingUrl    String?
-  labelUrl       String?
-  status         ShipmentStatus @default(PENDING)
-  shippedAt      DateTime?
-  deliveredAt    DateTime?
-  createdAt      DateTime       @default(now())
-  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id                  String          @id @default(cuid())
+  orderId             String
+  carrier             String
+  /// The carrier's product, e.g. "bpack 24h Pro" or "Express Worldwide".
+  service             String?
+  /// The carrier's own id for the booking, used to cancel it or fetch its label.
+  carrierRef          String?
+  trackingNumber      String?
+  trackingUrl         String?
+  labelUrl            String?
+  status              ShipmentStatus  @default(PENDING)
+  /// What the carrier charges us, when known. Not what the customer paid.
+  costCents           Int?
+  estimatedDeliveryAt DateTime?
+  /// "carrier" when booked through a carrier's API, "manual" when typed in by staff.
+  source              String          @default("manual")
+  /// The carrier's tracking history, as last read: [{ at, description, location }].
+  trackingEvents      Json?
+  trackingCheckedAt   DateTime?
+  cancelledAt         DateTime?
+  adminUserId         String?
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  createdAt           DateTime        @default(now())
+  order               Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  parcels             Parcel[]
+  items               ShipmentItem[]
+  labels              ShipmentLabel[]
 
   @@index([orderId])
+}
+
+/// One physical box in a shipment.
+model Parcel {
+  id             String   @id @default(cuid())
+  shipmentId     String
+  weightGrams    Int
+  lengthMm       Int?
+  widthMm        Int?
+  heightMm       Int?
+  trackingNumber String?
+  shipment       Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+/// A label document exactly as the carrier issued it. Kept in the database so it can be reprinted.
+model ShipmentLabel {
+  id             String   @id @default(cuid())
+  shipmentId     String
+  position       Int      @default(0)
+  mime           String
+  data           Bytes
+  trackingNumber String?
+  createdAt      DateTime @default(now())
+  shipment       Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, position])
+}
+
+/// Which order lines, and how many units, a shipment carries. Makes part-shipments possible.
+model ShipmentItem {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  orderItemId String
+  quantity    Int
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, orderItemId])
+  @@index([orderItemId])
 }
 
 enum ReturnStatus {
@@ -643,6 +752,7 @@ model AdminUser {
   sessions          AdminSession[]
   notes             OrderNote[]
   verifiedDocuments BatchDocument[]
+  orderEvents       OrderEvent[]
 }
 
 model AdminSession {

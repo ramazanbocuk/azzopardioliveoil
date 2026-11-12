@@ -42,6 +42,9 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             <Field label="Olive variety" name="cultivar" defaultValue={product?.cultivar ?? ""} />
             <TextArea label="Ingredients" name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} />
             <TextArea label="Storage" name="storage" rows={2} defaultValue={product?.storage ?? ""} />
+            <Field label="Customs (HS) code" name="hsCode" inputMode="numeric" defaultValue={product?.hsCode ?? ""} hint="6 to 10 digits. Needed on labels for parcels leaving the EU. Confirm the code with your customs adviser." />
+            <Field label="Country of origin" name="originCountry" maxLength={2} defaultValue={product?.originCountry ?? ""} hint="Two-letter code, such as IT." />
+            <Field label="Customs description" name="customsDescription" defaultValue={product?.customsDescription ?? ""} hint="Plain description of the goods for the customs declaration." />
           </div>
           <p className="text-small mt-4 text-stone-700">The nutrition table, certifications and awards are not editable here yet. Harvest, mill and bottling dates are recorded per lot.</p>
         </Card>

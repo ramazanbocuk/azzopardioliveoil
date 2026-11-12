@@ -22,6 +22,9 @@ export function checkEnvironment(env: Record<string, string | undefined> = proce
 
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) warning("Stripe is not connected: orders will be created unpaid and refunds cannot be sent.");
   else if (production && /^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY)) warning("Stripe is using a TEST key in production: no real money will be taken.");
+  if (!(env.BPOST_ACCOUNT_ID && env.BPOST_PASSPHRASE) && !(env.DHL_EXPRESS_API_KEY && env.DHL_EXPRESS_API_SECRET && env.DHL_EXPRESS_ACCOUNT_NUMBER) && !(env.FEDEX_CLIENT_ID && env.FEDEX_CLIENT_SECRET && env.FEDEX_ACCOUNT_NUMBER)) {
+    warning("No carrier is connected (bpost, DHL Express, FedEx): labels cannot be booked and shipments are recorded by hand.");
+  }
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) warning("Email (Resend) is not connected: no confirmation, shipping, reset or owner emails will be sent.");
   if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_API_VERSION || !env.WHATSAPP_TEMPLATE_NAME) warning("WhatsApp is not connected: no WhatsApp order alerts will be sent.");
 

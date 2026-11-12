@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
+import { PasswordField } from "@/components/admin/PasswordField";
 import { SignInError } from "@/components/admin/SignInError";
 import { Field, Submit } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
@@ -20,7 +21,8 @@ const NAV = [
   { href: "/admin/discounts", label: "Discounts" },
   { href: "/admin/newsletter", label: "Newsletter" },
   { href: "/admin/notifications", label: "Notifications" },
-  { href: "/admin/shipping", label: "Shipping & VAT" },
+  { href: "/admin/fulfilment", label: "Shipping & fulfilment" },
+  { href: "/admin/shipping", label: "Shipping rates & VAT" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/staff", label: "Staff" },
   { href: "/admin/audit", label: "Audit log" },
@@ -37,7 +39,7 @@ function SignIn() {
         </Suspense>
         <div className="mt-6 space-y-4">
           <Field label="Email address" name="email" type="email" required autoComplete="username" />
-          <Field label="Password" name="password" type="password" required autoComplete="current-password" />
+          <PasswordField label="Password" name="password" required autoComplete="current-password" />
         </div>
         <Submit className="mt-6 w-full">Sign in</Submit>
         <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>

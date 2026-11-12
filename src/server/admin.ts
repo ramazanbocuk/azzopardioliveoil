@@ -1,9 +1,11 @@
 import { z } from "zod";
-import type { AdminRole, OrderStatus, Prisma } from "@/generated/prisma/client";
+import type { AdminRole, FulfilmentStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "./auth";
 import type { Ctx } from "./context";
 import { hashPassword } from "./crypto";
+import type { Tx } from "./db";
 import { AppError, parse } from "./errors";
+import { ORDER_STATUSES, PAYMENT_ALLOWS_FULFILMENT, fulfilmentFromQuantities, syncOrderStatus } from "./orderStatus";
 import { getPaymentProvider } from "./payments";
 import { eraseCustomerData } from "./privacy";
 
@@ -18,7 +20,7 @@ import { eraseCustomerData } from "./privacy";
  *   ADMINISTRATOR  + refunds, VAT, settings, staff accounts, data erasure
  */
 
-async function audit(ctx: Ctx, action: string, entity: string, entityId: string | null, data?: Prisma.InputJsonValue) {
+export async function audit(ctx: Ctx, action: string, entity: string, entityId: string | null, data?: Prisma.InputJsonValue) {
   await ctx.db.auditLog.create({ data: { actorType: "admin", actorId: ctx.admin?.id ?? null, action, entity, entityId, data, ip: ctx.ip } });
 }
 
@@ -45,7 +47,6 @@ export function eurosToCents(input: unknown): number {
 
 // ───────────────────────────── Dashboard ─────────────────────────────
 
-const PAID_STATES: OrderStatus[] = ["PAID", "FULFILLING", "SHIPPED", "DELIVERED"];
 
 export async function dashboard(ctx: Ctx) {
   requireAdmin(ctx);
@@ -53,7 +54,8 @@ export async function dashboard(ctx: Ctx) {
   const now = new Date();
   const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const paid = { status: { in: PAID_STATES } } satisfies Prisma.OrderWhereInput;
+  // Revenue counts orders whose money we hold, wherever they are in fulfilment.
+  const paid = { paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT } } satisfies Prisma.OrderWhereInput;
 
   const [total, month, today, recent, customers, newCustomers, bestSellers, daily, lowStock, abandoned, awaiting, cartsWithItems] = await Promise.all([
     db.order.aggregate({ where: paid, _sum: { totalCents: true }, _count: true }),
@@ -65,14 +67,14 @@ export async function dashboard(ctx: Ctx) {
     db.orderItem.groupBy({ by: ["sku", "productName", "variantLabel"], where: { order: paid }, _sum: { quantity: true, lineTotalCents: true }, orderBy: { _sum: { quantity: "desc" } }, take: 5 }),
     db.$queryRaw<{ day: Date; revenue: bigint; orders: bigint }[]>`
       SELECT date_trunc('day', "paidAt") AS day, SUM("totalCents")::bigint AS revenue, COUNT(*)::bigint AS orders
-      FROM "Order" WHERE "paidAt" >= now() - interval '30 days' AND "status" IN ('PAID','FULFILLING','SHIPPED','DELIVERED')
+      FROM "Order" WHERE "paidAt" >= now() - interval '30 days' AND "paymentStatus" IN ('PAID','PARTIALLY_REFUNDED')
       GROUP BY 1 ORDER BY 1`,
     db.$queryRaw<{ sku: string; label: string; name: string; available: number }[]>`
       SELECT v."sku", v."label", p."name", (v."stock" - v."reserved")::int AS available
       FROM "Variant" v JOIN "Product" p ON p."id" = v."productId"
       WHERE v."isActive" AND p."deletedAt" IS NULL AND v."stock" - v."reserved" <= v."lowStockThreshold" ORDER BY available ASC LIMIT 10`,
     db.cart.count({ where: { items: { some: {} }, updatedAt: { lt: new Date(now.getTime() - 24 * 3600_000) } } }),
-    db.order.count({ where: { status: { in: ["PAID", "FULFILLING"] } } }),
+    db.order.count({ where: { ...paid, cancelledAt: null, fulfilmentStatus: { in: ["UNFULFILLED", "PROCESSING", "READY", "PARTIALLY_SHIPPED"] } } }),
     db.cart.count({ where: { items: { some: {} } } }),
   ]);
 
@@ -97,25 +99,86 @@ export async function dashboard(ctx: Ctx) {
 
 // ───────────────────────────── Orders ─────────────────────────────
 
-const orderDetail = { items: true, events: { orderBy: { createdAt: "asc" } }, notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } }, payments: { include: { refunds: true } }, shipments: true, returns: true, customer: true } as const;
+const orderDetail = {
+  items: true,
+  events: { orderBy: { createdAt: "asc" }, include: { actor: { select: { name: true } } } },
+  notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } },
+  payments: { include: { refunds: true } },
+  // Label bytes stay in the database until someone prints one; the page only needs to know they exist.
+  shipments: { orderBy: { createdAt: "asc" }, include: { parcels: true, items: true, labels: { select: { id: true, position: true }, orderBy: { position: "asc" } } } },
+  returns: true,
+  customer: true,
+} as const;
 
-export async function listOrders(ctx: Ctx, input: { q?: string; status?: string; page?: number }) {
-  requireAdmin(ctx);
-  const q = input.q?.trim();
-  const where: Prisma.OrderWhereInput = {
-    ...(input.status && input.status !== "ALL" ? { status: input.status as OrderStatus } : {}),
-    ...(q ? { OR: [{ number: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }, { shipLastName: { contains: q, mode: "insensitive" } }] } : {}),
+const orderFilter = z.object({
+  q: z.string().trim().max(120).nullish(),
+  status: z.string().nullish(),
+  payment: z.string().nullish(),
+  fulfilment: z.string().nullish(),
+  country: z.string().trim().toUpperCase().nullish(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish().or(z.literal("")),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish().or(z.literal("")),
+  page: z.coerce.number().int().min(1).max(10_000).default(1).catch(1),
+});
+export type OrderFilter = z.input<typeof orderFilter>;
+
+const isOneOf = <T extends string>(values: readonly T[], value: string | null | undefined): value is T => !!value && (values as readonly string[]).includes(value);
+const PAYMENT_STATUSES = ["UNPAID", "PROCESSING", "PAID", "PARTIALLY_REFUNDED", "REFUNDED", "FAILED"] as const satisfies readonly PaymentStatus[];
+const FULFILMENT_STATUSES = ["UNFULFILLED", "PROCESSING", "READY", "PARTIALLY_SHIPPED", "SHIPPED", "DELIVERED"] as const satisfies readonly FulfilmentStatus[];
+
+function orderWhere(input: OrderFilter): Prisma.OrderWhereInput {
+  const filter = parse(orderFilter, input);
+  const q = filter.q?.trim();
+  const placedAt = {
+    ...(filter.from ? { gte: new Date(`${filter.from}T00:00:00Z`) } : {}),
+    ...(filter.to ? { lt: new Date(new Date(`${filter.to}T00:00:00Z`).getTime() + 86_400_000) } : {}),
   };
-  const page = Math.max(1, input.page ?? 1);
-  const [rows, count] = await Promise.all([ctx.db.order.findMany({ where, orderBy: { placedAt: "desc" }, take: 25, skip: (page - 1) * 25, include: { items: true } }), ctx.db.order.count({ where })]);
-  return { rows, count, page, pages: Math.max(1, Math.ceil(count / 25)) };
+  return {
+    ...(isOneOf(ORDER_STATUSES, filter.status) ? { status: filter.status } : {}),
+    ...(isOneOf(PAYMENT_STATUSES, filter.payment) ? { paymentStatus: filter.payment } : {}),
+    ...(isOneOf(FULFILMENT_STATUSES, filter.fulfilment) ? { fulfilmentStatus: filter.fulfilment } : {}),
+    ...(filter.country && /^[A-Z]{2}$/.test(filter.country) ? { shipCountryCode: filter.country } : {}),
+    ...(filter.from || filter.to ? { placedAt } : {}),
+    ...(q
+      ? {
+          OR: [
+            { number: { contains: q.replace(/^#/, ""), mode: "insensitive" } },
+            { email: { contains: q, mode: "insensitive" } },
+            { shipLastName: { contains: q, mode: "insensitive" } },
+            { shipFirstName: { contains: q, mode: "insensitive" } },
+            { billCompany: { contains: q, mode: "insensitive" } },
+            { items: { some: { sku: { contains: q, mode: "insensitive" } } } },
+            { shipments: { some: { trackingNumber: { contains: q, mode: "insensitive" } } } },
+          ],
+        }
+      : {}),
+  };
+}
+
+export async function listOrders(ctx: Ctx, input: OrderFilter) {
+  requireAdmin(ctx);
+  const where = orderWhere(input);
+  const page = parse(orderFilter, input).page;
+  const [rows, count, countries] = await Promise.all([
+    ctx.db.order.findMany({ where, orderBy: { placedAt: "desc" }, take: 25, skip: (page - 1) * 25, include: { items: true } }),
+    ctx.db.order.count({ where }),
+    ctx.db.order.findMany({ distinct: ["shipCountryCode"], select: { shipCountryCode: true }, orderBy: { shipCountryCode: "asc" } }),
+  ]);
+  return { rows, count, page, pages: Math.max(1, Math.ceil(count / 25)), countries: countries.map((row) => row.shipCountryCode) };
 }
 
 export async function getOrder(ctx: Ctx, id: string) {
   requireAdmin(ctx);
   const order = await ctx.db.order.findFirst({ where: { OR: [{ id }, { number: id.toUpperCase() }] }, include: orderDetail });
   if (!order) throw new AppError("NOT_FOUND", "Order not found.");
-  return order;
+  // Every message queued for this order, sent or not: the customer communication history.
+  const messages = await ctx.db.outboxJob.findMany({ where: { payload: { path: ["orderId"], equals: order.id } }, orderBy: { createdAt: "asc" } });
+  return { ...order, messages };
+}
+
+/** Timeline entry carrying the staff member who caused it. Internal entries never reach the customer's page. */
+export function timeline(tx: Tx, ctx: Ctx, orderId: string, kind: string, message: string, isInternal = false) {
+  return tx.orderEvent.create({ data: { orderId, kind, message, isInternal, adminUserId: ctx.admin?.id ?? null } });
 }
 
 export async function addOrderNote(ctx: Ctx, orderId: string, body: string) {
@@ -135,37 +198,123 @@ export async function setItemLot(ctx: Ctx, orderItemId: string, lotNumber: strin
   await audit(ctx, "order.item.lot", "Order", item.orderId, { orderItemId, lot });
 }
 
-export async function startFulfilment(ctx: Ctx, orderId: string) {
-  requireAdmin(ctx);
-  const changed = await ctx.db.order.updateMany({ where: { id: orderId, status: "PAID" }, data: { status: "FULFILLING" } });
-  if (changed.count !== 1) throw new AppError("BAD_INPUT", "Only a paid order can be moved to packing.");
-  await ctx.db.orderEvent.create({ data: { orderId, kind: "fulfilling", message: "Your order is being packed." } });
-  await audit(ctx, "order.fulfilling", "Order", orderId);
+/** Moves an order one step along fulfilment, only from the states that step is allowed from. */
+async function advanceFulfilment(ctx: Ctx, orderId: string, from: FulfilmentStatus[], to: FulfilmentStatus, refusal: string, kind: string, message: string, isInternal: boolean) {
+  await ctx.db.$transaction(async (tx) => {
+    const changed = await tx.order.updateMany({ where: { id: orderId, cancelledAt: null, paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT }, fulfilmentStatus: { in: from } }, data: { fulfilmentStatus: to } });
+    if (changed.count !== 1) throw new AppError("BAD_INPUT", refusal);
+    await syncOrderStatus(tx, orderId);
+    await timeline(tx, ctx, orderId, kind, message, isInternal);
+  });
+  await audit(ctx, `order.${kind}`, "Order", orderId);
 }
 
-const shipInput = z.object({ carrier: z.string().trim().min(1, "Enter the carrier.").max(60), trackingNumber: optionalText(80), trackingUrl: z.string().trim().url("Enter a full tracking link.").max(500).nullish().or(z.literal("")) });
-
-/** Records a shipment entered by hand. Carrier label APIs are connected in Phase 7. */
-export async function markShipped(ctx: Ctx, orderId: string, input: unknown) {
+export async function startFulfilment(ctx: Ctx, orderId: string) {
   requireAdmin(ctx);
+  await advanceFulfilment(ctx, orderId, ["UNFULFILLED"], "PROCESSING", "Only a paid order that has not been started can be moved to processing.", "processing", "Your order is being prepared.", false);
+}
+
+/** Packed, checked and waiting for a label or collection. */
+export async function markReady(ctx: Ctx, orderId: string) {
+  requireAdmin(ctx);
+  await advanceFulfilment(ctx, orderId, ["UNFULFILLED", "PROCESSING"], "READY", "Only a paid order that has not shipped can be marked ready.", "ready", "Packed and ready for the carrier.", true);
+}
+
+/** What a carrier returned when it booked the shipment. Never built by hand. */
+export type CarrierBooking = { carrierRef: string; costCents: number | null; estimatedDelivery: Date | null; boxTrackingNumbers: string[]; labels: { mime: string; data: Buffer; trackingNumber?: string | null }[] };
+
+const parcelInput = z.object({
+  weightGrams: z.coerce.number().int().min(1, "Enter the parcel weight.").max(70_000),
+  lengthMm: z.coerce.number().int().min(1).max(3000).nullish(),
+  widthMm: z.coerce.number().int().min(1).max(3000).nullish(),
+  heightMm: z.coerce.number().int().min(1).max(3000).nullish(),
+});
+
+const shipInput = z.object({
+  carrier: z.string().trim().min(1, "Enter the carrier.").max(60),
+  service: optionalText(80),
+  trackingNumber: optionalText(80),
+  trackingUrl: z.string().trim().url("Enter a full tracking link.").max(500).nullish().or(z.literal("")),
+  /** Which lines, and how many units of each, are in this shipment. Omitted = everything not yet sent. */
+  items: z.array(z.object({ orderItemId: z.string().min(1), quantity: z.coerce.number().int().min(0).max(1000) })).nullish(),
+  /** The boxes. Omitted = one box weighing what the shipped units weigh. */
+  parcels: z.array(parcelInput).max(20).nullish(),
+});
+
+/**
+ * Records a shipment entered by hand: carrier, tracking and the boxes, typed
+ * by staff. Nothing is booked with a carrier here and no tracking number is
+ * invented. A shipment may carry part of an order; the order is "shipped"
+ * once every unit has left.
+ */
+export async function createShipment(ctx: Ctx, orderId: string, input: unknown, booked?: CarrierBooking) {
+  const admin = requireAdmin(ctx);
   const data = parse(shipInput, input);
-  await ctx.db.$transaction(async (tx) => {
-    const changed = await tx.order.updateMany({ where: { id: orderId, status: { in: ["PAID", "FULFILLING"] } }, data: { status: "SHIPPED" } });
-    if (changed.count !== 1) throw new AppError("BAD_INPUT", "Only a paid order can be shipped.");
-    await tx.shipment.create({ data: { orderId, carrier: data.carrier, trackingNumber: data.trackingNumber, trackingUrl: data.trackingUrl || null, status: "IN_TRANSIT", shippedAt: new Date() } });
-    await tx.orderEvent.create({ data: { orderId, kind: "shipped", message: `Shipped with ${data.carrier}.` } });
-    await tx.outboxJob.createMany({ data: [{ kind: "notify.customer.shipped", dedupeKey: `notify.customer.shipped:${orderId}`, payload: { orderId } }], skipDuplicates: true });
+  const shipmentId = await ctx.db.$transaction(async (tx) => {
+    // Lock the order row so two people cannot ship the same units at once.
+    await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
+    const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+    if (!order || order.cancelledAt || !PAYMENT_ALLOWS_FULFILMENT.includes(order.paymentStatus)) throw new AppError("BAD_INPUT", "Only a paid order can be shipped.");
+
+    const wanted = data.items?.filter((line) => line.quantity > 0) ?? order.items.map((item) => ({ orderItemId: item.id, quantity: item.quantity - item.shippedQuantity })).filter((line) => line.quantity > 0);
+    if (wanted.length === 0) throw new AppError("BAD_INPUT", "Everything on this order has already been shipped.");
+    let weight = 0;
+    for (const line of wanted) {
+      const item = order.items.find((candidate) => candidate.id === line.orderItemId);
+      if (!item) throw new AppError("BAD_INPUT", "That line is not part of this order.");
+      if (line.quantity > item.quantity - item.shippedQuantity) throw new AppError("BAD_INPUT", `${item.productName} ${item.variantLabel}: only ${item.quantity - item.shippedQuantity} left to ship.`);
+      weight += item.weightGrams * line.quantity;
+    }
+
+    const parcels = data.parcels?.length ? data.parcels : [{ weightGrams: Math.max(1, weight), lengthMm: null, widthMm: null, heightMm: null }];
+    const shipment = await tx.shipment.create({
+      data: {
+        orderId,
+        carrier: data.carrier,
+        service: data.service,
+        trackingNumber: data.trackingNumber,
+        trackingUrl: data.trackingUrl || null,
+        // A booked label is not yet in the carrier's hands; tracking moves it on from there.
+        status: booked ? "LABEL_CREATED" : "IN_TRANSIT",
+        source: booked ? "carrier" : "manual",
+        carrierRef: booked?.carrierRef ?? null,
+        costCents: booked?.costCents ?? null,
+        estimatedDeliveryAt: booked?.estimatedDelivery ?? null,
+        shippedAt: new Date(),
+        adminUserId: admin.id,
+        items: { create: wanted.map((line) => ({ orderItemId: line.orderItemId, quantity: line.quantity })) },
+        parcels: { create: parcels.map((parcel, index) => ({ weightGrams: parcel.weightGrams, lengthMm: parcel.lengthMm ?? null, widthMm: parcel.widthMm ?? null, heightMm: parcel.heightMm ?? null, trackingNumber: booked?.boxTrackingNumbers[index] ?? null })) },
+        labels: booked ? { create: booked.labels.map((label, position) => ({ position, mime: label.mime, data: new Uint8Array(label.data), trackingNumber: label.trackingNumber ?? null })) } : undefined,
+      },
+    });
+    for (const line of wanted) await tx.orderItem.update({ where: { id: line.orderItemId }, data: { shippedQuantity: { increment: line.quantity } } });
+
+    const items = await tx.orderItem.findMany({ where: { orderId } });
+    const fulfilmentStatus = fulfilmentFromQuantities(items, order.fulfilmentStatus);
+    await tx.order.update({ where: { id: orderId }, data: { fulfilmentStatus } });
+    await syncOrderStatus(tx, orderId);
+    const part = fulfilmentStatus === "PARTIALLY_SHIPPED";
+    await timeline(tx, ctx, orderId, part ? "partially_shipped" : "shipped", part ? `Part of your order was shipped with ${data.carrier}.` : `Shipped with ${data.carrier}.`);
+    await tx.outboxJob.createMany({ data: [{ kind: "notify.customer.shipped", dedupeKey: `notify.customer.shipped:${shipment.id}`, payload: { orderId, shipmentId: shipment.id } }], skipDuplicates: true });
+    return shipment.id;
   });
-  await audit(ctx, "order.shipped", "Order", orderId, { carrier: data.carrier, trackingNumber: data.trackingNumber });
+  await audit(ctx, "order.shipped", "Order", orderId, { shipmentId, carrier: data.carrier, trackingNumber: data.trackingNumber });
+  return shipmentId;
+}
+
+/** Ships everything that is left, in one box. Kept for the simple case. */
+export async function markShipped(ctx: Ctx, orderId: string, input: unknown) {
+  await createShipment(ctx, orderId, input);
 }
 
 export async function markDelivered(ctx: Ctx, orderId: string) {
   requireAdmin(ctx);
   await ctx.db.$transaction(async (tx) => {
-    const changed = await tx.order.updateMany({ where: { id: orderId, status: "SHIPPED" }, data: { status: "DELIVERED" } });
-    if (changed.count !== 1) throw new AppError("BAD_INPUT", "Only a shipped order can be marked delivered.");
-    await tx.shipment.updateMany({ where: { orderId }, data: { status: "DELIVERED", deliveredAt: new Date() } });
-    await tx.orderEvent.create({ data: { orderId, kind: "delivered", message: "Delivered." } });
+    const changed = await tx.order.updateMany({ where: { id: orderId, fulfilmentStatus: "SHIPPED", cancelledAt: null }, data: { fulfilmentStatus: "DELIVERED" } });
+    if (changed.count !== 1) throw new AppError("BAD_INPUT", "Only a fully shipped order can be marked delivered.");
+    await tx.shipment.updateMany({ where: { orderId, status: { in: ["PENDING", "LABEL_CREATED", "IN_TRANSIT"] } }, data: { status: "DELIVERED", deliveredAt: new Date() } });
+    await syncOrderStatus(tx, orderId);
+    await timeline(tx, ctx, orderId, "delivered", "Delivered.");
   });
   await audit(ctx, "order.delivered", "Order", orderId);
 }
@@ -175,15 +324,47 @@ export async function cancelUnpaidOrder(ctx: Ctx, orderId: string) {
   requireAdmin(ctx, "MANAGER");
   await ctx.db.$transaction(async (tx) => {
     const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
-    const changed = await tx.order.updateMany({ where: { id: orderId, status: "PENDING_PAYMENT" }, data: { status: "CANCELLED", cancelledAt: new Date(), reservedUntil: null } });
+    const changed = await tx.order.updateMany({ where: { id: orderId, paymentStatus: { in: ["UNPAID", "FAILED"] }, cancelledAt: null }, data: { status: "CANCELLED", cancelledAt: new Date(), reservedUntil: null } });
     if (!order || changed.count !== 1) throw new AppError("BAD_INPUT", "Only an unpaid order can be cancelled here. Refund a paid order instead.");
     for (const item of order.items) {
       if (item.variantId) await tx.$executeRaw`UPDATE "Variant" SET "reserved" = GREATEST("reserved" - ${item.quantity}, 0) WHERE "id" = ${item.variantId}`;
     }
     if (order.discountCode) await tx.$executeRaw`UPDATE "Discount" SET "usedCount" = GREATEST("usedCount" - 1, 0) WHERE "code" = ${order.discountCode}`;
-    await tx.orderEvent.create({ data: { orderId, kind: "cancelled", message: "Order cancelled." } });
+    await timeline(tx, ctx, orderId, "cancelled", "Order cancelled.");
   });
   await audit(ctx, "order.cancelled", "Order", orderId);
+}
+
+export const BULK_ACTIONS = { process: "Move to processing", ready: "Mark ready for fulfilment", delivered: "Mark delivered" } as const;
+export type BulkAction = keyof typeof BULK_ACTIONS;
+
+/**
+ * Applies one step to many orders. Each order is its own transaction: one
+ * that cannot take the step is skipped and reported, and never blocks the rest.
+ */
+export async function bulkUpdateOrders(ctx: Ctx, orderIds: string[], action: string) {
+  requireAdmin(ctx);
+  if (!isOneOf(Object.keys(BULK_ACTIONS) as BulkAction[], action)) throw new AppError("BAD_INPUT", "Choose what to do with the selected orders.");
+  const ids = [...new Set(orderIds)].slice(0, 200);
+  if (ids.length === 0) throw new AppError("BAD_INPUT", "Select at least one order.");
+  const step = { process: startFulfilment, ready: markReady, delivered: markDelivered }[action];
+
+  const numbers = new Map((await ctx.db.order.findMany({ where: { id: { in: ids } }, select: { id: true, number: true } })).map((order) => [order.id, order.number ?? order.id]));
+  const done: string[] = [];
+  const skipped: { number: string; reason: string }[] = [];
+  for (const id of ids) {
+    const number = numbers.get(id);
+    if (!number) continue;
+    try {
+      await step(ctx, id);
+      done.push(number);
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      skipped.push({ number, reason: error.message });
+    }
+  }
+  await audit(ctx, "order.bulk", "Order", null, { action, done: done.length, skipped: skipped.length });
+  return { done, skipped };
 }
 
 const refundInput = z.object({ amountCents: cents.min(1, "Enter an amount."), reason: optionalText(300), restock: z.boolean().default(false) });
@@ -210,7 +391,8 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
   await ctx.db.$transaction(async (tx) => {
     await tx.refund.create({ data: { paymentId: payment.id, amountCents: data.amountCents, reason: data.reason, providerRef, adminUserId: admin.id } });
     await tx.payment.update({ where: { id: payment.id }, data: { status: full ? "REFUNDED" : "PARTIALLY_REFUNDED" } });
-    await tx.order.update({ where: { id: orderId }, data: { paymentStatus: full ? "REFUNDED" : "PARTIALLY_REFUNDED", ...(full ? { status: "REFUNDED" } : {}) } });
+    await tx.order.update({ where: { id: orderId }, data: { paymentStatus: full ? "REFUNDED" : "PARTIALLY_REFUNDED" } });
+    await syncOrderStatus(tx, orderId);
     if (data.restock) {
       for (const item of order.items) {
         if (!item.variantId) continue;
@@ -218,7 +400,7 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
         await tx.inventoryMovement.create({ data: { variantId: item.variantId, delta: item.quantity, reason: "RETURN", orderId, adminUserId: admin.id } });
       }
     }
-    await tx.orderEvent.create({ data: { orderId, kind: "refunded", message: full ? "Order refunded." : "Partial refund issued." } });
+    await timeline(tx, ctx, orderId, "refunded", full ? "Order refunded." : "Partial refund issued.");
   });
   await audit(ctx, "order.refund", "Order", orderId, { amountCents: data.amountCents, restock: data.restock, providerRef });
 }
@@ -226,7 +408,7 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
 export async function setReturnStatus(ctx: Ctx, returnId: string, status: "APPROVED" | "REJECTED" | "RECEIVED") {
   requireAdmin(ctx, "MANAGER");
   const updated = await ctx.db.returnRequest.update({ where: { id: returnId }, data: { status } });
-  await ctx.db.orderEvent.create({ data: { orderId: updated.orderId, kind: `return_${status.toLowerCase()}`, message: `Return ${status.toLowerCase()}.` } });
+  await ctx.db.orderEvent.create({ data: { orderId: updated.orderId, kind: `return_${status.toLowerCase()}`, message: `Return ${status.toLowerCase()}.`, adminUserId: ctx.admin?.id ?? null } });
   await audit(ctx, "return.status", "ReturnRequest", returnId, { status });
 }
 
@@ -246,6 +428,9 @@ const productInput = z.object({
   cultivar: optionalText(200),
   ingredients: optionalText(500),
   storage: optionalText(500),
+  hsCode: z.string().trim().regex(/^\d{6,10}$/, "Enter the customs (HS) code as 6 to 10 digits.").nullish().or(z.literal("")).transform((value) => value || null),
+  customsDescription: optionalText(200),
+  originCountry: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, "Enter the country of origin as a two-letter code, such as IT.").nullish().or(z.literal("")).transform((value) => value || null),
 });
 
 export async function listProducts(ctx: Ctx) {
@@ -354,7 +539,7 @@ export async function listCustomers(ctx: Ctx, q?: string) {
     where: { erasedAt: null, ...(term ? { OR: [{ email: { contains: term, mode: "insensitive" } }, { lastName: { contains: term, mode: "insensitive" } }, { firstName: { contains: term, mode: "insensitive" } }] } : {}) },
     orderBy: { createdAt: "desc" },
     take: 100,
-    include: { _count: { select: { orders: true } }, orders: { where: { status: { in: PAID_STATES } }, select: { totalCents: true } } },
+    include: { _count: { select: { orders: true } }, orders: { where: { paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT } }, select: { totalCents: true } } },
   });
 }
 
@@ -396,13 +581,38 @@ export async function exportCustomersCsv(ctx: Ctx) {
   ]);
 }
 
-export async function exportOrdersCsv(ctx: Ctx) {
+export async function exportOrdersCsv(ctx: Ctx, filter: OrderFilter = {}) {
   requireAdmin(ctx, "MANAGER");
-  const orders = await ctx.db.order.findMany({ orderBy: { placedAt: "desc" }, take: 5000 });
+  const orders = await ctx.db.order.findMany({ where: orderWhere(filter), orderBy: { placedAt: "desc" }, take: 5000, include: { items: true, shipments: true } });
   await audit(ctx, "order.export", "Order", null, { count: orders.length });
+  const money = (value: number | null) => (value === null ? null : value / 100);
   return toCsv([
-    ["Order", "Placed", "Status", "Payment", "Email", "Country", "Subtotal", "Discount", "Shipping", "VAT", "Total"],
-    ...orders.map((o) => [o.number, o.placedAt.toISOString(), o.status, o.paymentStatus, o.email, o.shipCountryCode, o.subtotalCents / 100, o.discountCents / 100, o.shippingCents / 100, o.taxCents === null ? null : o.taxCents / 100, o.totalCents / 100]),
+    ["Order", "Placed", "Status", "Payment", "Fulfilment", "Email", "Ship to", "Ship country", "Bill to", "Bill company", "Bill VAT number", "Bill country", "Items", "SKUs", "Subtotal", "Discount", "Shipping", "VAT rate %", "VAT on shipping", "VAT total", "Total", "Carrier", "Tracking"],
+    ...orders.map((o) => [
+      o.number,
+      o.placedAt.toISOString(),
+      o.status,
+      o.paymentStatus,
+      o.fulfilmentStatus,
+      o.email,
+      `${o.shipFirstName} ${o.shipLastName}`,
+      o.shipCountryCode,
+      `${o.billFirstName} ${o.billLastName}`,
+      o.billCompany,
+      o.billVatNumber,
+      o.billCountryCode,
+      o.items.reduce((sum, item) => sum + item.quantity, 0),
+      o.items.map((item) => `${item.sku} x${item.quantity}`).join("; "),
+      money(o.subtotalCents),
+      money(o.discountCents),
+      money(o.shippingCents),
+      o.taxRateBps === null ? null : o.taxRateBps / 100,
+      money(o.shippingTaxCents),
+      money(o.taxCents),
+      money(o.totalCents),
+      o.shipments.map((shipment) => shipment.carrier).join("; ") || null,
+      o.shipments.map((shipment) => shipment.trackingNumber).filter(Boolean).join("; ") || null,
+    ]),
   ]);
 }
 
@@ -487,11 +697,26 @@ export async function deleteTaxRate(ctx: Ctx, countryCode: string) {
 
 // ───────────────────────────── Settings and staff ─────────────────────────────
 
-export const SETTING_KEYS = ["store", "notifications"] as const;
+export const SETTING_KEYS = ["store", "notifications", "shipping"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const settingSchemas = {
   store: z.object({ name: optionalText(120), legalName: optionalText(160), address: optionalText(400), vatNumber: optionalText(40), enterpriseNumber: optionalText(40), email: optionalText(254), phone: optionalText(40) }),
+  shipping: z.object({
+    // Where parcels leave from. Carriers need each part separately, so it is not the free-text registered address.
+    senderName: optionalText(70),
+    senderCompany: optionalText(70),
+    senderLine1: optionalText(160),
+    senderLine2: optionalText(160),
+    senderPostalCode: optionalText(20),
+    senderCity: optionalText(120),
+    senderCountryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, "Enter the country as a two-letter code, such as BE.").nullish().or(z.literal("")).transform((value) => value || null),
+    senderPhone: optionalText(40),
+    senderEmail: optionalText(254),
+    /** How a carrier is suggested when comparing rates: the user always confirms. */
+    carrierRule: z.enum(["manual", "cheapest", "fastest"]).default("manual"),
+    packagingGrams: z.coerce.number().int().min(0).max(20_000).default(0),
+  }),
   notifications: z.object({
     emailRecipient: optionalText(254),
     whatsappBusinessNumber: optionalText(40),
@@ -507,7 +732,7 @@ export async function getSettings(ctx: Ctx) {
   requireAdmin(ctx);
   const rows = await ctx.db.setting.findMany({ where: { key: { in: [...SETTING_KEYS] } } });
   const value = (key: SettingKey) => (rows.find((row) => row.key === key)?.value ?? {}) as Record<string, string | boolean | null>;
-  return { store: value("store"), notifications: value("notifications") };
+  return { store: value("store"), notifications: value("notifications"), shipping: value("shipping") };
 }
 
 export async function saveSetting(ctx: Ctx, key: SettingKey, input: unknown) {

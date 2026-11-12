@@ -3,7 +3,7 @@ import { GET as cron } from "@/app/api/cron/jobs/route";
 import { MAX_ATTEMPTS, processJobs, requeueJob } from "@/server/jobs";
 import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Transport } from "@/server/notifications/channels";
 import { customerConfirmationEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, signLink, verifyLink } from "@/server/notifications/messages";
-import { db, resetDb, seedCatalog } from "../helpers";
+import { db, resetDb, seedCatalog, BILL } from "../helpers";
 
 // Placeholder values: nothing here is a real credential and no request leaves the machine.
 const ENV = {
@@ -47,7 +47,7 @@ async function paidOrder() {
       shipLine1: "Rue Test 1",
       shipPostalCode: "1000",
       shipCity: "Brussels",
-      shipCountryCode: "BE",
+      shipCountryCode: "BE", ...BILL,
       items: {
         create: [
           { variantId: variant.id, sku: "t-500", productName: "Sicilian EVOO", variantLabel: "500ml", unitPriceCents: 2900, quantity: 2, lineTotalCents: 5800 },

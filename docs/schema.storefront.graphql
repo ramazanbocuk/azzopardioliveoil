@@ -12,6 +12,22 @@ input AddressInput {
   region: String
 }
 
+"""Invoice address, when it differs from the delivery address."""
+input BillingInput {
+  city: String!
+  company: String
+
+  """ISO 3166-1 alpha-2."""
+  countryCode: String!
+  firstName: String!
+  lastName: String!
+  line1: String!
+  line2: String
+  postalCode: String!
+  region: String
+  vatNumber: String
+}
+
 """Totals are computed by the server from current prices."""
 type Cart {
   discountCents: Int!
@@ -41,6 +57,9 @@ type Category {
 
 input CheckoutInput {
   address: AddressInput!
+
+  """Omit to bill to the delivery address."""
+  billing: BillingInput
   customerNote: String
   email: String!
   locale: String
