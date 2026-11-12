@@ -1,26 +1,285 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ==========================================================================
+   Azzopardi design tokens
+   Colour pairs marked "text" pass WCAG AA (4.5:1) on their stated ground.
+   ========================================================================== */
+
+@theme static {
+  /* Olive — brand ground and primary text on light */
+  --color-olive-950: #161c10;
+  --color-olive-900: #1f2716;
+  --color-olive-700: #2f3a22;
+  --color-olive-500: #55633f;
+  --color-olive-300: #9ba583;
+  --color-olive-100: #dde0d0;
+
+  /* Ivory and the "harvest day" grounds: dawn → noon → dusk */
+  --color-ivory: #f4efe4;
+  --color-paper: #eae3d3;
+  --color-dawn: #dddad1;
+  --color-noon: #f7f3ea;
+  --color-dusk: #ebddbc;
+
+  /* Mediterranean stone — rules, secondary text (700 is text-safe on ivory) */
+  --color-stone-300: #d2cbbd;
+  --color-stone-500: #b9b0a0;
+  --color-stone-700: #5c574b;
+
+  /* Muted gold — 500 decorative only, 300 text on olive, 700 text on ivory */
+  --color-gold-300: #cdb077;
+  --color-gold-500: #b08d4a;
+  --color-gold-700: #6b5324;
+
+  /* Terracotta — 500 decorative / large type, 700 text and grounds */
+  --color-terracotta-500: #b5613c;
+  --color-terracotta-700: #974a2a;
+
+  --color-ink: #1a1c16;
+
+  /* Layout */
+  --spacing-gutter: clamp(1.25rem, 4vw, 4rem);
+  --spacing-section: clamp(6rem, 13vw, 13rem);
+  --spacing-section-sm: clamp(4rem, 8vw, 7.5rem);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--serif);
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --serif: var(--font-zodiak), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: var(--font-switzer), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --page-bg: var(--color-ivory);
+  --header-h: 4.5rem;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--page-bg);
+  color: var(--color-ink);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.65;
+  font-feature-settings: "kern", "liga";
+  transition: background-color 1.1s var(--ease-soft);
+}
+
+::selection {
+  background: var(--color-olive-700);
+  color: var(--color-ivory);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold-700);
+  outline-offset: 3px;
+}
+
+/* ==========================================================================
+   Type scale — fluid between 375px and 1600px
+   ========================================================================== */
+
+@utility text-display {
+  font-family: var(--serif);
+  font-size: clamp(3rem, 8.6vw, 9.5rem);
+  line-height: 0.96;
+  letter-spacing: -0.035em;
+  font-weight: 400;
+}
+
+@utility text-h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.5rem, 5.8vw, 5.75rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-weight: 400;
+}
+
+@utility text-h2 {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 4vw, 3.75rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  font-weight: 400;
+}
+
+@utility text-h3 {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.3vw, 2.125rem);
+  line-height: 1.16;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+}
+
+@utility text-lead {
+  font-size: clamp(1.125rem, 1.45vw, 1.375rem);
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+
+@utility text-body {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+@utility text-small {
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+/* Small caps label: navigation, eyebrows, buttons */
+@utility text-label {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Lot ticket voice */
+@utility text-ticket {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility container-page {
+  width: 100%;
+  max-width: 104rem;
+  margin-inline: auto;
+  padding-inline: var(--spacing-gutter);
+}
+
+/* Underline that draws in from the left */
+@utility link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition: background-size 0.6s var(--ease-out-expo);
+  padding-bottom: 0.2em;
+  &:hover,
+  &:focus-visible {
+    background-size: 100% 1px;
+  }
+}
+
+/* Film grain for plates and dark grounds */
+@utility grain {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.22;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+/* ==========================================================================
+   Motion plumbing
+   `js-motion` is set on <html> before first paint only when the visitor has
+   not asked for reduced motion. Without it, everything is simply visible.
+   ========================================================================== */
+
+.js-motion [data-reveal] {
+  visibility: hidden;
+}
+
+/* Keeps descenders inside SplitText line masks */
+.split-line-mask {
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
+@keyframes header-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+}
+
+.js-motion .header-in {
+  animation: header-in 1.2s var(--ease-out-expo) 0.5s backwards;
+}
+
+/* Long-form copy: articles and legal pages */
+.prose-azz {
+  max-width: 68ch;
+  color: color-mix(in srgb, var(--color-ink) 85%, transparent);
+}
+.prose-azz > * + * {
+  margin-top: 1.25em;
+}
+.prose-azz h2 {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.3vw, 2.125rem);
+  line-height: 1.16;
+  letter-spacing: -0.015em;
+  color: var(--color-ink);
+  margin-top: 2.4em;
+}
+.prose-azz ul,
+.prose-azz ol {
+  padding-left: 1.25em;
+}
+.prose-azz ul {
+  list-style: disc;
+}
+.prose-azz ol {
+  list-style: decimal;
+}
+.prose-azz li + li {
+  margin-top: 0.5em;
+}
+.prose-azz a {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+/* Page-to-page crossfade (View Transitions API) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.5s;
+  animation-timing-function: var(--ease-soft);
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

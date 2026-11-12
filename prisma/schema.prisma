@@ -1,0 +1,732 @@
+// Azzopardi Olive Oil — database schema
+//
+// Conventions
+// - Money is stored as integer euro cents. Never floats.
+// - Orders snapshot everything they need (names, prices, addresses), so later
+//   catalogue edits never rewrite history.
+// - Facts about the oil (origin, analyses, certifications) are nullable and
+//   entered by an administrator. Nothing here has a "sensible default".
+// - Secrets are never stored: session and cart tokens are kept as SHA-256
+//   hashes, passwords as Argon2id hashes.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Catalogue ─────────────────────────────
+
+model Category {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  name           String
+  intro          String   @default("")
+  position       Int      @default(0)
+  isVisible      Boolean  @default(true)
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  products     Product[]
+  translations CategoryTranslation[]
+}
+
+model CategoryTranslation {
+  id         String   @id @default(cuid())
+  categoryId String
+  locale     String
+  name       String
+  intro      String   @default("")
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, locale])
+}
+
+model Product {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  name           String
+  blurb          String    @default("")
+  description    String    @default("")
+  categoryId     String
+  isVisible      Boolean   @default(false)
+  isFeatured     Boolean   @default(false)
+  position       Int       @default(0)
+  seoTitle       String?
+  seoDescription String?
+  // Administrator-entered label facts. Null = not yet recorded.
+  origin         String?
+  cultivar       String?
+  ingredients    String?
+  storage        String?
+  /// [{ label, value }] per 100 ml, as printed on the label.
+  nutrition      Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  category     Category             @relation(fields: [categoryId], references: [id])
+  variants     Variant[]
+  images       ProductImage[]
+  batches      Batch[]
+  reviews      Review[]
+  translations ProductTranslation[]
+
+  @@index([categoryId])
+  @@index([isVisible, position])
+}
+
+model ProductTranslation {
+  id             String  @id @default(cuid())
+  productId      String
+  locale         String
+  name           String
+  blurb          String  @default("")
+  description    String  @default("")
+  seoTitle       String?
+  seoDescription String?
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locale])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  url       String
+  alt       String  @default("")
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, position])
+}
+
+/// A purchasable size. New sizes are new rows; nothing is hard-coded to 500/750/1000.
+model Variant {
+  id                String   @id @default(cuid())
+  productId         String
+  sku               String   @unique
+  label             String
+  volumeMl          Int
+  priceCents        Int
+  compareAtCents    Int?
+  weightGrams       Int
+  /// Units physically on hand.
+  stock             Int      @default(0)
+  /// Units held by orders awaiting payment. Available = stock - reserved.
+  reserved          Int      @default(0)
+  lowStockThreshold Int      @default(6)
+  isActive          Boolean  @default(true)
+  position          Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  product    Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  movements  InventoryMovement[]
+  cartItems  CartItem[]
+  favourites Favourite[]
+
+  @@index([productId, position])
+}
+
+/// One bottling. The lot number printed on the label leads here.
+model Batch {
+  id          String    @id @default(cuid())
+  lotNumber   String    @unique
+  productId   String
+  harvestDate DateTime? @db.Date
+  grove       String?
+  mill        String?
+  milledAt    DateTime? @db.Date
+  bottledAt   DateTime? @db.Date
+  bestBefore  DateTime? @db.Date
+  notes       String?
+  /// Only published batches are visible to customers.
+  isPublished Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  product   Product         @relation(fields: [productId], references: [id])
+  documents BatchDocument[]
+
+  @@index([productId, isPublished])
+}
+
+enum BatchDocumentKind {
+  ANALYSIS
+  CERTIFICATION
+  AWARD
+  OTHER
+}
+
+/// Proof for a claim. Shown publicly only once an administrator has verified it.
+model BatchDocument {
+  id           String            @id @default(cuid())
+  batchId      String
+  kind         BatchDocumentKind
+  title        String
+  url          String
+  verifiedAt   DateTime?
+  verifiedById String?
+  createdAt    DateTime          @default(now())
+
+  batch      Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  verifiedBy AdminUser? @relation(fields: [verifiedById], references: [id])
+
+  @@index([batchId])
+}
+
+enum InventoryReason {
+  RECEIVED
+  ADJUSTMENT
+  SALE
+  RETURN
+  DAMAGED
+}
+
+model InventoryMovement {
+  id          String          @id @default(cuid())
+  variantId   String
+  delta       Int
+  reason      InventoryReason
+  orderId     String?
+  adminUserId String?
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  variant Variant @relation(fields: [variantId], references: [id])
+
+  @@index([variantId, createdAt])
+}
+
+// ───────────────────────────── Customers ─────────────────────────────
+
+model Customer {
+  id              String    @id @default(cuid())
+  /// Always stored lower-cased.
+  email           String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String?
+  locale          String    @default("en")
+  marketingOptIn  Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  /// Set when the account is erased on request; personal fields are blanked.
+  erasedAt        DateTime?
+
+  sessions   CustomerSession[]
+  addresses  Address[]
+  favourites Favourite[]
+  orders     Order[]
+  reviews    Review[]
+  carts      Cart[]
+}
+
+model CustomerSession {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  customerId String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  userAgent  String?
+  ip         String?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([expiresAt])
+}
+
+model Address {
+  id          String   @id @default(cuid())
+  customerId  String
+  firstName   String
+  lastName    String
+  line1       String
+  line2       String?
+  postalCode  String
+  city        String
+  region      String?
+  countryCode String   @db.Char(2)
+  phone       String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model Favourite {
+  customerId String
+  variantId  String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  variant  Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, variantId])
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Review {
+  id         String       @id @default(cuid())
+  productId  String
+  customerId String
+  /// The delivered order that entitles this customer to review.
+  orderId    String
+  rating     Int
+  title      String       @default("")
+  body       String
+  status     ReviewStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, customerId])
+  @@index([productId, status])
+}
+
+enum NewsletterStatus {
+  PENDING
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+model NewsletterSubscriber {
+  id        String           @id @default(cuid())
+  email     String           @unique
+  status    NewsletterStatus @default(PENDING)
+  /// Hash of the confirm/unsubscribe token (double opt-in).
+  tokenHash String           @unique
+  locale    String           @default("en")
+  source    String           @default("site")
+  consentAt DateTime?
+  createdAt DateTime         @default(now())
+}
+
+// ───────────────────────────── Cart & pricing ─────────────────────────────
+
+model Cart {
+  id           String   @id @default(cuid())
+  tokenHash    String   @unique
+  customerId   String?
+  discountCode String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    CartItem[]
+
+  @@index([updatedAt])
+}
+
+model CartItem {
+  cartId    String
+  variantId String
+  quantity  Int
+  addedAt   DateTime @default(now())
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([cartId, variantId])
+}
+
+enum DiscountKind {
+  PERCENT
+  FIXED
+  FREE_SHIPPING
+}
+
+model Discount {
+  id               String       @id @default(cuid())
+  /// Always stored upper-cased.
+  code             String       @unique
+  kind             DiscountKind
+  /// Percent (1–100) for PERCENT, cents for FIXED, ignored for FREE_SHIPPING.
+  value            Int          @default(0)
+  minSubtotalCents Int          @default(0)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  usageLimit       Int?
+  usedCount        Int          @default(0)
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+}
+
+model ShippingZone {
+  id        String         @id @default(cuid())
+  name      String
+  /// ISO 3166-1 alpha-2 codes.
+  countries String[]
+  isActive  Boolean        @default(true)
+  rates     ShippingRate[]
+}
+
+model ShippingRate {
+  id             String       @id @default(cuid())
+  zoneId         String
+  name           String
+  /// Carrier key used by the shipping provider adapters (e.g. "bpost").
+  carrier        String?
+  priceCents     Int
+  /// Weight band this rate applies to. A flat rate leaves both at their defaults.
+  minWeightGrams Int          @default(0)
+  maxWeightGrams Int?
+  /// Subtotal from which this rate becomes free. Null = never free.
+  freeAboveCents Int?
+  estimate       String?
+  isActive       Boolean      @default(true)
+  position       Int          @default(0)
+  zone           ShippingZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@index([zoneId, isActive])
+}
+
+/// VAT by destination. Rates are entered by the administrator and must be
+/// confirmed with an accountant; the system ships with none.
+model TaxRate {
+  id          String  @id @default(cuid())
+  countryCode String  @unique @db.Char(2)
+  /// Percent with two decimals, stored ×100 (6% = 600).
+  rateBps     Int
+  label       String  @default("VAT")
+  isActive    Boolean @default(true)
+}
+
+// ───────────────────────────── Orders ─────────────────────────────
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  FULFILLING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FAILED
+}
+
+model Order {
+  id                 String        @id @default(cuid())
+  /// Human number is derived from this: AZZ-{1000 + sequence}.
+  sequence           Int           @unique @default(autoincrement())
+  number             String?       @unique
+  customerId         String?
+  email              String
+  status             OrderStatus   @default(PENDING_PAYMENT)
+  paymentStatus      PaymentStatus @default(UNPAID)
+  currency           String        @default("EUR") @db.Char(3)
+  locale             String        @default("en")
+  subtotalCents      Int
+  discountCents      Int           @default(0)
+  shippingCents      Int
+  /// VAT contained in the total. Null when no rate was configured for the destination.
+  taxCents           Int?
+  taxRateBps         Int?
+  totalCents         Int
+  discountCode       String?
+  shippingRateName   String
+  shippingCarrier    String?
+  weightGrams        Int
+  // Delivery address snapshot
+  shipFirstName      String
+  shipLastName       String
+  shipLine1          String
+  shipLine2          String?
+  shipPostalCode     String
+  shipCity           String
+  shipRegion         String?
+  shipCountryCode    String        @db.Char(2)
+  shipPhone          String?
+  customerNote       String?
+  /// Hash of the link token that lets a guest open their own order page.
+  accessTokenHash    String?
+  /// Reservation is released if still unpaid after this moment.
+  reservedUntil      DateTime?
+  placedAt           DateTime      @default(now())
+  paidAt             DateTime?
+  cancelledAt        DateTime?
+  updatedAt          DateTime      @updatedAt
+
+  customer  Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items     OrderItem[]
+  payments  Payment[]
+  shipments Shipment[]
+  events    OrderEvent[]
+  notes     OrderNote[]
+  returns   ReturnRequest[]
+
+  @@index([customerId, placedAt])
+  @@index([status, placedAt])
+  @@index([email])
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  variantId      String?
+  sku            String
+  productName    String
+  variantLabel   String
+  lotNumber      String?
+  unitPriceCents Int
+  quantity       Int
+  lineTotalCents Int
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// Customer-visible timeline.
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  kind      String
+  message   String
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+/// Internal only. Never exposed through the storefront API.
+model OrderNote {
+  id          String    @id @default(cuid())
+  orderId     String
+  adminUserId String
+  body        String
+  createdAt   DateTime  @default(now())
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  author      AdminUser @relation(fields: [adminUserId], references: [id])
+
+  @@index([orderId])
+}
+
+enum PaymentProvider {
+  STRIPE
+  MOLLIE
+}
+
+model Payment {
+  id          String          @id @default(cuid())
+  orderId     String
+  provider    PaymentProvider
+  /// The provider's own id (PaymentIntent, Mollie payment id).
+  providerRef String
+  status      PaymentStatus   @default(UNPAID)
+  amountCents Int
+  currency    String          @default("EUR") @db.Char(3)
+  method      String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+
+  @@unique([provider, providerRef])
+  @@index([orderId])
+}
+
+model Refund {
+  id          String   @id @default(cuid())
+  paymentId   String
+  amountCents Int
+  reason      String?
+  providerRef String?
+  adminUserId String?
+  createdAt   DateTime @default(now())
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+}
+
+/// Every verified webhook is recorded once; a repeat delivery is a no-op.
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  type        String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+}
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_CREATED
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+  FAILED
+}
+
+model Shipment {
+  id             String         @id @default(cuid())
+  orderId        String
+  carrier        String
+  trackingNumber String?
+  trackingUrl    String?
+  labelUrl       String?
+  status         ShipmentStatus @default(PENDING)
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RECEIVED
+  REFUNDED
+}
+
+model ReturnRequest {
+  id        String       @id @default(cuid())
+  orderId   String
+  status    ReturnStatus @default(REQUESTED)
+  reason    String
+  /// [{ orderItemId, quantity }]
+  items     Json
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ───────────────────────────── Administration ─────────────────────────────
+
+enum AdminRole {
+  ADMINISTRATOR
+  MANAGER
+  STAFF
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         AdminRole @default(STAFF)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  sessions          AdminSession[]
+  notes             OrderNote[]
+  verifiedDocuments BatchDocument[]
+}
+
+model AdminSession {
+  id          String   @id @default(cuid())
+  tokenHash   String   @unique
+  adminUserId String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  ip          String?
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+/// Append-only record of sensitive actions by staff and by the system.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorType String
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  data      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  /// Deliberately not sent: the channel is switched off or not connected.
+  SKIPPED
+}
+
+/// Transactional outbox. A row is written in the same transaction as the
+/// business change, then delivered with retries. `dedupeKey` makes a job
+/// impossible to enqueue twice (e.g. one WhatsApp message per paid order).
+model OutboxJob {
+  id        String    @id @default(cuid())
+  kind      String
+  payload   Json
+  dedupeKey String    @unique
+  status    JobStatus @default(PENDING)
+  attempts  Int       @default(0)
+  runAfter  DateTime  @default(now())
+  lastError String?
+  /// Set while a worker holds the job; a stale lock is released after ten minutes.
+  lockedAt  DateTime?
+  createdAt DateTime  @default(now())
+  doneAt    DateTime?
+
+  @@index([status, runAfter])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+/// Fixed-window counters for login, lookup and form endpoints.
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
+
+model JournalPost {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  kind        String    @default("Story")
+  title       String
+  standfirst  String    @default("")
+  body        String    @default("")
+  /// Recipe details: { serves, time, ingredients[], method[] }
+  recipe      Json?
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

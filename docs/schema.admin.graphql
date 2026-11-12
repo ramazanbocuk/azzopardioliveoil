@@ -1,0 +1,51 @@
+type AdminProduct {
+  id: ID!
+  isVisible: Boolean!
+  name: String!
+  slug: String!
+  variants: [AdminVariant!]!
+}
+
+type AdminUser {
+  email: String!
+  id: ID!
+  name: String!
+  role: String!
+}
+
+type AdminVariant {
+  available: Int!
+  id: ID!
+  isActive: Boolean!
+  label: String!
+  lowStockThreshold: Int!
+  priceCents: Int!
+  reserved: Int!
+  sku: String!
+  stock: Int!
+}
+
+enum InventoryReason {
+  ADJUSTMENT
+  DAMAGED
+  RECEIVED
+  RETURN
+}
+
+type Mutation {
+  """
+  Adds or removes units on hand. Managers and above. Recorded in the movement ledger and the audit log.
+  """
+  adjustInventory(delta: Int!, note: String, reason: InventoryReason!, sku: String!): AdminVariant!
+  login(email: String!, password: String!): AdminUser!
+  logout: Boolean!
+}
+
+type Query {
+  me: AdminUser
+
+  """
+  All products, including hidden ones, with stock levels. Staff and above.
+  """
+  products: [AdminProduct!]!
+}

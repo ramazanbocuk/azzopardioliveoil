@@ -1,0 +1,326 @@
+input AddressInput {
+  city: String!
+
+  """ISO 3166-1 alpha-2."""
+  countryCode: String!
+  firstName: String!
+  lastName: String!
+  line1: String!
+  line2: String
+  phone: String
+  postalCode: String!
+  region: String
+}
+
+"""Totals are computed by the server from current prices."""
+type Cart {
+  discountCents: Int!
+  discountCode: String
+  freeShippingDiscount: Boolean!
+  itemCount: Int!
+  lines: [CartLine!]!
+  subtotalCents: Int!
+}
+
+type CartLine {
+  enoughStock: Boolean!
+  lineTotalCents: Int!
+  product: Product!
+  quantity: Int!
+  sku: String!
+  unitPriceCents: Int!
+  variant: Variant!
+}
+
+type Category {
+  id: ID!
+  intro: String!
+  name: String!
+  slug: String!
+}
+
+input CheckoutInput {
+  address: AddressInput!
+  customerNote: String
+  email: String!
+  locale: String
+  shippingRateId: ID!
+}
+
+"""
+The signed-in customer. Only ever resolved for the session's own account.
+"""
+type Customer {
+  email: String!
+  favouriteSkus: [String!]!
+  firstName: String!
+  id: ID!
+  lastName: String!
+  marketingOptIn: Boolean!
+  orders: [Order!]!
+}
+
+"""One bottling. Fields are null until an administrator records them."""
+type Lot {
+  bestBefore: String
+  bottledAt: String
+  grove: String
+  harvestDate: String
+  lotNumber: String!
+  mill: String
+  milledAt: String
+}
+
+"""A verified document backing a claim about a lot."""
+type LotDocument {
+  kind: String!
+  title: String!
+  url: String!
+}
+
+type LotRecord {
+  documents: [LotDocument!]!
+  lot: Lot!
+  productName: String!
+  productSlug: String!
+}
+
+type Mutation {
+  cartAdd(quantity: Int = 1, sku: String!): Cart!
+  cartApplyDiscount(code: String!): Cart!
+  cartRemove(sku: String!): Cart!
+  cartRemoveDiscount: Cart!
+  cartSetQuantity(quantity: Int!, sku: String!): Cart!
+
+  """
+  Creates an order awaiting payment and reserves its stock. It does not take payment and never marks the order paid.
+  """
+  checkout(input: CheckoutInput!): Order!
+
+  """
+  Erases the signed-in customer's personal data. Requires the current password. Orders are kept as the law requires, detached from the account.
+  """
+  deleteMyAccount(password: String!): Boolean!
+  login(email: String!, password: String!): Customer!
+  logout: Boolean!
+  register(input: RegisterInput!): Customer!
+
+  """
+  Emails a reset link if the address has an account. Always returns true.
+  """
+  requestPasswordReset(email: String!): Boolean!
+
+  """
+  Asks to return a delivered order. Signed-in customers only, for their own orders.
+  """
+  requestReturn(number: String!, reason: String!): Boolean!
+  resetPassword(exp: String!, id: String!, password: String!, sig: String!): Boolean!
+
+  """
+  Queues a message from the contact form for delivery to the shop's inbox.
+  """
+  sendContactMessage(email: String!, message: String!, name: String!, reference: String): Boolean!
+
+  """
+  Returns the provider's hosted payment page URL for an unpaid order. Paying is confirmed only by the provider's signed webhook.
+  """
+  startPayment(number: String!, token: String!): String!
+
+  """
+  Only customers with a delivered order containing the product may review it. Reviews are published after moderation.
+  """
+  submitReview(input: ReviewInput!): Boolean!
+
+  """
+  Records a pending subscription. It becomes active only after the address is confirmed by email (double opt-in, Phase 7).
+  """
+  subscribeNewsletter(email: String!, locale: String): Boolean!
+
+  """
+  Adds or removes a variant from the signed-in customer's favourites. Returns the resulting SKUs.
+  """
+  toggleFavourite(sku: String!): [String!]!
+}
+
+type NutritionRow {
+  label: String!
+  value: String
+}
+
+type Order {
+  """
+  Private link token. Present only in the response that created the order.
+  """
+  accessToken: String
+  canRequestReturn: Boolean!
+  currency: String!
+  discountCents: Int!
+  email: String!
+  events: [OrderEvent!]!
+  items: [OrderItem!]!
+  number: String!
+  paymentStatus: String!
+  placedAt: String!
+  shipCountryCode: String!
+  shipLines: [String!]!
+  shipName: String!
+  shipments: [Shipment!]!
+  shippingCents: Int!
+  shippingRateName: String!
+  status: String!
+  subtotalCents: Int!
+
+  """
+  VAT included in the total. Null if no rate is configured for the destination.
+  """
+  taxCents: Int
+  totalCents: Int!
+}
+
+type OrderEvent {
+  at: String!
+  kind: String!
+  message: String!
+}
+
+type OrderItem {
+  lineTotalCents: Int!
+  lotNumber: String
+  productName: String!
+  quantity: Int!
+  sku: String!
+  unitPriceCents: Int!
+  variantLabel: String!
+}
+
+type Product {
+  blurb: String!
+  category: Category
+  cultivar: String
+  description: String!
+  id: ID!
+  ingredients: String
+
+  """Published lots, newest bottling first."""
+  lots: [Lot!]!
+  name: String!
+  nutrition: [NutritionRow!]!
+  origin: String
+  reviews: [Review!]!
+  seoDescription: String
+  seoTitle: String
+  slug: String!
+  storage: String
+  variants: [Variant!]!
+}
+
+type ProductConnection {
+  endCursor: String
+  hasNextPage: Boolean!
+  nodes: [Product!]!
+  totalCount: Int!
+}
+
+input ProductFilter {
+  categorySlug: String
+  inStockOnly: Boolean
+
+  """Matches name, description, or an exact published lot number."""
+  search: String
+  volumesMl: [Int!]
+}
+
+enum ProductSort {
+  FEATURED
+  NAME
+  NEWEST
+}
+
+type Query {
+  cart: Cart!
+  categories: [Category!]!
+
+  """Public record for a lot number. Null if unknown or not yet published."""
+  lot(lotNumber: String!): LotRecord
+  me: Customer
+
+  """
+  Everything held about the signed-in customer, as a JSON document (GDPR access and portability).
+  """
+  myData: String!
+
+  """
+  Guest order lookup. Requires the order number and the email used to order.
+  """
+  order(email: String!, number: String!): Order
+
+  """Opens an order with the private token issued when it was placed."""
+  orderByToken(number: String!, token: String!): Order
+
+  """False until a payment provider is connected."""
+  paymentAvailable: Boolean!
+  product(slug: String!): Product
+  products(after: ID, filter: ProductFilter, first: Int, sort: ProductSort): ProductConnection!
+
+  """
+  Rates for the current cart to a country. Empty when we do not deliver there.
+  """
+  shippingOptions(countryCode: String!): [ShippingOption!]!
+}
+
+input RegisterInput {
+  email: String!
+  firstName: String!
+  lastName: String!
+  marketingOptIn: Boolean
+
+  """At least 12 characters."""
+  password: String!
+}
+
+type Review {
+  authorFirstName: String!
+  body: String!
+  createdAt: String!
+  id: ID!
+  rating: Int!
+  title: String!
+}
+
+input ReviewInput {
+  body: String!
+  productSlug: String!
+  rating: Int!
+  title: String
+}
+
+type Shipment {
+  carrier: String!
+  deliveredAt: String
+  shippedAt: String
+  status: String!
+  trackingNumber: String
+  trackingUrl: String
+}
+
+type ShippingOption {
+  carrier: String
+  estimate: String
+  id: ID!
+  name: String!
+  priceCents: Int!
+}
+
+"""A purchasable size of a product."""
+type Variant {
+  compareAtCents: Int
+  id: ID!
+  inStock: Boolean!
+  label: String!
+  lowStock: Boolean!
+
+  """Price in euro cents, VAT included."""
+  priceCents: Int!
+  sku: String!
+  volumeMl: Int!
+}
