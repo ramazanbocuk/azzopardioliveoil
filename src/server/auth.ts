@@ -6,6 +6,7 @@ import { AppError, parse } from "./errors";
 import { resetPurpose, verifyLink } from "./notifications/messages";
 import { eraseCustomerData } from "./privacy";
 import { enforce } from "./rateLimit";
+import { checkSecondFactor } from "./totp";
 
 const email = z.string().trim().toLowerCase().email("Enter a valid email address.").max(254);
 const password = z.string().min(12, "Use at least 12 characters.").max(128, "Use at most 128 characters.");
@@ -13,6 +14,7 @@ const name = z.string().trim().min(1, "This field is required.").max(80);
 
 const registerInput = z.object({ email, password, firstName: name, lastName: name, marketingOptIn: z.boolean().nullish().transform((value) => value ?? false) });
 const loginInput = z.object({ email, password: z.string().min(1).max(128) });
+const adminLoginInput = loginInput.extend({ code: z.string().trim().max(12).nullish() });
 
 const INVALID = "The email address or password is incorrect.";
 
@@ -112,7 +114,7 @@ export async function deleteOwnAccount(ctx: Ctx, currentPassword: string): Promi
 // ── Administration ──
 
 export async function adminLogin(ctx: Ctx, input: unknown): Promise<AdminUser> {
-  const data = parse(loginInput, input);
+  const data = parse(adminLoginInput, input);
   await enforce(ctx.db, `admin-login:ip:${ctx.ip}`, 10, 900);
   await enforce(ctx.db, `admin-login:email:${data.email}`, 5, 900);
 
@@ -122,10 +124,17 @@ export async function adminLogin(ctx: Ctx, input: unknown): Promise<AdminUser> {
     await ctx.db.auditLog.create({ data: { actorType: "anonymous", action: "admin.login.failed", entity: "AdminUser", data: { email: data.email }, ip: ctx.ip } });
     throw new AppError("INVALID_CREDENTIALS", INVALID);
   }
+  // The password was right; now the second factor, if this account has one. A wrong code counts as a failed sign-in.
+  try {
+    checkSecondFactor(admin, data.code);
+  } catch (error) {
+    if (data.code?.trim()) await ctx.db.auditLog.create({ data: { actorType: "anonymous", action: "admin.login.failed", entity: "AdminUser", entityId: admin.id, data: { email: data.email, reason: "second factor" }, ip: ctx.ip } });
+    throw error;
+  }
 
   const token = newToken();
   await ctx.db.$transaction([
-    ctx.db.adminSession.create({ data: { tokenHash: hashToken(token), adminUserId: admin.id, expiresAt: new Date(Date.now() + TTL.admin * 1000), ip: ctx.ip } }),
+    ctx.db.adminSession.create({ data: { tokenHash: hashToken(token), adminUserId: admin.id, expiresAt: new Date(Date.now() + TTL.admin * 1000), ip: ctx.ip, userAgent: ctx.userAgent?.slice(0, 300) ?? null } }),
     ctx.db.adminUser.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } }),
     ctx.db.auditLog.create({ data: { actorType: "admin", actorId: admin.id, action: "admin.login", entity: "AdminUser", entityId: admin.id, ip: ctx.ip } }),
   ]);

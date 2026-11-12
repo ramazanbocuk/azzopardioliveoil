@@ -12,6 +12,7 @@ export default async function LotsPage({ searchParams }: PageProps<"/admin/lots"
     ctx.db.product.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
     searchParams,
   ]);
+  const suppliers = await ctx.db.supplier.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, kind: true } });
 
   const form = (batch: (typeof batches)[number] | null) => (
     <form action={saveBatch.bind(null, batch?.id ?? null)} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -20,6 +21,14 @@ export default async function LotsPage({ searchParams }: PageProps<"/admin/lots"
         {products.map((product) => (
           <option key={product.id} value={product.id}>
             {product.name}
+          </option>
+        ))}
+      </Select>
+      <Select label="Supplier (internal)" name="supplierId" defaultValue={batch?.supplierId ?? ""}>
+        <option value="">Not recorded</option>
+        {suppliers.map((supplier) => (
+          <option key={supplier.id} value={supplier.id}>
+            {supplier.name} ({supplier.kind})
           </option>
         ))}
       </Select>

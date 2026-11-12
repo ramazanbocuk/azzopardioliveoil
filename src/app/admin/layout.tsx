@@ -16,16 +16,25 @@ const NAV = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/products", label: "Products" },
-  { href: "/admin/lots", label: "Lots" },
+  { href: "/admin/inventory", label: "Inventory" },
   { href: "/admin/customers", label: "Customers" },
-  { href: "/admin/discounts", label: "Discounts" },
-  { href: "/admin/newsletter", label: "Newsletter" },
-  { href: "/admin/notifications", label: "Notifications" },
   { href: "/admin/fulfilment", label: "Shipping & fulfilment" },
-  { href: "/admin/shipping", label: "Shipping rates & VAT" },
-  { href: "/admin/settings", label: "Settings" },
-  { href: "/admin/staff", label: "Staff" },
-  { href: "/admin/audit", label: "Audit log" },
+  { href: "/admin/payments", label: "Payments" },
+  { href: "/admin/discounts", label: "Discounts & coupons" },
+  { href: "/admin/marketing", label: "Marketing" },
+  { href: "/admin/wholesale", label: "Wholesale / B2B" },
+  { href: "/admin/returns", label: "Returns & refunds" },
+  { href: "/admin/reviews", label: "Reviews" },
+  { href: "/admin/reports", label: "Analytics & reports" },
+  { href: "/admin/accounting", label: "Accounting & VAT" },
+  { href: "/admin/suppliers", label: "Suppliers" },
+  { href: "/admin/traceability", label: "Food traceability" },
+  { href: "/admin/content", label: "Website content" },
+  { href: "/admin/notifications", label: "Notifications" },
+  { href: "/admin/staff", label: "Staff & permissions" },
+  { href: "/admin/security", label: "Security" },
+  { href: "/admin/integrations", label: "Integrations" },
+  { href: "/admin/settings", label: "System settings" },
 ];
 
 function SignIn() {
@@ -40,6 +49,7 @@ function SignIn() {
         <div className="mt-6 space-y-4">
           <Field label="Email address" name="email" type="email" required autoComplete="username" />
           <PasswordField label="Password" name="password" required autoComplete="current-password" />
+          <Field label="Authenticator code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} hint="Only if you have turned on two-factor sign-in." />
         </div>
         <Submit className="mt-6 w-full">Sign in</Submit>
         <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>

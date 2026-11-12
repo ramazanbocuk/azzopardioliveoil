@@ -516,6 +516,7 @@ const batchInput = z.object({
   bottledAt: optionalDate,
   bestBefore: optionalDate,
   notes: optionalText(2000),
+  supplierId: z.string().nullish().transform((value) => value || null),
   isPublished: z.boolean().default(false),
 });
 
@@ -697,11 +698,17 @@ export async function deleteTaxRate(ctx: Ctx, countryCode: string) {
 
 // ───────────────────────────── Settings and staff ─────────────────────────────
 
-export const SETTING_KEYS = ["store", "notifications", "shipping"] as const;
+export const SETTING_KEYS = ["store", "notifications", "shipping", "content"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const settingSchemas = {
   store: z.object({ name: optionalText(120), legalName: optionalText(160), address: optionalText(400), vatNumber: optionalText(40), enterpriseNumber: optionalText(40), email: optionalText(254), phone: optionalText(40) }),
+  content: z.object({
+    /** A short line shown across the top of every shop page, e.g. last order dates before a holiday. */
+    announcement: optionalText(160),
+    announcementLink: z.string().trim().max(300).regex(/^(\/|https:\/\/)/, "Start the link with / or https://.").nullish().or(z.literal("")).transform((value) => value || null),
+    announcementOn: z.boolean().default(false),
+  }),
   shipping: z.object({
     // Where parcels leave from. Carriers need each part separately, so it is not the free-text registered address.
     senderName: optionalText(70),
@@ -732,7 +739,7 @@ export async function getSettings(ctx: Ctx) {
   requireAdmin(ctx);
   const rows = await ctx.db.setting.findMany({ where: { key: { in: [...SETTING_KEYS] } } });
   const value = (key: SettingKey) => (rows.find((row) => row.key === key)?.value ?? {}) as Record<string, string | boolean | null>;
-  return { store: value("store"), notifications: value("notifications"), shipping: value("shipping") };
+  return { store: value("store"), notifications: value("notifications"), shipping: value("shipping"), content: value("content") };
 }
 
 export async function saveSetting(ctx: Ctx, key: SettingKey, input: unknown) {

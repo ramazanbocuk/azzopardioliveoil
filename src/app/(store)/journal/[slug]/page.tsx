@@ -3,14 +3,16 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { LeadPlate, NextPage } from "@/components/ui/Editorial";
 import { Notice, PageHeader, Prose } from "@/components/ui/Page";
-import { getJournalEntry, journal } from "@/content/site";
+import { journal } from "@/content/site";
+import { getJournalEntries } from "@/server/storefrontData";
 
 export function generateStaticParams() {
   return journal.map((entry) => ({ slug: entry.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps<"/journal/[slug]">): Promise<Metadata> {
-  const entry = getJournalEntry((await params).slug);
+  const { slug } = await params;
+  const entry = (await getJournalEntries()).entries.find((candidate) => candidate.slug === slug);
   if (!entry) return {};
   return { title: entry.title, description: entry.standfirst, alternates: { canonical: `/journal/${entry.slug}` } };
 }
@@ -28,10 +30,13 @@ export default function JournalEntryPage({ params }: PageProps<"/journal/[slug]"
 }
 
 async function JournalEntryPageContent({ params }: Pick<PageProps<"/journal/[slug]">, "params">) {
-  const entry = getJournalEntry((await params).slug);
+  const { slug } = await params;
+  const { entries, fromAdmin } = await getJournalEntries();
+  const entry = entries.find((candidate) => candidate.slug === slug);
   if (!entry) notFound();
 
-  const next = journal[(journal.indexOf(entry) + 1) % journal.length];
+  const next = entries[(entries.indexOf(entry) + 1) % entries.length];
+  const isSample = entries.indexOf(entry) >= fromAdmin;
 
   return (
     <article>
@@ -74,9 +79,11 @@ async function JournalEntryPageContent({ params }: Pick<PageProps<"/journal/[slu
           </aside>
         )}
 
-        <Notice title="Draft article" className="order-3 lg:col-span-7 lg:col-start-2">
-          Placeholder text and no photography yet. Journal entries are written and published from the admin panel.
-        </Notice>
+        {isSample && (
+          <Notice title="Draft article" className="order-3 lg:col-span-7 lg:col-start-2">
+            Placeholder text and no photography yet. Journal entries are written and published from the admin panel.
+          </Notice>
+        )}
       </div>
 
       <NextPage eyebrow="Read next" title={next.title} href={`/journal/${next.slug}`} label="Read" />

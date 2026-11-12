@@ -1,7 +1,8 @@
 import { Card, Check, Field, Flash, LinkButton, Page, Select, Submit, TextArea, euros } from "@/components/admin/ui";
 import { getProduct } from "@/server/admin";
+import { PHOTOS_PER_PRODUCT, listProductPhotos } from "@/server/backoffice";
 import { adminCtx } from "@/server/adminSession";
-import { adjustStock, deleteProduct, saveProduct, saveVariant } from "../../actions";
+import { adjustStock, deletePhoto, deleteProduct, saveProduct, saveVariant, uploadPhoto } from "../../actions";
 
 export const metadata = { title: "Product" };
 
@@ -10,6 +11,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   if (!ctx.admin) return null;
   const [{ id }, flash, categories] = await Promise.all([params, searchParams, ctx.db.category.findMany({ orderBy: { position: "asc" } })]);
   const product = id === "new" ? null : await getProduct(ctx, id);
+  const photos = product ? await listProductPhotos(ctx, product.id) : [];
 
   return (
     <Page title={product?.name ?? "New product"} eyebrow="Product" actions={<LinkButton href="/admin/products">All products</LinkButton>}>
@@ -104,6 +106,36 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             </form>
           </Card>
         </>
+      )}
+      {product && (
+        <Card title="Photos" description={`JPEG, PNG or WebP, up to 4 MB each, at most ${PHOTOS_PER_PRODUCT}. Photos are stored and kept ready for the shop; the product page still shows the illustrated bottle until the photo layout is designed.`}>
+          {photos.length > 0 && (
+            <ul className="mb-6 grid gap-4 sm:grid-cols-3 xl:grid-cols-4">
+              {photos.map((photo) => (
+                <li key={photo.id} className="border border-ink/10 p-3">
+                  {/* Admin preview of an uploaded file: next/image optimisation is not needed here. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/admin/products/${product.id}/photo/${photo.id}`} alt={photo.alt} className="aspect-square w-full bg-stone-300/30 object-contain" />
+                  <p className="text-small mt-2">{photo.alt}</p>
+                  <p className="text-small text-stone-700">{photo.bytes ? `${Math.round(photo.bytes / 1024)} KB` : ""}</p>
+                  <form action={deletePhoto.bind(null, product.id, photo.id)} className="mt-2">
+                    <Submit variant="danger" className="!h-9 !px-3">Delete</Submit>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={uploadPhoto.bind(null, product.id)} className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-small font-medium">Photo</span>
+              <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required className="mt-1.5 block w-full border border-ink/25 bg-white p-2 text-[0.9375rem]" />
+            </label>
+            <Field label="Description (alt text)" name="alt" required maxLength={200} hint="What the photo shows, in a few words." />
+            <div className="sm:col-span-2">
+              <Submit>Upload photo</Submit>
+            </div>
+          </form>
+        </Card>
       )}
     </Page>
   );

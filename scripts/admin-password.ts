@@ -22,12 +22,13 @@ async function main() {
   if (!admin) throw new Error(`No staff account for ${email}. Run \`npm run db:seed\` to create the first administrator.`);
 
   await db.$transaction([
-    db.adminUser.update({ where: { id: admin.id }, data: { passwordHash: await hashPassword(password) } }),
+    // A lost phone is the other way to be locked out, so two-factor sign-in is cleared too and can be set up again.
+    db.adminUser.update({ where: { id: admin.id }, data: { passwordHash: await hashPassword(password), totpSecret: null, totpEnabledAt: null } }),
     db.adminSession.deleteMany({ where: { adminUserId: admin.id } }),
     db.rateLimit.deleteMany({ where: { key: { startsWith: "admin-login:" } } }),
     db.auditLog.create({ data: { actorType: "system", action: "admin.password.reset_cli", entity: "AdminUser", entityId: admin.id } }),
   ]);
-  console.log(`Password updated for ${email}. Existing sessions were signed out.`);
+  console.log(`Password updated for ${email}. Two-factor sign-in was cleared and existing sessions were signed out.`);
 }
 
 main().then(

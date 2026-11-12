@@ -105,6 +105,10 @@ model ProductImage {
   url       String
   alt       String  @default("")
   position  Int     @default(0)
+  /// Uploaded photos are kept in the database and served from /media/{id}; null for images hosted elsewhere.
+  data      Bytes?
+  mime      String?
+  bytes     Int?
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, position])
@@ -150,12 +154,15 @@ model Batch {
   bottledAt   DateTime? @db.Date
   bestBefore  DateTime? @db.Date
   notes       String?
+  /// Who supplied this lot (grower, mill or bottler). Internal: never shown to customers.
+  supplierId  String?
   /// Only published batches are visible to customers.
   isPublished Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   product   Product         @relation(fields: [productId], references: [id])
+  supplier  Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   documents BatchDocument[]
 
   @@index([productId, isPublished])
@@ -211,20 +218,27 @@ model InventoryMovement {
 // ───────────────────────────── Customers ─────────────────────────────
 
 model Customer {
-  id              String    @id @default(cuid())
+  id                   String          @id @default(cuid())
   /// Always stored lower-cased.
-  email           String    @unique
-  passwordHash    String
-  firstName       String
-  lastName        String
-  phone           String?
-  locale          String    @default("en")
-  marketingOptIn  Boolean   @default(false)
-  emailVerifiedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  email                String          @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  phone                String?
+  locale               String          @default("en")
+  marketingOptIn       Boolean         @default(false)
+  emailVerifiedAt      DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
   /// Set when the account is erased on request; personal fields are blanked.
-  erasedAt        DateTime?
+  erasedAt             DateTime?
+  // Wholesale (B2B). Terms are set by staff; APPROVED accounts get their discount automatically.
+  wholesaleStatus      WholesaleStatus @default(NONE)
+  companyName          String?
+  companyVatNumber     String?
+  /// Standing discount on goods, percent × 100 (15% = 1500).
+  wholesaleDiscountBps Int             @default(0)
+  wholesaleNote        String?
 
   sessions   CustomerSession[]
   addresses  Address[]
@@ -740,14 +754,17 @@ enum AdminRole {
 }
 
 model AdminUser {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         AdminRole @default(STAFF)
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          AdminRole @default(STAFF)
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  /// Authenticator secret, encrypted with APP_SECRET. Present while enrolling; enforced once totpEnabledAt is set.
+  totpSecret    String?
+  totpEnabledAt DateTime?
 
   sessions          AdminSession[]
   notes             OrderNote[]
@@ -762,6 +779,7 @@ model AdminSession {
   expiresAt   DateTime
   createdAt   DateTime @default(now())
   ip          String?
+  userAgent   String?
 
   adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
@@ -824,6 +842,34 @@ model RateLimit {
   key         String   @id
   count       Int
   windowStart DateTime
+}
+
+enum WholesaleStatus {
+  NONE
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
+/// A grower, mill, bottler or packaging supplier. Internal records for traceability and purchasing.
+model Supplier {
+  id          String   @id @default(cuid())
+  name        String
+  /// What they supply: Grower, Mill, Bottler, Packaging, Logistics, Other.
+  kind        String   @default("Other")
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  countryCode String?  @db.Char(2)
+  vatNumber   String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  batches     Batch[]
+
+  @@index([isActive, name])
 }
 
 model JournalPost {

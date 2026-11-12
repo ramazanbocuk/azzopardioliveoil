@@ -71,6 +71,33 @@ export default async function StaffPage({ searchParams }: PageProps<"/admin/staf
           <Submit>Create</Submit>
         </form>
       </Card>
+      <Card title="What each role can do" description="Checked on the server for every action, whichever screen it comes from.">
+        <Table head={["Area", "Staff", "Manager", "Administrator"]}>
+          {[
+            ["See orders, customers, stock, shipments, reports screens", "Yes", "Yes", "Yes"],
+            ["Process, pack and ship orders; book and print labels; add notes; record lots", "Yes", "Yes", "Yes"],
+            ["Own two-factor sign-in and own sessions", "Yes", "Yes", "Yes"],
+            ["Products, prices, stock changes, lots, suppliers, discounts, shipping rates", "No", "Yes", "Yes"],
+            ["Cancel unpaid orders and carrier bookings; handle returns; moderate reviews", "No", "Yes", "Yes"],
+            ["Sales and VAT reports, CSV exports, lot recall list", "No", "Yes", "Yes"],
+            ["Wholesale terms, journal articles", "No", "Yes", "Yes"],
+            ["Refunds", "No", "No", "Yes"],
+            ["VAT rates, store and shipping settings, announcement, notifications", "No", "No", "Yes"],
+            ["Staff accounts and roles; reset another person’s two-factor; end anyone’s session", "No", "No", "Yes"],
+            ["Erase a customer’s personal data", "No", "No", "Yes"],
+          ].map(([area, staff, manager, administrator]) => (
+            <tr key={area}>
+              <td>{area}</td>
+              {[staff, manager, administrator].map((allowed, index) => (
+                <td key={index} className={allowed === "Yes" ? "text-olive-700" : "text-stone-700"}>
+                  {allowed}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </Table>
+        <p className="text-small mt-4 text-stone-700">Roles are fixed: permissions cannot be customised per person.</p>
+      </Card>
     </Page>
   );
 }

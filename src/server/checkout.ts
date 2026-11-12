@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { activeDiscount, findCart, summarise, toLines } from "./cart";
+import { WHOLESALE_CODE, activeDiscount, findCart, summarise, toLines } from "./cart";
 import type { Ctx } from "./context";
 import { hashToken, newToken } from "./crypto";
 import type { Db } from "./db";
@@ -86,6 +86,7 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
 
   const lines = toLines(cart);
   const discount = await activeDiscount(ctx.db, cart);
+  // A code on the cart must still be usable, unless the customer's trade terms beat it anyway.
   if (cart.discountCode && !discount) throw new AppError("DISCOUNT_INVALID", "The discount code on your cart can no longer be used.", "code");
 
   const summary = await summarise(ctx.db, cart);
@@ -109,7 +110,8 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
       if (reserved !== 1) throw new AppError("OUT_OF_STOCK", `${item.variant.product.name} ${item.variant.label} does not have enough stock.`);
     }
 
-    if (discount) {
+    // Trade terms are not a counted code: there is no usage limit to consume.
+    if (discount && discount.code !== WHOLESALE_CODE) {
       const used = await tx.$executeRaw`
         UPDATE "Discount" SET "usedCount" = "usedCount" + 1
         WHERE "code" = ${discount.code} AND ("usageLimit" IS NULL OR "usedCount" < "usageLimit")`;
