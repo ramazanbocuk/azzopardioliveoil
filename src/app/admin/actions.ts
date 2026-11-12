@@ -94,6 +94,21 @@ export async function cancelShipment(orderId: string, shipmentId: string) {
   });
 }
 
+export async function releaseShipmentAttempt(orderId: string, attemptId: string) {
+  await run(`/admin/orders/${orderId}`, (ctx) => fulfilment.releaseAttempt(ctx, attemptId), "Attempt released. The order can be booked again.");
+}
+
+/** Books one label per selected order. The choice arrives as "carrier|service". */
+export async function bulkBookLabels(form: FormData) {
+  await run("/admin/fulfilment", async (ctx) => {
+    const [carrier, ...service] = text(form, "choice").split("|");
+    const result = await fulfilment.bulkBookLabels(ctx, form.getAll("ids").map(String), { carrier, service: service.join("|") });
+    afterResponse(() => processJobs(getPrisma()), "run after bulk booking");
+    const failed = result.failed.length ? ` Not booked: ${result.failed.slice(0, 4).map((row) => `${row.number} (${row.reason})`).join("; ")}${result.failed.length > 4 ? "…" : ""}` : "";
+    return `/admin/fulfilment?${result.booked.length ? "ok" : "error"}=${encodeURIComponent(`${result.booked.length} label${result.booked.length === 1 ? "" : "s"} booked.${failed}`)}`;
+  });
+}
+
 export async function saveShipping(form: FormData) {
   await run("/admin/settings", (ctx) => admin.saveSetting(ctx, "shipping", formData(form)), "Shipping origin saved.");
 }
@@ -144,7 +159,7 @@ export async function deleteProduct(id: string) {
 
 export async function saveVariant(productId: string, variantId: string | null, form: FormData) {
   await run(`/admin/products/${productId}`, async (ctx) => {
-    await admin.saveVariant(ctx, productId, variantId, formData(form, { booleans: ["isActive"], euros: ["priceCents", "compareAtCents"] }));
+    await admin.saveVariant(ctx, productId, variantId, formData(form, { booleans: ["isActive"], euros: ["priceCents", "compareAtCents", "costCents"] }));
     updateTag("catalog");
   });
 }
@@ -244,7 +259,7 @@ export async function setStaffActive(id: string, isActive: boolean) {
 
 export async function retryJob(id: string) {
   await run("/admin/notifications", async (ctx) => {
-    requireAdmin(ctx, "MANAGER");
+    requireAdmin(ctx, "MANAGER", "notifications");
     await requeueJob(ctx.db, id);
     await processJobs(ctx.db);
   }, "Job retried.");
@@ -252,7 +267,7 @@ export async function retryJob(id: string) {
 
 export async function runJobsNow() {
   await run("/admin/notifications", async (ctx) => {
-    requireAdmin(ctx, "MANAGER");
+    requireAdmin(ctx, "MANAGER", "notifications");
     const report = await processJobs(ctx.db);
     return `/admin/notifications?ok=${encodeURIComponent(`Ran ${report.claimed} job(s): ${report.done} sent, ${report.skipped} skipped, ${report.retried} to retry, ${report.failed} failed.`)}`;
   });
@@ -322,6 +337,32 @@ export async function deletePhoto(productId: string, imageId: string) {
     await backoffice.removeProductPhoto(ctx, imageId);
     updateTag("catalog");
   }, "Photo deleted.");
+}
+
+export async function createPurchaseOrder(form: FormData) {
+  await run("/admin/inventory/purchasing", async (ctx) => {
+    const lines = [...form.keys()].filter((key) => key.startsWith("qty:") && Number(text(form, key)) > 0).map((key) => ({ sku: key.slice(4), quantity: text(form, key), unitCostCents: Math.round(Number(text(form, `cost:${key.slice(4)}`).replace(",", ".") || "0") * 100) }));
+    await backoffice.createPurchaseOrder(ctx, { supplierId: text(form, "supplierId"), expectedAt: text(form, "expectedAt"), notes: text(form, "notes"), lines });
+  }, "Purchase order created as a draft.");
+}
+
+export async function purchaseOrderStatus(id: string, status: "ORDERED" | "CANCELLED") {
+  await run("/admin/inventory/purchasing", (ctx) => backoffice.setPurchaseOrderStatus(ctx, id, status), status === "ORDERED" ? "Marked as ordered." : "Purchase order cancelled.");
+}
+
+export async function receivePurchaseOrder(id: string) {
+  await run("/admin/inventory/purchasing", async (ctx) => {
+    await backoffice.receivePurchaseOrder(ctx, id);
+    updateTag("catalog");
+  }, "Delivery received: stock and unit costs updated.");
+}
+
+export async function addCustomerNote(customerId: string, form: FormData) {
+  await run(`/admin/customers/${customerId}`, (ctx) => backoffice.addCustomerNote(ctx, customerId, text(form, "body")), "Note added.");
+}
+
+export async function setCustomerTags(customerId: string, form: FormData) {
+  await run(`/admin/customers/${customerId}`, (ctx) => backoffice.setCustomerTags(ctx, customerId, text(form, "tags")), "Tags saved.");
 }
 
 // ── Security ──

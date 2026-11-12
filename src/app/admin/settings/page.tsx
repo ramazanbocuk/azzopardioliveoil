@@ -48,6 +48,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
             <option value="cheapest">The cheapest service</option>
             <option value="fastest">The fastest service</option>
           </Select>
+          <Select label="Label printer" name="labelFormat" defaultValue={text(shipping, "labelFormat") || "THERMAL"}>
+            <option value="THERMAL">Thermal label printer, 4 × 6 inch (A6)</option>
+            <option value="A4">Office printer, A4 sheet</option>
+          </Select>
+          <Field label="Packaging weight per box (g)" name="packagingGrams" type="number" min={0} max={20000} defaultValue={typeof shipping.packagingGrams === "number" ? String(shipping.packagingGrams) : "0"} hint="Added to the goods when labels are booked in bulk." />
           <div className="sm:col-span-2">
             <Submit>Save shipping origin</Submit>
           </div>

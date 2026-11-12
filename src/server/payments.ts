@@ -211,6 +211,11 @@ export async function applyPaymentEvent(db: Db, provider: ProviderName, event: P
         await tx.auditLog.create({ data: { actorType: "system", action: "order.paid_without_stock", entity: "Order", entityId: order.id, data: { note: "Paid after reservation expired and stock was no longer available. Needs manual review." } } });
       }
       await tx.outboxJob.createMany({ data: PAID_JOBS.map((kind) => ({ kind, dedupeKey: `${kind}:${order.id}`, payload: { orderId: order.id } })), skipDuplicates: true });
+      // One low-stock alert per product per day, when this sale took it to or below its alert level.
+      const variantIds = order.items.map((item) => item.variantId).filter((id): id is string => !!id);
+      const low = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Variant" WHERE "id" = ANY(${variantIds}) AND "isActive" AND "stock" - "reserved" <= "lowStockThreshold"`;
+      const today = new Date().toISOString().slice(0, 10);
+      if (low.length) await tx.outboxJob.createMany({ data: low.map((variant) => ({ kind: "notify.owner.low_stock", dedupeKey: `notify.owner.low_stock:${variant.id}:${today}`, payload: { variantId: variant.id } })), skipDuplicates: true });
       return "paid";
     });
   } catch (error) {

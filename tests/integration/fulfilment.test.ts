@@ -3,7 +3,7 @@ import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
 import type { Ctx } from "@/server/context";
 import { AppError } from "@/server/errors";
-import { bookLabel, cancelBooking, compareRates, fulfilmentBoard, getLabel, refreshTracking } from "@/server/fulfilment";
+import { bookLabel, bulkBookLabels, cancelBooking, compareRates, fulfilmentBoard, getLabel, openAttempts, refreshTracking, releaseAttempt } from "@/server/fulfilment";
 import { CarrierError, type ShipmentRequest, type ShippingCarrier, type Tracking } from "@/server/shipping/carriers";
 import { setCarriers } from "@/server/shipping/registry";
 import { BILL, db, resetDb, seedCatalog } from "../helpers";
@@ -152,11 +152,83 @@ describe("carrier fulfilment", () => {
     const admins = await as("ADMINISTRATOR");
     await admin.saveSetting(admins, "shipping", ORIGIN);
     const orderId = await paidOrder();
-    setCarriers([testCarrier({ book: async () => Promise.reject(new CarrierError("Test Carrier", "Invalid postal code")) }).carrier]);
+    setCarriers([testCarrier({ book: async () => Promise.reject(new CarrierError("Test Carrier", "Invalid postal code", 422)) }).carrier]);
     await refused(bookLabel(admins, orderId, { carrier: "testcarrier", service: "STD", boxes: BOX }), /Test Carrier: Invalid postal code Nothing was booked/);
     expect(await db.shipment.count()).toBe(0);
     expect(await db.order.findUniqueOrThrow({ where: { id: orderId } })).toMatchObject({ fulfilmentStatus: "UNFULFILLED", status: "PAID" });
     expect(await db.auditLog.count({ where: { action: "shipment.book_failed" } })).toBe(1);
+    expect(await db.shipmentAttempt.findFirstOrThrow()).toMatchObject({ status: "FAILED" });
+    expect(await db.outboxJob.findFirstOrThrow()).toMatchObject({ kind: "notify.owner.label_failed" });
+
+    // A clear refusal leaves the order free to be booked again.
+    const { carrier, seen } = testCarrier();
+    setCarriers([carrier]);
+    await bookLabel(admins, orderId, { carrier: "testcarrier", service: "STD", boxes: BOX });
+    expect(seen.booked).toHaveLength(1);
+  });
+
+  it("never books the same parcel twice: not on a double click, and not when the carrier fails to answer", async () => {
+    const admins = await as("ADMINISTRATOR");
+    await admin.saveSetting(admins, "shipping", ORIGIN);
+    const orderId = await paidOrder();
+
+    // Two requests at the same moment: one books, the other is refused before the carrier is called.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slow = testCarrier();
+    const book = slow.carrier.book;
+    slow.carrier.book = async (request, service) => {
+      await gate;
+      return book(request, service);
+    };
+    setCarriers([slow.carrier]);
+    const first = bookLabel(admins, orderId, { carrier: "testcarrier", service: "STD", boxes: BOX });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await refused(bookLabel(admins, orderId, { carrier: "testcarrier", service: "STD", boxes: BOX }), /already being booked/);
+    release();
+    await first;
+    expect(slow.seen.booked).toHaveLength(1);
+    expect(await db.shipment.count()).toBe(1);
+
+    // The carrier never answers: the outcome is unknown, so a retry is blocked until someone has checked.
+    const other = await paidOrder();
+    const silent = testCarrier({ book: async () => Promise.reject(new CarrierError("Test Carrier", "could not be reached (timeout).")) });
+    setCarriers([silent.carrier]);
+    await refused(bookLabel(admins, other, { carrier: "testcarrier", service: "STD", boxes: BOX }), /not known whether Test Carrier booked/);
+    const working = testCarrier();
+    setCarriers([working.carrier]);
+    await refused(bookLabel(admins, other, { carrier: "testcarrier", service: "STD", boxes: BOX }), /may have gone through/);
+    expect(working.seen.booked).toHaveLength(0);
+
+    const [attempt] = await openAttempts(admins, other);
+    expect(attempt).toMatchObject({ status: "UNKNOWN", carrier: "Test Carrier" });
+    await refused(releaseAttempt(await as("STAFF"), attempt.id), /role does not allow/);
+    await releaseAttempt(admins, attempt.id);
+    await bookLabel(admins, other, { carrier: "testcarrier", service: "STD", boxes: BOX });
+    expect(working.seen.booked).toHaveLength(1);
+    await refused(releaseAttempt(admins, attempt.id), /not waiting/);
+  });
+
+  it("books labels for many orders, weighing each box and reporting the ones that fail", async () => {
+    const admins = await as("ADMINISTRATOR");
+    await admin.saveSetting(admins, "shipping", { ...ORIGIN, packagingGrams: 400, labelFormat: "A4" });
+    const a = await paidOrder();
+    const b = await paidOrder();
+    const abroad = await paidOrder("GB"); // no customs code on its line: must be refused, not guessed
+    const { carrier, seen } = testCarrier();
+    setCarriers([carrier]);
+
+    const result = await bulkBookLabels(admins, [a, b, abroad, a], { carrier: "testcarrier", service: "STD" });
+    expect(result.booked).toHaveLength(2);
+    expect(result.failed).toMatchObject([{ reason: expect.stringMatching(/customs/) }]);
+    expect(seen.booked.map((call) => [call.request.boxes, call.request.labelFormat])).toEqual([[[{ weightGrams: 2300 }], "A4"], [[{ weightGrams: 2300 }], "A4"]]);
+    expect(await db.order.count({ where: { fulfilmentStatus: "SHIPPED" } })).toBe(2);
+
+    // Running the same batch again books nothing more.
+    const again = await bulkBookLabels(admins, [a, b], { carrier: "testcarrier", service: "STD" });
+    expect(again.booked).toHaveLength(0);
+    expect(seen.booked).toHaveLength(2);
+    await refused(bulkBookLabels(admins, [], { carrier: "testcarrier", service: "STD" }), /at least one order/);
   });
 
   it("requires a customs code for every product before booking outside the EU", async () => {

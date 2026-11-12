@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { Badge, Card, Flash, LinkButton, Page, Stat, Table, cellLink, dateTime, money } from "@/components/admin/ui";
+import { SelectAll } from "@/components/admin/SelectAll";
+import { Badge, Card, Flash, LinkButton, Page, Stat, Submit, Table, cellLink, dateTime, money } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
 import { fulfilmentBoard } from "@/server/fulfilment";
 import { FULFILMENT_LABEL } from "@/server/orderStatus";
+import { connectedCarriers } from "@/server/shipping/registry";
+import { bulkBookLabels } from "../actions";
 
 export const metadata = { title: "Shipping & fulfilment" };
 
@@ -13,6 +16,7 @@ export default async function FulfilmentPage({ searchParams }: PageProps<"/admin
   if (!ctx.admin) return null;
   const [board, params] = await Promise.all([fulfilmentBoard(ctx), searchParams]);
   const connected = board.carriers.filter((carrier) => carrier.connected);
+  const services = connectedCarriers().flatMap((carrier) => carrier.services.map((service) => ({ value: `${carrier.key}|${service.code}`, label: `${carrier.name} — ${service.name}` })));
 
   return (
     <Page title="Shipping & fulfilment" eyebrow={`${board.waiting.length} order${board.waiting.length === 1 ? "" : "s"} waiting to ship`} actions={<LinkButton href="/admin/orders?fulfilment=READY">Ready to ship</LinkButton>}>
@@ -50,9 +54,34 @@ export default async function FulfilmentPage({ searchParams }: PageProps<"/admin
       </Card>
 
       <Card title="Waiting to ship" description="Paid orders with units that have not left yet, oldest payment first. Open an order to compare rates, book a label or record a shipment.">
-        <Table head={["Order", "Paid", "Ship to", "Destination", "Units left", "Goods weight", "Requested", "Fulfilment", "Total"]} empty={board.waiting.length === 0 ? "Nothing is waiting to ship." : undefined}>
+        <form action={bulkBookLabels}>
+        {services.length > 0 ? (
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className="block">
+              <span className="text-small font-medium">Book labels for the selected orders with</span>
+              <select name="choice" required defaultValue="" className="mt-1.5 block h-10 border border-ink/25 bg-white px-3 text-[0.9375rem]">
+                <option value="" disabled>
+                  Choose a carrier and service
+                </option>
+                {services.map((service) => (
+                  <option key={service.value} value={service.value}>
+                    {service.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Submit>Book labels</Submit>
+            <p className="text-small max-w-[60ch] text-stone-700">Up to 50 at a time. Each order ships as one box holding everything not yet sent, weighed as goods plus the packaging weight in Settings. Each label is a real booking with the carrier. Orders that fail are listed and do not stop the others.</p>
+          </div>
+        ) : (
+          <p className="text-small mb-4 text-stone-700">Bulk label booking appears here once a carrier is connected.</p>
+        )}
+        <Table head={[<SelectAll key="all" name="ids" label="Select all waiting orders" />, "Order", "Paid", "Ship to", "Destination", "Units left", "Goods weight", "Requested", "Fulfilment", "Total"]} empty={board.waiting.length === 0 ? "Nothing is waiting to ship." : undefined}>
           {board.waiting.map(({ order, units, weightGrams, needsCustoms }) => (
             <tr key={order.id}>
+              <td>
+                <input type="checkbox" name="ids" value={order.id} aria-label={`Select order ${order.number}`} className="size-4 accent-olive-700" />
+              </td>
               <td>
                 <Link href={`/admin/orders/${order.id}`} className={cellLink}>
                   {order.number}
@@ -82,6 +111,7 @@ export default async function FulfilmentPage({ searchParams }: PageProps<"/admin
             </tr>
           ))}
         </Table>
+        </form>
       </Card>
 
       <Card title="Recent shipments">

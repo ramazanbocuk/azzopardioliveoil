@@ -42,6 +42,17 @@ Put them in the environment (see `.env.example`), restart, and check **Admin →
 - **Tracking:** the scheduler re-reads tracking for parcels in transit every two hours and marks the order delivered when the carrier reports delivery. Carriers' push notifications (webhooks) are not used.
 - **By hand:** recording a shipment with a typed carrier and tracking number always works, connected or not.
 
+## Never paying for a label twice
+
+Before a carrier is called, an attempt is written under a lock on the order. While one is open for the same units, a second click, a retry or a second person is refused. If the carrier refuses, the attempt closes and the order can be booked again. If the carrier never answers, the outcome is unknown: the order shows a notice and stays blocked until someone has checked with the carrier and pressed Release. An alert email goes to the shop either way.
+
+## Label formats and documents
+
+- **Label printer** (Settings): thermal 4×6 inch, or A4. It is passed to the carrier as its own format name (DHL `ECOM26_84_001` / `ECOM26_84_A4_001`, FedEx `PAPER_4X6` / `PAPER_85X11_TOP_HALF_LABEL`, bpost `A6` / `A4`). **Confirm each name on the first test booking.**
+- Labels are stored as issued and can be reprinted from the order or the shipping dashboard. Several boxes give several labels where the carrier issues one per box.
+- **Bulk booking**: up to 50 orders at once from the shipping dashboard, one box each.
+- **Commercial invoice**: printable from any order, for parcels leaving the EU. It needs the HS code and origin on each product and your EORI number, which is printed as a gap to fill.
+
 ## Not built
 
-Automatic carrier choice without a person confirming; pickup booking; return labels; pickup points and lockers; bulk label printing; carrier webhooks; label formats other than PDF.
+Automatic carrier choice without a person confirming; pickup booking; return labels; pickup points and lockers; printing many labels as one file; carrier push notifications (tracking is polled); label formats other than PDF (ZPL); insurance options; sending customs documents electronically.

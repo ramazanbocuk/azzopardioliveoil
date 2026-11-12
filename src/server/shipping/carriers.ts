@@ -50,6 +50,8 @@ export type ShipmentRequest = {
   /** True when the parcel leaves the EU customs union and needs a customs declaration. */
   customs: boolean;
   shipDate: Date;
+  /** "THERMAL" for a 4×6 inch (A6) label printer, "A4" for an office printer. */
+  labelFormat: "THERMAL" | "A4";
 };
 
 export type RateQuote = {
@@ -109,6 +111,10 @@ export class CarrierNotConnected extends Error {
 
 /** The carrier answered, and refused. The message is the carrier's own, so staff can act on it. */
 export class CarrierError extends Error {
+  /**
+   * `status` is the carrier's HTTP answer. When it is missing the carrier never
+   * answered, so whether it acted on the request is unknown.
+   */
   constructor(
     public readonly carrier: string,
     message: string,

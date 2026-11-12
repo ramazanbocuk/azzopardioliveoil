@@ -6,7 +6,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Page";
-import { formatPrice, shippingCountries } from "@/content/site";
+import {formatPrice } from "@/content/site";
 import { errorMessage } from "@/lib/apollo";
 import { Checkout, ShippingOptionsQuery, StartPayment } from "@/lib/operations";
 import { useCart, useCartActions } from "@/lib/store";
@@ -31,11 +31,11 @@ function Step({ number, title, children }: { number: number; title: string; chil
  * back a link to the payment provider's own page. Nothing here can mark an
  * order paid.
  */
-export function CheckoutView() {
+export function CheckoutView({ countries }: { countries: { code: string; name: string }[] }) {
   const router = useRouter();
   const { cart, ready } = useCart();
   const actions = useCartActions();
-  const [country, setCountry] = useState("BE");
+  const [country, setCountry] = useState(countries.some((option) => option.code === "BE") ? "BE" : (countries[0]?.code ?? "BE"));
   const [chosenRate, setChosenRate] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [codeMessage, setCodeMessage] = useState("");
@@ -167,7 +167,7 @@ export function CheckoutView() {
               }}
               className="sm:col-span-2"
             >
-              {shippingCountries.map((option) => (
+              {countries.map((option) => (
                 <option key={option.code} value={option.code}>
                   {option.name}
                 </option>
@@ -189,7 +189,7 @@ export function CheckoutView() {
               <TextField label="Postal code" name="billPostalCode" required autoComplete="billing postal-code" />
               <TextField label="City" name="billCity" required autoComplete="billing address-level2" />
               <SelectField label="Country" name="billCountry" required autoComplete="billing country" defaultValue={country} className="sm:col-span-2">
-                {shippingCountries.map((option) => (
+                {countries.map((option) => (
                   <option key={option.code} value={option.code}>
                     {option.name}
                   </option>

@@ -7,7 +7,7 @@ export const metadata = { title: "Audit log" };
 export default async function AuditPage() {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "security");
   const [rows, staff] = await Promise.all([ctx.db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 200 }), ctx.db.adminUser.findMany({ select: { id: true, name: true } })]);
   const who = (row: (typeof rows)[number]) => (row.actorType === "admin" ? (staff.find((s) => s.id === row.actorId)?.name ?? "Former staff") : row.actorType);
 

@@ -8,7 +8,7 @@ export const metadata = { title: "Discounts" };
 export default async function DiscountsPage({ searchParams }: PageProps<"/admin/discounts">) {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "discounts");
   const [discounts, params] = await Promise.all([ctx.db.discount.findMany({ orderBy: { createdAt: "desc" } }), searchParams]);
 
   const form = (discount: (typeof discounts)[number] | null) => (

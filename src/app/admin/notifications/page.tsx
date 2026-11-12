@@ -33,7 +33,7 @@ function ContactMessage({ payload }: { payload: unknown }) {
 export default async function NotificationsPage({ searchParams }: PageProps<"/admin/notifications">) {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "notifications");
   const [jobs, counts, params] = await Promise.all([ctx.db.outboxJob.findMany({ orderBy: { createdAt: "desc" }, take: 100 }), ctx.db.outboxJob.groupBy({ by: ["status"], _count: true }), searchParams]);
   const count = (status: string) => counts.find((row) => row.status === status)?._count ?? 0;
 

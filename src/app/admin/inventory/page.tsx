@@ -12,17 +12,17 @@ export default async function InventoryPage({ searchParams }: PageProps<"/admin/
   const [stock, params] = await Promise.all([inventoryOverview(ctx), searchParams]);
 
   return (
-    <Page title="Inventory" eyebrow={`${stock.rows.length} variants`} actions={<LinkButton href="/admin/export/inventory">Export (CSV)</LinkButton>}>
+    <Page title="Inventory" eyebrow={`${stock.rows.length} variants`} actions={<><LinkButton href="/admin/inventory/purchasing">Purchasing</LinkButton><LinkButton href="/admin/export/inventory">Export (CSV)</LinkButton></>}>
       <Flash params={params} />
       <div className="grid gap-4 sm:grid-cols-4">
         <Stat label="Units on hand" value={String(stock.unitsOnHand)} />
         <Stat label="Held for unpaid orders" value={String(stock.unitsReserved)} />
         <Stat label="Low or out of stock" value={String(stock.lowCount)} />
-        <Stat label="Value at retail price" value={money(stock.retailValueCents)} note="Selling price × units, VAT included. Not a cost valuation." />
+        <Stat label="Stock value at cost" value={money(stock.costValueCents)} note={stock.variantsWithoutCost ? `${stock.variantsWithoutCost} stocked variant(s) have no unit cost entered and are not counted.` : `At retail price: ${money(stock.retailValueCents)}`} />
       </div>
 
       <Card title="Stock levels" description="Available = on hand − held. Every change is written to the ledger below with who made it and why.">
-        <Table head={["Product", "SKU", "On hand", "Held", "Available", "Alert at", "State", "Adjust"]} empty={stock.rows.length === 0 ? "No products yet." : undefined}>
+        <Table head={["Product", "SKU", "Location", "On hand", "Held", "Available", "Alert at", "Unit cost", "State", "Adjust"]} empty={stock.rows.length === 0 ? "No products yet." : undefined}>
           {stock.rows.map((row) => (
             <tr key={row.id}>
               <td>
@@ -31,11 +31,16 @@ export default async function InventoryPage({ searchParams }: PageProps<"/admin/
                 </Link>
                 <span className="text-small block text-stone-700">{row.label}</span>
               </td>
-              <td className="font-mono text-[0.8125rem]">{row.sku}</td>
+              <td className="font-mono text-[0.8125rem]">
+                {row.sku}
+                {row.barcode && <span className="block text-stone-700">{row.barcode}</span>}
+              </td>
+              <td>{row.location ?? "—"}</td>
               <td className="tabular-nums">{row.stock}</td>
               <td className="tabular-nums">{row.reserved}</td>
               <td className="tabular-nums font-medium">{row.available}</td>
               <td className="tabular-nums">{row.lowStockThreshold}</td>
+              <td className="tabular-nums">{row.costCents === null ? "—" : money(row.costCents)}</td>
               <td>{!row.isActive ? <Badge>NOT ON SALE</Badge> : row.available <= 0 ? <Badge tone="FAILED">OUT OF STOCK</Badge> : row.low ? <Badge tone="UNPAID">LOW</Badge> : <Badge tone="PAID">IN STOCK</Badge>}</td>
               <td>
                 <form action={adjustStock.bind(null, row.product.id, row.id)} className="flex flex-wrap items-end gap-2">

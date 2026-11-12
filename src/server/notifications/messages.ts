@@ -148,6 +148,41 @@ export function contactEmail(message: { name: string; email: string; reference?:
   };
 }
 
+// ── Staff alerts and customer notices ──
+
+/** A plain operational alert to the shop: something needs a person's attention. */
+export function staffAlertEmail(to: string, alert: { subject: string; heading: string; lines: string[]; path?: string }): Email {
+  const link = alert.path ? `${appUrl()}${alert.path}` : null;
+  return {
+    to,
+    subject: alert.subject,
+    text: [alert.heading, "", ...alert.lines, ...(link ? ["", link] : [])].join("\n"),
+    html: layout(alert.heading, `${alert.lines.map((line) => `<p>${escape(line)}</p>`).join("")}${link ? `<p><a href="${link}">Open in the admin panel</a></p>` : ""}`),
+  };
+}
+
+export function customerRefundEmail(order: Order, amountCents: number, full: boolean): Email {
+  const intro = full ? `We have refunded your order ${order.number} in full.` : `We have refunded ${money(amountCents)} of your order ${order.number}.`;
+  const timing = "The money goes back to the payment method you used. Your bank decides how quickly it appears, usually within a few working days.";
+  return {
+    to: order.email,
+    subject: `Refund for your order ${order.number}`,
+    text: [`Dear ${order.shipFirstName},`, "", intro, `Amount refunded: ${money(amountCents)}`, "", timing, "", "Azzopardi Olive Oil"].join("\n"),
+    html: layout("Your refund", `<p>Dear ${escape(order.shipFirstName)},</p><p>${escape(intro)}</p><p><strong>Amount refunded: ${money(amountCents)}</strong></p><p>${timing}</p>`),
+  };
+}
+
+export function wholesaleApprovedEmail(customer: { email: string; firstName: string; companyName: string | null; wholesaleDiscountBps: number }): Email {
+  const terms = `${(customer.wholesaleDiscountBps / 100).toLocaleString("en-GB", { maximumFractionDigits: 2 })}%`;
+  const lines = [`Your wholesale account${customer.companyName ? ` for ${customer.companyName}` : ""} has been approved.`, `Your trade discount of ${terms} on goods is applied automatically at checkout whenever you are signed in. It does not combine with discount codes.`, "At checkout you can enter your company invoice address and VAT number."];
+  return {
+    to: customer.email,
+    subject: "Your Azzopardi wholesale account is approved",
+    text: [`Dear ${customer.firstName},`, "", ...lines, "", `${appUrl()}/account`, "", "Azzopardi Olive Oil"].join("\n"),
+    html: layout("Wholesale account approved", `<p>Dear ${escape(customer.firstName)},</p>${lines.map((line) => `<p>${escape(line)}</p>`).join("")}<p><a href="${appUrl()}/account">Sign in to your account</a></p>`),
+  };
+}
+
 // ── Password reset ──
 
 export const RESET_MINUTES = 60;

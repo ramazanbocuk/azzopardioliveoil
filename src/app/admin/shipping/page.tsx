@@ -8,7 +8,7 @@ export const metadata = { title: "Shipping & VAT" };
 export default async function ShippingPage({ searchParams }: PageProps<"/admin/shipping">) {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "shipping");
   const [zones, taxes, params] = await Promise.all([
     ctx.db.shippingZone.findMany({ orderBy: { name: "asc" }, include: { rates: { orderBy: { position: "asc" } } } }),
     ctx.db.taxRate.findMany({ orderBy: { countryCode: "asc" } }),

@@ -38,6 +38,7 @@ const request = (over: Partial<ShipmentRequest> = {}): ShipmentRequest => ({
   declaredValueCents: 3600,
   customs: false,
   shipDate: new Date("2026-11-13T09:00:00Z"),
+  labelFormat: "THERMAL",
   ...over,
 });
 const abroad = { name: "Sam Smith", line1: "12 High Street", postalCode: "SW1A 1AA", city: "London", countryCode: "GB", email: "sam@example.test", phone: "+447000000000" };

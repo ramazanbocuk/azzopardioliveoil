@@ -105,3 +105,20 @@ export async function getAnnouncement(): Promise<{ text: string; link: string | 
   const value = ((await getPrisma().setting.findUnique({ where: { key: "content" } }))?.value ?? {}) as { announcement?: string | null; announcementLink?: string | null; announcementOn?: boolean };
   return value.announcementOn && value.announcement ? { text: value.announcement, link: value.announcementLink ?? null } : null;
 }
+
+/**
+ * Countries the shop delivers to: every country in an active shipping zone
+ * that has at least one active rate. Names come from the platform's own
+ * country list, so a zone can hold any ISO code. Belgium first, then A–Z.
+ */
+export async function getShippingCountries(): Promise<{ code: string; name: string }[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("shipping");
+  const zones = await getPrisma().shippingZone.findMany({ where: { isActive: true, rates: { some: { isActive: true } } }, select: { countries: true } });
+  const names = new Intl.DisplayNames(["en"], { type: "region" });
+  const codes = [...new Set(zones.flatMap((zone) => zone.countries))].filter((code) => /^[A-Z]{2}$/.test(code));
+  return codes
+    .map((code) => ({ code, name: names.of(code) ?? code }))
+    .sort((a, b) => (a.code === "BE" ? -1 : b.code === "BE" ? 1 : a.name.localeCompare(b.name)));
+}

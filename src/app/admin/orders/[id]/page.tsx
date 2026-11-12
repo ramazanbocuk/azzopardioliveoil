@@ -2,11 +2,11 @@ import Link from "next/link";
 import { Badge, Card, Check, Field, Flash, LinkButton, Page, Submit, Table, TextArea, cellLink, dateTime, euros, money } from "@/components/admin/ui";
 import { getOrder } from "@/server/admin";
 import { AppError } from "@/server/errors";
-import { compareRates, type RateComparison } from "@/server/fulfilment";
+import { compareRates, openAttempts, type RateComparison } from "@/server/fulfilment";
 import { carrierStates } from "@/server/shipping/registry";
 import { adminCtx } from "@/server/adminSession";
 import { FULFILMENT_LABEL, ORDER_STATUS_LABEL, PAYMENT_ALLOWS_FULFILMENT } from "@/server/orderStatus";
-import { addNote, bookCarrierLabel, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
+import { addNote, bookCarrierLabel, releaseShipmentAttempt, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
 
 export const metadata = { title: "Order" };
 
@@ -18,6 +18,8 @@ const MESSAGE_LABEL: Record<string, string> = {
   "notify.owner.email": "New-order email to the shop",
   "notify.owner.whatsapp": "New-order WhatsApp to the shop",
   "notify.owner.sms": "New-order SMS to the shop",
+  "notify.customer.refund": "Refund email to the customer",
+  "notify.owner.label_failed": "Failed-label alert to the shop",
 };
 
 function Address({ lines }: { lines: (string | null | undefined)[] }) {
@@ -72,6 +74,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
       <input type="hidden" name="heightCm" value={box.heightCm} />
     </>
   );
+  const attempts = await openAttempts(ctx, order.id);
   const itemName = (orderItemId: string) => {
     const item = order.items.find((candidate) => candidate.id === orderItemId);
     return item ? `${item.productName} ${item.variantLabel}` : "Removed line";
@@ -85,6 +88,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
         <>
           <LinkButton href={`/admin/orders/${order.id}/invoice`} target="_blank">Invoice</LinkButton>
           <LinkButton href={`/admin/orders/${order.id}/packing-slip`} target="_blank">Packing slip</LinkButton>
+          <LinkButton href={`/admin/orders/${order.id}/commercial-invoice`} target="_blank">Commercial invoice</LinkButton>
         </>
       }
     >
@@ -256,6 +260,16 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
               </div>
             ))}
 
+            {attempts.map((attempt) => (
+              <div key={attempt.id} role="alert" className="mb-5 border-l-2 border-terracotta-700 bg-terracotta-500/10 px-4 py-3 text-terracotta-700">
+                <p className="font-medium">A booking with {attempt.carrier} on {dateTime(attempt.createdAt)} may or may not have gone through.</p>
+                <p className="mt-1">{attempt.error}</p>
+                <p className="mt-1">Check in {attempt.carrier}’s own system whether a shipment exists for this order. If one does, cancel it there or record it by hand below. Booking is blocked for these items until this is released, so the label cannot be paid for twice.</p>
+                <form action={releaseShipmentAttempt.bind(null, order.id, attempt.id)} className="mt-3">
+                  <Submit variant="danger">I have checked: nothing was booked. Release.</Submit>
+                </form>
+              </div>
+            ))}
             {canShip && (
               <div className="mb-8 border border-ink/10 p-4">
                 <h3 className="font-medium">Book a carrier label</h3>

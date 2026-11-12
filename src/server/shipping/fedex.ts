@@ -129,7 +129,7 @@ export function createFedex(env: Env, transport: CarrierTransport, now: () => nu
           pickupType: "USE_SCHEDULED_PICKUP",
           blockInsightVisibility: false,
           shippingChargesPayment: { paymentType: "SENDER" },
-          labelSpecification: { labelFormatType: "COMMON2D", imageType: "PDF", labelStockType: "PAPER_4X6" },
+          labelSpecification: { labelFormatType: "COMMON2D", imageType: "PDF", labelStockType: request.labelFormat === "A4" ? "PAPER_85X11_TOP_HALF_LABEL" : "PAPER_4X6" },
           customerReferences: [{ customerReferenceType: "CUSTOMER_REFERENCE", value: request.reference.slice(0, 40) }],
           totalPackageCount: request.boxes.length,
           requestedPackageLineItems: lineItems(request),

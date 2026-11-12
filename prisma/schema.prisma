@@ -129,15 +129,22 @@ model Variant {
   /// Units held by orders awaiting payment. Available = stock - reserved.
   reserved          Int      @default(0)
   lowStockThreshold Int      @default(6)
+  /// EAN/UPC printed on the bottle, for scanning.
+  barcode           String?
+  /// What one unit costs the business, for stock valuation and margin. Null = not recorded.
+  costCents         Int?
+  /// Where it is kept: shelf, rack or bin.
+  location          String?
   isActive          Boolean  @default(true)
   position          Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  product    Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  movements  InventoryMovement[]
-  cartItems  CartItem[]
-  favourites Favourite[]
+  product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  movements     InventoryMovement[]
+  purchaseLines PurchaseOrderLine[]
+  cartItems     CartItem[]
+  favourites    Favourite[]
 
   @@index([productId, position])
 }
@@ -239,6 +246,8 @@ model Customer {
   /// Standing discount on goods, percent × 100 (15% = 1500).
   wholesaleDiscountBps Int             @default(0)
   wholesaleNote        String?
+  /// Free labels set by staff, e.g. VIP, Restaurant, Press.
+  tags                 String[]        @default([])
 
   sessions   CustomerSession[]
   addresses  Address[]
@@ -246,6 +255,7 @@ model Customer {
   orders     Order[]
   reviews    Review[]
   carts      Cart[]
+  notes      CustomerNote[]
 }
 
 model CustomerSession {
@@ -696,6 +706,27 @@ model Parcel {
   @@index([shipmentId])
 }
 
+/// One attempt to book a shipment with a carrier. Written BEFORE the carrier is called, so a
+/// second click, a retry or a second person can never book (and pay for) the same parcel twice.
+model ShipmentAttempt {
+  id          String   @id @default(cuid())
+  orderId     String
+  /// Which units this attempt covers: the same units cannot be attempted twice at once.
+  fingerprint String
+  carrier     String
+  service     String
+  /// STARTED while the carrier is being called; SUCCEEDED or FAILED once it answers;
+  /// UNKNOWN when it never answered, so staff must check with the carrier before trying again.
+  status      String   @default("STARTED")
+  shipmentId  String?
+  error       String?
+  adminUserId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orderId, fingerprint, status])
+}
+
 /// A label document exactly as the carrier issued it. Kept in the database so it can be reprinted.
 model ShipmentLabel {
   id             String   @id @default(cuid())
@@ -747,8 +778,17 @@ model ReturnRequest {
 
 // ───────────────────────────── Administration ─────────────────────────────
 
+/// What each role may do is defined in src/server/permissions.ts.
 enum AdminRole {
+  SUPER_ADMINISTRATOR
   ADMINISTRATOR
+  OPERATIONS_MANAGER
+  WAREHOUSE_MANAGER
+  SHIPPING_MANAGER
+  CUSTOMER_SUPPORT
+  ACCOUNTANT
+  MARKETING_MANAGER
+  ANALYST
   MANAGER
   STAFF
 }
@@ -853,23 +893,68 @@ enum WholesaleStatus {
 
 /// A grower, mill, bottler or packaging supplier. Internal records for traceability and purchasing.
 model Supplier {
-  id          String   @id @default(cuid())
-  name        String
+  id             String          @id @default(cuid())
+  name           String
   /// What they supply: Grower, Mill, Bottler, Packaging, Logistics, Other.
-  kind        String   @default("Other")
-  contactName String?
-  email       String?
-  phone       String?
-  address     String?
-  countryCode String?  @db.Char(2)
-  vatNumber   String?
-  notes       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  batches     Batch[]
+  kind           String          @default("Other")
+  contactName    String?
+  email          String?
+  phone          String?
+  address        String?
+  countryCode    String?         @db.Char(2)
+  vatNumber      String?
+  notes          String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  batches        Batch[]
+  purchaseOrders PurchaseOrder[]
 
   @@index([isActive, name])
+}
+
+/// Stock ordered from a supplier. Receiving it adds the units to stock and records what they cost.
+model PurchaseOrder {
+  id          String              @id @default(cuid())
+  sequence    Int                 @unique @default(autoincrement())
+  supplierId  String
+  /// DRAFT, ORDERED, RECEIVED or CANCELLED.
+  status      String              @default("DRAFT")
+  expectedAt  DateTime?           @db.Date
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  notes       String?
+  adminUserId String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  lines       PurchaseOrderLine[]
+
+  @@index([status, createdAt])
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  variantId       String
+  quantity        Int
+  unitCostCents   Int
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  variant         Variant       @relation(fields: [variantId], references: [id])
+
+  @@index([purchaseOrderId])
+}
+
+/// A staff note about a customer. Never shown to the customer, but part of their data on a GDPR request.
+model CustomerNote {
+  id          String   @id @default(cuid())
+  customerId  String
+  adminUserId String?
+  body        String
+  createdAt   DateTime @default(now())
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
 }
 
 model JournalPost {

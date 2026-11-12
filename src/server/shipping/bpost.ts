@@ -92,7 +92,7 @@ export function createBpost(env: Env, transport: CarrierTransport): ShippingCarr
     async book(request, service): Promise<BookedShipment> {
       await carrierCall(transport, "bpost", orders, { method: "POST", headers: { authorization, "content-type": "application/vnd.bpost.shm-order-v5+XML" }, body: bpostOrderXml(accountId, request, service) }, describe);
       const reference = encodeURIComponent(request.reference);
-      const body = await carrierCall(transport, "bpost", `${orders}/${reference}/labels/A6`, { method: "GET", headers: { authorization, "content-type": "application/vnd.bpost.shm-labelRequest-v5+XML", accept: "application/vnd.bpost.shm-label-pdf-v3.4+XML" } }, describe);
+      const body = await carrierCall(transport, "bpost", `${orders}/${reference}/labels/${request.labelFormat === "A4" ? "A4" : "A6"}`, { method: "GET", headers: { authorization, "content-type": "application/vnd.bpost.shm-labelRequest-v5+XML", accept: "application/vnd.bpost.shm-label-pdf-v3.4+XML" } }, describe);
       const labels = all(body, "label").map((label) => ({ barcode: first(label, "barcode"), bytes: first(label, "bytes") })).filter((label): label is { barcode: string; bytes: string } => !!label.barcode && !!label.bytes);
       if (labels.length === 0) throw new CarrierError("bpost", `created order ${request.reference} but returned no label. Open the order in Shipping Manager to print it, or cancel it there.`);
       const tracking = labels[0].barcode;
