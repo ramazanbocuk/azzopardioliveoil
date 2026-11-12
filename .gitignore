@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local database files and generated client
+/.data
+/src/generated
+!.env.example
+
+# end-to-end test output
+/test-results
+/playwright-report
+
+# database backups contain personal data
+/backups
+/.next-e2e

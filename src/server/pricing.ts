@@ -1,0 +1,108 @@
+/**
+ * Pure pricing rules. No database, no clock of its own — everything is passed
+ * in, so every rule here is unit-tested directly. The server is the only
+ * place totals are computed; the browser displays what it is told.
+ */
+
+export type Line = { unitPriceCents: number; quantity: number; weightGrams: number };
+
+export type DiscountRule = {
+  code: string;
+  kind: "PERCENT" | "FIXED" | "FREE_SHIPPING";
+  value: number;
+  minSubtotalCents: number;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  usageLimit: number | null;
+  usedCount: number;
+  isActive: boolean;
+};
+
+export type RateRule = {
+  id: string;
+  name: string;
+  carrier: string | null;
+  priceCents: number;
+  minWeightGrams: number;
+  maxWeightGrams: number | null;
+  freeAboveCents: number | null;
+  estimate: string | null;
+};
+
+export const MAX_LINE_QUANTITY = 24;
+
+export function subtotalCents(lines: Line[]): number {
+  return lines.reduce((sum, line) => sum + line.unitPriceCents * line.quantity, 0);
+}
+
+export function totalWeightGrams(lines: Line[]): number {
+  return lines.reduce((sum, line) => sum + line.weightGrams * line.quantity, 0);
+}
+
+/** Returns why a code cannot be used, or null when it can. */
+export function discountProblem(discount: DiscountRule, subtotal: number, now: Date): string | null {
+  if (!discount.isActive) return "This code is not active.";
+  if (discount.startsAt && now < discount.startsAt) return "This code is not valid yet.";
+  if (discount.endsAt && now > discount.endsAt) return "This code has expired.";
+  if (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit) return "This code has been fully used.";
+  if (subtotal < discount.minSubtotalCents) return "Your order does not reach the minimum for this code.";
+  return null;
+}
+
+export function discountAmount(discount: DiscountRule | null, subtotal: number): { discountCents: number; freeShipping: boolean } {
+  if (!discount) return { discountCents: 0, freeShipping: false };
+  switch (discount.kind) {
+    case "PERCENT":
+      return { discountCents: Math.round((subtotal * Math.min(100, Math.max(0, discount.value))) / 100), freeShipping: false };
+    case "FIXED":
+      return { discountCents: Math.min(subtotal, Math.max(0, discount.value)), freeShipping: false };
+    case "FREE_SHIPPING":
+      return { discountCents: 0, freeShipping: true };
+  }
+}
+
+/** Rates whose weight band fits the parcel, priced for this order. */
+export function applicableRates(rates: RateRule[], weightGrams: number, goodsCents: number, freeShipping: boolean) {
+  return rates
+    .filter((rate) => weightGrams >= rate.minWeightGrams && (rate.maxWeightGrams === null || weightGrams <= rate.maxWeightGrams))
+    .map((rate) => {
+      const free = freeShipping || (rate.freeAboveCents !== null && goodsCents >= rate.freeAboveCents);
+      return { id: rate.id, name: rate.name, carrier: rate.carrier, estimate: rate.estimate, priceCents: free ? 0 : rate.priceCents };
+    });
+}
+
+/** VAT contained in a VAT-inclusive amount. `rateBps` is percent × 100 (6% = 600). */
+export function includedTaxCents(grossCents: number, rateBps: number): number {
+  return Math.round((grossCents * rateBps) / (10000 + rateBps));
+}
+
+export type Totals = {
+  subtotalCents: number;
+  discountCents: number;
+  shippingCents: number;
+  /** Null when no VAT rate is configured for the destination. */
+  taxCents: number | null;
+  totalCents: number;
+};
+
+/**
+ * Displayed prices include VAT, so the total is goods − discount + shipping
+ * and VAT is the portion contained in it. One rate is applied to goods and
+ * shipping alike — to be confirmed with the accountant per destination.
+ */
+export function computeTotals(input: { lines: Line[]; discount: DiscountRule | null; shippingCents: number; taxRateBps: number | null }): Totals {
+  const subtotal = subtotalCents(input.lines);
+  const { discountCents } = discountAmount(input.discount, subtotal);
+  const totalCents = subtotal - discountCents + input.shippingCents;
+  return {
+    subtotalCents: subtotal,
+    discountCents,
+    shippingCents: input.shippingCents,
+    taxCents: input.taxRateBps === null ? null : includedTaxCents(totalCents, input.taxRateBps),
+    totalCents,
+  };
+}
+
+export function orderNumber(sequence: number): string {
+  return `AZZ-${1000 + sequence}`;
+}
