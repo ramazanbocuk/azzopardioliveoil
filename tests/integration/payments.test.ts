@@ -121,6 +121,24 @@ describe("Stripe webhook", () => {
     expect(await db.inventoryMovement.count()).toBe(1);
   });
 
+  it("accepts a payment the customer made in another currency through Adaptive Pricing", async () => {
+    const { c, number, accessToken, totalCents } = await placeOrder();
+    await c.gql(PAY, { n: number, t: accessToken });
+    // The session reports what the customer paid (PLN); what we asked for (EUR) is in currency_conversion.
+    const converted = { amount_subtotal: totalCents, amount_total: totalCents, fx_rate: "4.31", source_currency: "eur" };
+    const { payload, signature } = sessionEvent("checkout.session.completed", { id: `cs_test_${number}`, amount_total: Math.round(totalCents * 4.31), currency: "pln", payment_status: "paid", currency_conversion: converted });
+    expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(payload, signature))).toBe("paid");
+    expect((await db.order.findFirstOrThrow()).paymentStatus).toBe("PAID");
+  });
+
+  it("refuses a converted payment whose original amount does not match the order", async () => {
+    const { c, number, accessToken, totalCents } = await placeOrder();
+    await c.gql(PAY, { n: number, t: accessToken });
+    const converted = { amount_subtotal: totalCents - 100, amount_total: totalCents - 100, fx_rate: "4.31", source_currency: "eur" };
+    const { payload, signature } = sessionEvent("checkout.session.completed", { id: `cs_test_${number}`, amount_total: Math.round(totalCents * 4.31), currency: "pln", payment_status: "paid", currency_conversion: converted });
+    expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(payload, signature))).toBe("amount-mismatch");
+  });
+
   it("refuses a payment whose amount does not match the order", async () => {
     const { c, number, accessToken, totalCents } = await placeOrder();
     await c.gql(PAY, { n: number, t: accessToken });

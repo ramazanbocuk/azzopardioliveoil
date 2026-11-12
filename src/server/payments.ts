@@ -45,6 +45,8 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
       const session = await stripe.checkout.sessions.create(
         {
           mode: "payment",
+          // Labels these sessions in the Stripe Dashboard so this checkout flow can be told apart from any later one.
+          integration_identifier: "azzopardi-hosted-checkout-qhvxmrtk",
           // One line for the server-computed total, so Stripe can never charge a different amount than the order.
           line_items: [{ quantity: 1, price_data: { currency: order.currency.toLowerCase(), unit_amount: order.totalCents, product_data: { name: `Azzopardi Olive Oil — order ${order.number}` } } }],
           customer_email: order.email,
@@ -78,7 +80,10 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
         return none;
       }
       const session = event.data.object;
-      const detail = { ...base, providerRef: session.id, amountCents: session.amount_total, currency: session.currency?.toUpperCase() ?? null, method: session.payment_method_types?.[0] ?? null };
+      // With Adaptive Pricing a customer may pay in their own currency. The session then reports that
+      // currency, and the amount we actually asked for sits in currency_conversion; compare against that.
+      const asked = session.currency_conversion ? { amount: session.currency_conversion.amount_total, currency: session.currency_conversion.source_currency } : { amount: session.amount_total, currency: session.currency };
+      const detail = { ...base, providerRef: session.id, amountCents: asked.amount, currency: asked.currency?.toUpperCase() ?? null, method: session.payment_method_types?.[0] ?? null };
 
       if (event.type === "checkout.session.expired") return { ...detail, outcome: "expired" };
       if (event.type === "checkout.session.async_payment_failed") return { ...detail, outcome: "failed" };
