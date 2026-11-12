@@ -4,7 +4,7 @@ import { storefrontSchema } from "@/graphql/storefront";
 import { processJobs, purgeExpired } from "@/server/jobs";
 import type { Transport } from "@/server/notifications/channels";
 import nextConfig from "../../next.config";
-import { code, createClient, db, resetDb, seedCatalog } from "../helpers";
+import { code, createClient, db, resetDb, seedCatalog, BILL } from "../helpers";
 
 const server = createServer(storefrontSchema);
 const client = () => createClient(server);
@@ -103,7 +103,7 @@ describe("customer data rights", () => {
     const ada = client();
     await ada.gql(REGISTER, { input: account });
     const customer = await db.customer.findUniqueOrThrow({ where: { email: account.email } });
-    await db.order.create({ data: { customerId: customer.id, email: account.email, subtotalCents: 1, shippingCents: 0, totalCents: 1, shippingRateName: "S", weightGrams: 1, shipFirstName: "A", shipLastName: "L", shipLine1: "S", shipPostalCode: "1", shipCity: "B", shipCountryCode: "BE" } });
+    await db.order.create({ data: { customerId: customer.id, email: account.email, subtotalCents: 1, shippingCents: 0, totalCents: 1, shippingRateName: "S", weightGrams: 1, shipFirstName: "A", shipLastName: "L", shipLine1: "S", shipPostalCode: "1", shipCity: "B", shipCountryCode: "BE", ...BILL } });
 
     const remove = `mutation ($p: String!) { deleteMyAccount(password: $p) }`;
     expect(code(await client().gql(remove, { p: account.password }))).toBe("UNAUTHENTICATED");

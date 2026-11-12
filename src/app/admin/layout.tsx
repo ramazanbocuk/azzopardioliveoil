@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
+import { PasswordField } from "@/components/admin/PasswordField";
+import { SignInError } from "@/components/admin/SignInError";
 import { Field, Submit } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
 import { signIn, signOut } from "./actions";
@@ -14,29 +16,43 @@ const NAV = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/products", label: "Products" },
-  { href: "/admin/lots", label: "Lots" },
+  { href: "/admin/inventory", label: "Inventory" },
   { href: "/admin/customers", label: "Customers" },
-  { href: "/admin/discounts", label: "Discounts" },
-  { href: "/admin/newsletter", label: "Newsletter" },
+  { href: "/admin/fulfilment", label: "Shipping & fulfilment" },
+  { href: "/admin/payments", label: "Payments" },
+  { href: "/admin/discounts", label: "Discounts & coupons" },
+  { href: "/admin/marketing", label: "Marketing" },
+  { href: "/admin/wholesale", label: "Wholesale / B2B" },
+  { href: "/admin/returns", label: "Returns & refunds" },
+  { href: "/admin/reviews", label: "Reviews" },
+  { href: "/admin/reports", label: "Analytics & reports" },
+  { href: "/admin/accounting", label: "Accounting & VAT" },
+  { href: "/admin/suppliers", label: "Suppliers" },
+  { href: "/admin/traceability", label: "Food traceability" },
+  { href: "/admin/content", label: "Website content" },
   { href: "/admin/notifications", label: "Notifications" },
-  { href: "/admin/shipping", label: "Shipping & VAT" },
-  { href: "/admin/settings", label: "Settings" },
-  { href: "/admin/staff", label: "Staff" },
-  { href: "/admin/audit", label: "Audit log" },
+  { href: "/admin/staff", label: "Staff & permissions" },
+  { href: "/admin/security", label: "Security" },
+  { href: "/admin/integrations", label: "Integrations" },
+  { href: "/admin/settings", label: "System settings" },
 ];
 
-function SignIn({ error }: { error?: boolean }) {
+function SignIn() {
   return (
     <div className="grid min-h-svh place-items-center bg-[#f3f1ea] px-5 font-sans text-ink">
       <form action={signIn} className="w-full max-w-sm border border-ink/10 bg-white p-8">
         <p className="font-serif text-[1.25rem] uppercase tracking-[0.2em]">Azzopardi</p>
         <h1 className="mt-6 font-serif text-[1.75rem]">Staff sign-in</h1>
+        <Suspense>
+          <SignInError />
+        </Suspense>
         <div className="mt-6 space-y-4">
           <Field label="Email address" name="email" type="email" required autoComplete="username" />
-          <Field label="Password" name="password" type="password" required autoComplete="current-password" />
+          <PasswordField label="Password" name="password" required autoComplete="current-password" />
+          <Field label="Authenticator code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} hint="Only if you have turned on two-factor sign-in." />
         </div>
         <Submit className="mt-6 w-full">Sign in</Submit>
-        {error && <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>}
+        <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>
         <p className="text-small mt-6 text-stone-700">
           <Link href="/" className="underline underline-offset-4">
             Back to the shop

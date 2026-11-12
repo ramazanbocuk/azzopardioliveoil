@@ -51,7 +51,8 @@ export async function run(backTo: string, action: (ctx: Ctx) => Promise<string |
     const ctx = await adminCtx();
     const next = await action(ctx);
     await flushCookies(ctx);
-    target = next?.includes("ok=") ? next : withNotice(next ?? backTo, "ok", success);
+    // An action may return a path that already carries its own outcome message.
+    target = next && /[?&](ok|error)=/.test(next) ? next : withNotice(next ?? backTo, "ok", success);
   } catch (error) {
     if (!(error instanceof AppError)) console.error("[admin] unexpected error", error);
     target = withNotice(backTo, "error", error instanceof AppError ? error.message : "Something went wrong. Nothing was changed.");

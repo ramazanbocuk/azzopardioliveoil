@@ -41,6 +41,7 @@ export function CheckoutView() {
   const [codeMessage, setCodeMessage] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [separateBilling, setSeparateBilling] = useState(false);
 
   const shipping = useQuery(ShippingOptionsQuery, { variables: { countryCode: country }, skip: !ready || cart.lines.length === 0, fetchPolicy: "network-only" });
   const [placeOrder] = useMutation(Checkout);
@@ -104,6 +105,19 @@ export function CheckoutView() {
               countryCode: country,
               phone: field("phone") || null,
             },
+            billing: separateBilling
+              ? {
+                  firstName: field("billFirstName"),
+                  lastName: field("billLastName"),
+                  company: field("billCompany") || null,
+                  vatNumber: field("billVatNumber") || null,
+                  line1: field("billAddress1"),
+                  line2: field("billAddress2") || null,
+                  postalCode: field("billPostalCode"),
+                  city: field("billCity"),
+                  countryCode: field("billCountry"),
+                }
+              : null,
             customerNote: field("note") || null,
           },
         },
@@ -162,6 +176,27 @@ export function CheckoutView() {
             <TextField label="Phone (optional)" name="phone" type="tel" autoComplete="tel" className="sm:col-span-2" hint="Only used by the carrier for delivery." />
             <TextField label="Note for your order (optional)" name="note" maxLength={500} className="sm:col-span-2" />
           </div>
+          <Checkbox label="Send the invoice to a different address or company" name="separateBilling" checked={separateBilling} onChange={(event) => setSeparateBilling(event.target.checked)} className="mt-6" />
+          {separateBilling && (
+            <div className="mt-6 grid gap-x-6 gap-y-6 border-t border-ink/20 pt-7 sm:grid-cols-2">
+              <p className="text-label sm:col-span-2">Invoice address</p>
+              <TextField label="First name" name="billFirstName" required autoComplete="billing given-name" />
+              <TextField label="Last name" name="billLastName" required autoComplete="billing family-name" />
+              <TextField label="Company (optional)" name="billCompany" autoComplete="billing organization" />
+              <TextField label="VAT number (optional)" name="billVatNumber" />
+              <TextField label="Street and number" name="billAddress1" required autoComplete="billing address-line1" className="sm:col-span-2" />
+              <TextField label="Apartment, box (optional)" name="billAddress2" autoComplete="billing address-line2" className="sm:col-span-2" />
+              <TextField label="Postal code" name="billPostalCode" required autoComplete="billing postal-code" />
+              <TextField label="City" name="billCity" required autoComplete="billing address-level2" />
+              <SelectField label="Country" name="billCountry" required autoComplete="billing country" defaultValue={country} className="sm:col-span-2">
+                {shippingCountries.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.name}
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+          )}
         </Step>
 
         <Step number={3} title="Shipping method">

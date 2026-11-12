@@ -1,5 +1,5 @@
 import { cacheLife, cacheTag } from "next/cache";
-import { bottleScale, type CatalogItem, type Category, type Product } from "@/content/site";
+import { bottleScale, journal, type CatalogItem, type Category, type JournalEntry, type Product } from "@/content/site";
 import { getPrisma } from "./db";
 
 /**
@@ -70,4 +70,38 @@ export async function getFreeShippingThreshold(): Promise<number | null> {
   cacheTag("shipping");
   const rate = await getPrisma().shippingRate.findFirst({ where: { isActive: true, freeAboveCents: { not: null }, zone: { isActive: true } }, orderBy: { freeAboveCents: "asc" } });
   return rate?.freeAboveCents ?? null;
+}
+
+/**
+ * Journal entries for the shop: articles published from the admin panel,
+ * newest first, followed by the built-in sample entries. `fromAdmin` tells
+ * the pages whether real articles exist, so the "draft" notice can go.
+ */
+export async function getJournalEntries(): Promise<{ entries: JournalEntry[]; fromAdmin: number }> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("journal");
+  const tones = ["olive", "terracotta", "gold", "stone", "dawn"] as const;
+  const posts = await getPrisma().journalPost.findMany({ where: { isPublished: true }, orderBy: { publishedAt: "desc" }, take: 60 });
+  const published: JournalEntry[] = posts.map((post, index) => ({
+    slug: post.slug,
+    kind: post.kind === "Recipe" ? "Recipe" : "Story",
+    kicker: post.kind,
+    title: post.title,
+    tone: tones[index % tones.length],
+    label: post.title.toLowerCase(),
+    standfirst: post.standfirst,
+    body: post.body.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean),
+  }));
+  const taken = new Set(published.map((entry) => entry.slug));
+  return { entries: [...published, ...journal.filter((entry) => !taken.has(entry.slug))], fromAdmin: published.length };
+}
+
+/** The announcement line set under Website content, or null when it is off or empty. */
+export async function getAnnouncement(): Promise<{ text: string; link: string | null } | null> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("content");
+  const value = ((await getPrisma().setting.findUnique({ where: { key: "content" } }))?.value ?? {}) as { announcement?: string | null; announcementLink?: string | null; announcementOn?: boolean };
+  return value.announcementOn && value.announcement ? { text: value.announcement, link: value.announcementLink ?? null } : null;
 }

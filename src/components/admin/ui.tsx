@@ -56,14 +56,14 @@ export function Stat({ label, value, note }: { label: string; value: string; not
   );
 }
 
-export function Table({ head, children, empty }: { head: string[]; children: ReactNode; empty?: string }) {
+export function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode; empty?: string }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[40rem] border-collapse text-left text-[0.9375rem]">
         <thead>
           <tr className="border-b border-ink/15">
-            {head.map((cell) => (
-              <th key={cell} scope="col" className="text-label px-3 py-3 font-medium text-stone-700 first:pl-0 last:pr-0">
+            {head.map((cell, index) => (
+              <th key={index} scope="col" className="text-label px-3 py-3 font-medium text-stone-700 first:pl-0 last:pr-0">
                 {cell}
               </th>
             ))}
@@ -79,7 +79,12 @@ export function Table({ head, children, empty }: { head: string[]; children: Rea
 const TONES: Record<string, string> = {
   PENDING_PAYMENT: "bg-gold-300/40 text-gold-700",
   PAID: "bg-olive-100 text-olive-900",
-  FULFILLING: "bg-olive-100 text-olive-900",
+  PAYMENT_PROCESSING: "bg-gold-300/40 text-gold-700",
+  PROCESSING: "bg-olive-100 text-olive-900",
+  READY_FOR_FULFILMENT: "bg-olive-300/60 text-olive-900",
+  READY: "bg-olive-300/60 text-olive-900",
+  PARTIALLY_SHIPPED: "bg-olive-500/40 text-olive-950",
+  UNFULFILLED: "bg-stone-300 text-ink",
   SHIPPED: "bg-olive-700 text-ivory",
   DELIVERED: "bg-olive-900 text-ivory",
   CANCELLED: "bg-stone-300 text-ink",

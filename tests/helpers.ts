@@ -86,3 +86,6 @@ export function createClient(server: ApolloServer<Ctx>, path = "/api/graphql") {
 }
 
 export const code = (result: { errors?: { extensions?: { code?: string } }[] }) => result.errors?.[0]?.extensions?.code;
+
+/** Billing address for orders created directly in tests. */
+export const BILL = { billFirstName: "Test", billLastName: "Customer", billLine1: "Teststraat 1", billPostalCode: "1000", billCity: "Brussels", billCountryCode: "BE" } as const;

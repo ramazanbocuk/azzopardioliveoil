@@ -103,6 +103,47 @@ export function computeTotals(input: { lines: Line[]; discount: DiscountRule | n
   };
 }
 
+/** Splits `total` across `weights` in whole cents, so the parts always add up to the total exactly. */
+export function allocateCents(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return weights.map(() => 0);
+  const exact = weights.map((weight) => (total * weight) / sum);
+  const parts = exact.map(Math.floor);
+  let left = total - parts.reduce((a, b) => a + b, 0);
+  const byRemainder = exact.map((value, index) => ({ index, remainder: value - Math.floor(value) })).sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (const { index } of byRemainder) {
+    if (left <= 0) break;
+    parts[index] += 1;
+    left -= 1;
+  }
+  return parts;
+}
+
+export type TaxBreakdown = {
+  /** What each line costs after its share of the discount, VAT included. */
+  lineNetCents: number[];
+  /** VAT contained in each line. Null when no rate applies. */
+  lineTaxCents: (number | null)[];
+  shippingTaxCents: number | null;
+};
+
+/**
+ * VAT per line, for invoices and accounting. The parts always add up to the
+ * order's `taxCents`: VAT on shipping is taken first, and the rest is shared
+ * across lines by what each costs after discount.
+ */
+export function taxBreakdown(input: { lines: Line[]; discountCents: number; shippingCents: number; taxRateBps: number | null }): TaxBreakdown {
+  const gross = input.lines.map((line) => line.unitPriceCents * line.quantity);
+  const discounts = allocateCents(input.discountCents, gross);
+  const lineNetCents = gross.map((amount, index) => amount - discounts[index]);
+  if (input.taxRateBps === null) return { lineNetCents, lineTaxCents: lineNetCents.map(() => null), shippingTaxCents: null };
+
+  const goods = lineNetCents.reduce((a, b) => a + b, 0);
+  const totalTax = includedTaxCents(goods + input.shippingCents, input.taxRateBps);
+  const shippingTaxCents = Math.min(totalTax, includedTaxCents(input.shippingCents, input.taxRateBps));
+  return { lineNetCents, lineTaxCents: allocateCents(totalTax - shippingTaxCents, lineNetCents), shippingTaxCents };
+}
+
 export function orderNumber(sequence: number): string {
   return `AZZ-${1000 + sequence}`;
 }

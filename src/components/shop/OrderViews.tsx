@@ -16,7 +16,11 @@ import { useHydrated } from "@/lib/store";
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: "Awaiting payment",
   PAID: "Paid — being prepared",
-  FULFILLING: "Being packed",
+  PAYMENT_PROCESSING: "Payment being confirmed",
+  PROCESSING: "Being prepared",
+  READY_FOR_FULFILMENT: "Packed, awaiting carrier",
+  PARTIALLY_SHIPPED: "Partly on its way",
+  PARTIALLY_REFUNDED: "Partially refunded",
   SHIPPED: "On its way",
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",

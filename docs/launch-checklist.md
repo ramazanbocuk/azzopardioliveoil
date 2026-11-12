@@ -40,4 +40,17 @@ The software cannot do these for you. Each is needed before taking real orders.
 - [ ] Test in Safari and Firefox, and on real phones
 
 ## Known software gaps at hand-over
-Two-factor sign-in for staff · Mollie · carrier APIs and labels · product photo and document upload · homepage content management · multilingual pages (English only) · favourites synced to accounts · saved addresses and profile editing · nutrition table editor · admin GraphQL beyond sign-in, products and stock
+
+Built since the first hand-over: the 22-section admin, eleven order statuses, part-shipments, carrier adapters, sales and VAT reports, suppliers, lot recall, reviews moderation, wholesale terms, journal articles, announcement, product photo upload and staff two-factor sign-in.
+
+Still not built, or not proven:
+
+- **Carriers:** DHL Express, FedEx and bpost adapters are written from the carriers' documentation and have never called a carrier. Each needs an account and a test booking. See `docs/shipping.md`.
+- **Photos on the shop:** photos can be uploaded and are stored, but product pages still show the illustrated bottle.
+- **Content:** home page sections, story pages and legal pages are edited in code, not in the admin.
+- **Wholesale:** no application form for customers, no invoice payment terms, no minimum quantities or tiered price lists.
+- **Marketing:** no newsletter sending, no abandoned-cart reminders, no advertising or analytics tags.
+- **Accounting:** reports are working figures, not a VAT return; no credit notes; no separate invoice numbering; no link to accounting software.
+- **Security:** two-factor sign-in is optional per person and cannot be made compulsory; no single sign-on.
+- **Also:** Mollie, multilingual pages, saved customer addresses, bulk invoice and label printing, carrier pickup booking and return labels, tracking of refunds or disputes made directly in Stripe.
+- **Admin API:** the admin screens call the service layer directly; the admin GraphQL endpoint still covers sign-in, products and stock only.

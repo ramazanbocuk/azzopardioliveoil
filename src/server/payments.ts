@@ -4,6 +4,7 @@ import type { Ctx } from "./context";
 import { hashToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError } from "./errors";
+import { syncOrderStatus } from "./orderStatus";
 import { enforce } from "./rateLimit";
 
 /**
@@ -18,7 +19,7 @@ import { enforce } from "./rateLimit";
 export type PaymentEvent = {
   eventId: string;
   type: string;
-  outcome: "paid" | "failed" | "expired" | "ignored";
+  outcome: "paid" | "processing" | "failed" | "expired" | "ignored";
   providerRef: string;
   amountCents: number | null;
   currency: string | null;
@@ -87,8 +88,10 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
 
       if (event.type === "checkout.session.expired") return { ...detail, outcome: "expired" };
       if (event.type === "checkout.session.async_payment_failed") return { ...detail, outcome: "failed" };
-      // "completed" with a delayed method (e.g. bank transfer) is not money yet; wait for async_payment_succeeded.
-      return { ...detail, outcome: session.payment_status === "paid" ? "paid" : "ignored" };
+      // "completed" with a delayed method (e.g. bank transfer) is not money yet: the order waits as
+      // "payment processing" until async_payment_succeeded or async_payment_failed arrives.
+      if (session.payment_status === "paid") return { ...detail, outcome: "paid" };
+      return { ...detail, outcome: event.type === "checkout.session.completed" ? "processing" : "ignored" };
     },
   };
 }
@@ -140,7 +143,7 @@ export async function startPayment(ctx: Ctx, number: string, token: string): Pro
   return { url: checkout.url };
 }
 
-export type WebhookResult = "paid" | "duplicate" | "ignored" | "unknown-payment" | "amount-mismatch" | "failed" | "expired";
+export type WebhookResult = "paid" | "processing" | "duplicate" | "ignored" | "unknown-payment" | "amount-mismatch" | "failed" | "expired";
 
 /** Notifications owed for a paid order. Delivered with retries in Phase 7; each can exist only once. */
 const PAID_JOBS = ["notify.owner.whatsapp", "notify.owner.email", "notify.owner.sms", "notify.customer.confirmation"] as const;
@@ -161,9 +164,22 @@ export async function applyPaymentEvent(db: Db, provider: ProviderName, event: P
       const { order } = payment;
 
       if (event.outcome === "failed" || event.outcome === "expired") {
-        if (payment.status === "UNPAID") await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+        if (payment.status === "UNPAID" || payment.status === "PROCESSING") await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+        if (order.paymentStatus === "PROCESSING") {
+          await tx.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
+          await syncOrderStatus(tx, order.id);
+        }
         if (event.outcome === "failed") await tx.orderEvent.create({ data: { orderId: order.id, kind: "payment_failed", message: "Payment was not completed." } });
         return event.outcome;
+      }
+
+      if (event.outcome === "processing") {
+        const waiting = await tx.order.updateMany({ where: { id: order.id, paymentStatus: "UNPAID", cancelledAt: null }, data: { paymentStatus: "PROCESSING" } });
+        if (waiting.count !== 1) return "ignored";
+        await tx.payment.update({ where: { id: payment.id }, data: { status: "PROCESSING", method: event.method } });
+        await syncOrderStatus(tx, order.id);
+        await tx.orderEvent.create({ data: { orderId: order.id, kind: "payment_processing", message: "Payment started. We are waiting for your bank to confirm it." } });
+        return "processing";
       }
 
       // Never accept a payment for a different amount or currency than the order.
@@ -172,10 +188,12 @@ export async function applyPaymentEvent(db: Db, provider: ProviderName, event: P
         return "amount-mismatch";
       }
 
-      const claimed = await tx.order.updateMany({ where: { id: order.id, paymentStatus: { not: "PAID" } }, data: { status: "PAID", paymentStatus: "PAID", paidAt: new Date(), reservedUntil: null, cancelledAt: null } });
+      const claimed = await tx.order.updateMany({ where: { id: order.id, paymentStatus: { in: ["UNPAID", "PROCESSING", "FAILED"] } }, data: { paymentStatus: "PAID", paidAt: new Date(), reservedUntil: null, cancelledAt: null } });
       if (claimed.count !== 1) return "duplicate"; // already paid through another event
 
-      const wasReserved = order.status === "PENDING_PAYMENT";
+      await syncOrderStatus(tx, order.id);
+      // A cancelled order had already given its held stock back.
+      const wasReserved = order.cancelledAt === null;
       let short = false;
       for (const item of order.items) {
         if (!item.variantId) continue;

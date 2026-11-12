@@ -4,7 +4,7 @@ import { DraftBand } from "@/components/ui/Editorial";
 import { ArrowIcon } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Page";
 import { Plate } from "@/components/ui/Plate";
-import { journal } from "@/content/site";
+import { getJournalEntries } from "@/server/storefrontData";
 import { Reveal } from "@/motion/Reveal";
 
 export const metadata: Metadata = {
@@ -13,12 +13,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/journal" },
 };
 
-export default function JournalPage() {
-  const [lead, ...rest] = journal;
+export default async function JournalPage() {
+  const { entries, fromAdmin } = await getJournalEntries();
+  const [lead, ...rest] = entries;
   return (
     <>
       <PageHeader eyebrow="Journal" title="At the table, and in the grove." lead="Recipes, notes from the harvest, and the Mediterranean way of eating well with very little." />
-      <DraftBand>Draft articles to show the layout. Published pieces are written and photographed by the house and managed from the admin panel.</DraftBand>
+      {fromAdmin === 0 && <DraftBand>Draft articles to show the layout. Published pieces are written and photographed by the house and managed from the admin panel.</DraftBand>}
 
       <section className="container-page pb-section">
         <Reveal>

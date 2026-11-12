@@ -1,15 +1,15 @@
-import { Card, Check, Field, Flash, Page, Submit, TextArea } from "@/components/admin/ui";
+import { Card, Check, Field, Flash, Page, Select, Submit, TextArea } from "@/components/admin/ui";
 import { getSettings } from "@/server/admin";
 import { adminCtx } from "@/server/adminSession";
 import { getPaymentProvider } from "@/server/payments";
-import { saveNotifications, saveStore } from "../actions";
+import { saveNotifications, saveShipping, saveStore } from "../actions";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage({ searchParams }: PageProps<"/admin/settings">) {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  const [{ store, notifications }, params] = await Promise.all([getSettings(ctx), searchParams]);
+  const [{ store, notifications, shipping }, params] = await Promise.all([getSettings(ctx), searchParams]);
   const text = (source: Record<string, string | boolean | null>, key: string) => (typeof source[key] === "string" ? (source[key] as string) : "");
   const flag = (key: string, fallback: boolean) => (typeof notifications[key] === "boolean" ? (notifications[key] as boolean) : fallback);
   const connected = (ok: boolean) => <span className={ok ? "text-olive-700" : "text-terracotta-700"}>{ok ? "Connected" : "Not connected"}</span>;
@@ -28,6 +28,28 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
           <Field label="Contact phone" name="phone" defaultValue={text(store, "phone")} />
           <div className="sm:col-span-2">
             <Submit>Save store information</Submit>
+          </div>
+        </form>
+      </Card>
+
+      <Card title="Shipping origin" description="The sender printed on carrier labels and customs declarations. Carriers need each part separately. No label can be booked until name, street, postal code, city, country and phone are filled in.">
+        <form action={saveShipping} className="grid gap-4 sm:grid-cols-2">
+          <Field label="Sender name" name="senderName" defaultValue={text(shipping, "senderName")} />
+          <Field label="Company" name="senderCompany" defaultValue={text(shipping, "senderCompany")} />
+          <Field label="Street and number" name="senderLine1" defaultValue={text(shipping, "senderLine1")} hint="bpost needs the house number at the end, for example “Rue de la Loi 16”." />
+          <Field label="Box, floor (optional)" name="senderLine2" defaultValue={text(shipping, "senderLine2")} />
+          <Field label="Postal code" name="senderPostalCode" defaultValue={text(shipping, "senderPostalCode")} />
+          <Field label="City" name="senderCity" defaultValue={text(shipping, "senderCity")} />
+          <Field label="Country (two letters)" name="senderCountryCode" maxLength={2} defaultValue={text(shipping, "senderCountryCode") || "BE"} />
+          <Field label="Phone" name="senderPhone" type="tel" defaultValue={text(shipping, "senderPhone")} hint="International format, for example +32 2 123 45 67." />
+          <Field label="Email" name="senderEmail" type="email" defaultValue={text(shipping, "senderEmail")} />
+          <Select label="When comparing rates, suggest" name="carrierRule" defaultValue={text(shipping, "carrierRule") || "manual"}>
+            <option value="manual">Nothing — I choose each time</option>
+            <option value="cheapest">The cheapest service</option>
+            <option value="fastest">The fastest service</option>
+          </Select>
+          <div className="sm:col-span-2">
+            <Submit>Save shipping origin</Submit>
           </div>
         </form>
       </Card>

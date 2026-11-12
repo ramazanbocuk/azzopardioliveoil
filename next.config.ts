@@ -41,6 +41,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // Product photos are uploaded through a server action; the default 1 MB cap is too small for a photo.
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   // The end-to-end tests build into their own folder, so they never disturb a running dev server.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   turbopack: {

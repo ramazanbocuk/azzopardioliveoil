@@ -6,7 +6,11 @@ import { MAX_LINE_QUANTITY, discountAmount, discountProblem, subtotalCents, tota
 
 const cartInclude = {
   items: { orderBy: { addedAt: "asc" }, include: { variant: { include: { product: true } } } },
+  customer: { select: { wholesaleStatus: true, wholesaleDiscountBps: true } },
 } as const;
+
+/** The code recorded on an order when a trade customer's standing discount was applied. It is not a row in Discount. */
+export const WHOLESALE_CODE = "WHOLESALE";
 
 async function load(db: Db, id: string) {
   return db.cart.findUniqueOrThrow({ where: { id }, include: cartInclude });
@@ -18,7 +22,10 @@ export type LoadedCart = Awaited<ReturnType<typeof load>>;
 export async function findCart(ctx: Ctx): Promise<LoadedCart | null> {
   const token = ctx.cookies[COOKIE.cart];
   if (!token) return null;
-  return ctx.db.cart.findUnique({ where: { tokenHash: hashToken(token) }, include: cartInclude });
+  const cart = await ctx.db.cart.findUnique({ where: { tokenHash: hashToken(token) }, include: cartInclude });
+  // A cart started before signing in becomes the signed-in customer's, so their own terms apply to it.
+  if (cart && ctx.customer && cart.customerId !== ctx.customer.id) return ctx.db.cart.update({ where: { id: cart.id }, data: { customerId: ctx.customer.id }, include: cartInclude });
+  return cart;
 }
 
 async function getOrCreateCart(ctx: Ctx): Promise<LoadedCart> {
@@ -106,11 +113,26 @@ export function toLines(cart: LoadedCart) {
 }
 
 /** The discount on the cart, if it is still usable right now. */
+/** An approved trade customer's standing percentage on goods, as a discount rule. */
+function wholesaleRule(cart: LoadedCart): DiscountRule | null {
+  const customer = cart.customer;
+  if (!customer || customer.wholesaleStatus !== "APPROVED" || customer.wholesaleDiscountBps <= 0) return null;
+  return { code: WHOLESALE_CODE, kind: "PERCENT", value: customer.wholesaleDiscountBps / 100, minSubtotalCents: 0, startsAt: null, endsAt: null, usageLimit: null, usedCount: 0, isActive: true };
+}
+
+/**
+ * The one discount that applies to a cart. Discounts never stack: a trade
+ * customer gets their standing terms or a code they entered, whichever takes
+ * more off the goods.
+ */
 export async function activeDiscount(db: Db, cart: LoadedCart): Promise<DiscountRule | null> {
-  if (!cart.discountCode) return null;
-  const discount = await db.discount.findUnique({ where: { code: cart.discountCode } });
-  if (!discount || discountProblem(discount, subtotalCents(toLines(cart)), new Date())) return null;
-  return discount;
+  const subtotal = subtotalCents(toLines(cart));
+  const wholesale = wholesaleRule(cart);
+  const found = cart.discountCode ? await db.discount.findUnique({ where: { code: cart.discountCode } }) : null;
+  const code = found && !discountProblem(found, subtotal, new Date()) ? found : null;
+  if (!wholesale) return code;
+  if (!code) return wholesale;
+  return discountAmount(code, subtotal).discountCents > discountAmount(wholesale, subtotal).discountCents ? code : wholesale;
 }
 
 /** What the storefront shows for a cart. Prices come from the database, never the client. */

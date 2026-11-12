@@ -215,7 +215,7 @@ const OrderType = builder.objectRef<FullOrder>("Order").implement({
   fields: (t) => ({
     number: t.string({ resolve: (order) => order.number ?? "" }),
     accessToken: t.string({ nullable: true, description: "Private link token. Present only in the response that created the order.", resolve: (order) => order.accessToken ?? null }),
-    canRequestReturn: t.boolean({ resolve: (order) => order.status === "DELIVERED" }),
+    canRequestReturn: t.boolean({ resolve: (order) => order.fulfilmentStatus === "DELIVERED" }),
     status: t.exposeString("status"),
     paymentStatus: t.exposeString("paymentStatus"),
     email: t.exposeString("email"),
@@ -279,11 +279,28 @@ const AddressInput = builder.inputType("AddressInput", {
   }),
 });
 
+const BillingInput = builder.inputType("BillingInput", {
+  description: "Invoice address, when it differs from the delivery address.",
+  fields: (t) => ({
+    firstName: t.string({ required: true }),
+    lastName: t.string({ required: true }),
+    company: t.string(),
+    vatNumber: t.string(),
+    line1: t.string({ required: true }),
+    line2: t.string(),
+    postalCode: t.string({ required: true }),
+    city: t.string({ required: true }),
+    region: t.string(),
+    countryCode: t.string({ required: true, description: "ISO 3166-1 alpha-2." }),
+  }),
+});
+
 const CheckoutInput = builder.inputType("CheckoutInput", {
   fields: (t) => ({
     email: t.string({ required: true }),
     shippingRateId: t.id({ required: true }),
     address: t.field({ type: AddressInput, required: true }),
+    billing: t.field({ type: BillingInput, description: "Omit to bill to the delivery address." }),
     customerNote: t.string(),
     locale: t.string(),
   }),
@@ -432,7 +449,7 @@ builder.mutationType({
         if (reason.length < 10 || reason.length > 1000) throw new AppError("BAD_INPUT", "Tell us the reason in 10 to 1000 characters.", "reason");
         const order = await ctx.db.order.findFirst({ where: { number: args.number.trim().toUpperCase(), customerId: customer.id }, include: { items: true, returns: true } });
         if (!order) throw new AppError("NOT_FOUND", "Order not found.");
-        if (order.status !== "DELIVERED") throw new AppError("BAD_INPUT", "A return can be requested once the order has been delivered.");
+        if (order.fulfilmentStatus !== "DELIVERED") throw new AppError("BAD_INPUT", "A return can be requested once the order has been delivered.");
         if (order.returns.some((r) => r.status === "REQUESTED" || r.status === "APPROVED")) throw new AppError("BAD_INPUT", "A return is already in progress for this order.");
         await ctx.db.returnRequest.create({ data: { orderId: order.id, reason, items: order.items.map((item) => ({ orderItemId: item.id, quantity: item.quantity })) } });
         await ctx.db.orderEvent.create({ data: { orderId: order.id, kind: "return_requested", message: "Return requested." } });
@@ -499,7 +516,7 @@ builder.mutationType({
         const product = await getProduct(ctx.db, input.productSlug);
         if (!product) throw new AppError("NOT_FOUND", "This product is not available.", "productSlug");
         const skus = (await ctx.db.variant.findMany({ where: { productId: product.id }, select: { sku: true } })).map((v) => v.sku);
-        const order = await ctx.db.order.findFirst({ where: { customerId: customer.id, status: "DELIVERED", items: { some: { sku: { in: skus } } } }, select: { id: true } });
+        const order = await ctx.db.order.findFirst({ where: { customerId: customer.id, fulfilmentStatus: "DELIVERED", items: { some: { sku: { in: skus } } } }, select: { id: true } });
         if (!order) throw new AppError("FORBIDDEN", "You can review a product once an order containing it has been delivered.");
         await ctx.db.review.upsert({
           where: { productId_customerId: { productId: product.id, customerId: customer.id } },

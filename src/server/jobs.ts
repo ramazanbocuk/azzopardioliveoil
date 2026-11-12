@@ -1,4 +1,5 @@
 import type { OutboxJob } from "@/generated/prisma/client";
+import { refreshTracking } from "./fulfilment";
 import { releaseExpiredReservations } from "./checkout";
 import type { Db } from "./db";
 import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Env, type Transport } from "./notifications/channels";
@@ -71,7 +72,9 @@ const handlers: Record<string, Handler> = {
 
   async "notify.customer.shipped"(db, job, { env, transport }) {
     const order = await paidOrder(db, job);
-    await sendEmail(customerShippedEmail(order, order.shipments[0] ?? null), job.dedupeKey, env, transport);
+    // An order can leave in several shipments; each email is about the one that triggered it.
+    const shipmentId = (job.payload as { shipmentId?: string }).shipmentId;
+    await sendEmail(customerShippedEmail(order, order.shipments.find((shipment) => shipment.id === shipmentId) ?? order.shipments[0] ?? null), job.dedupeKey, env, transport);
   },
 
   async "email.newsletter.confirm"(db, job, { env, transport }) {
@@ -172,5 +175,6 @@ export async function runScheduledWork(db: Db, options: Options = {}) {
   const released = await releaseExpiredReservations(db, options.now);
   const jobs = await processJobs(db, options);
   const purged = await purgeExpired(db, options.now);
-  return { releasedOrders: released, jobs, purged };
+  const tracking = await refreshTracking(db, options.now);
+  return { releasedOrders: released, jobs, purged, tracking };
 }

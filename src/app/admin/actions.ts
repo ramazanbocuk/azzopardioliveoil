@@ -3,6 +3,9 @@
 import { updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
+import * as backoffice from "@/server/backoffice";
+import * as fulfilment from "@/server/fulfilment";
+import * as twoFactor from "@/server/twoFactor";
 import { formData, run } from "@/server/adminSession";
 import { afterResponse } from "@/server/afterResponse";
 import { adminLogin, adminLogout, requireAdmin } from "@/server/auth";
@@ -19,7 +22,7 @@ import { processJobs, requeueJob } from "@/server/jobs";
 const text = (form: FormData, key: string) => String(form.get(key) ?? "");
 
 export async function signIn(form: FormData) {
-  await run("/admin", (ctx) => adminLogin(ctx, { email: text(form, "email"), password: text(form, "password") }).then(() => undefined), "Signed in.");
+  await run("/admin", (ctx) => adminLogin(ctx, { email: text(form, "email"), password: text(form, "password"), code: text(form, "code") }).then(() => undefined), "Signed in.");
 }
 
 export async function signOut() {
@@ -37,18 +40,72 @@ export async function setLot(orderId: string, itemId: string, form: FormData) {
 }
 
 export async function startPacking(orderId: string) {
-  await run(`/admin/orders/${orderId}`, (ctx) => admin.startFulfilment(ctx, orderId), "Order moved to packing.");
+  await run(`/admin/orders/${orderId}`, (ctx) => admin.startFulfilment(ctx, orderId), "Order moved to processing.");
 }
 
+export async function markReady(orderId: string) {
+  await run(`/admin/orders/${orderId}`, (ctx) => admin.markReady(ctx, orderId), "Order marked ready for fulfilment.");
+}
+
+/** Reads the shipment form: units per line, and identical boxes described once (kg and cm, as people measure them). */
 export async function ship(orderId: string, form: FormData) {
   await run(
     `/admin/orders/${orderId}`,
     async (ctx) => {
-      await admin.markShipped(ctx, orderId, formData(form));
+      const number = (key: string) => Number(text(form, key).trim().replace(",", "."));
+      const items = [...form.keys()].filter((key) => key.startsWith("qty:")).map((key) => ({ orderItemId: key.slice(4), quantity: Math.round(number(key)) || 0 }));
+      const boxes = Math.min(20, Math.max(1, Math.round(number("boxes")) || 1));
+      const kg = number("weightKg");
+      const mm = (key: string) => (text(form, key).trim() ? Math.round(number(key) * 10) : null);
+      const parcels = kg > 0 ? Array.from({ length: boxes }, () => ({ weightGrams: Math.round(kg * 1000), lengthMm: mm("lengthCm"), widthMm: mm("widthCm"), heightMm: mm("heightCm") })) : null;
+      await admin.createShipment(ctx, orderId, { carrier: text(form, "carrier"), service: text(form, "service"), trackingNumber: text(form, "trackingNumber"), trackingUrl: text(form, "trackingUrl"), items: items.length ? items : null, parcels });
       afterResponse(() => processJobs(getPrisma()), "run after shipping");
     },
-    "Order marked as shipped.",
+    "Shipment recorded.",
   );
+}
+
+const boxesFrom = (form: FormData) => {
+  const number = (key: string) => Number(text(form, key).trim().replace(",", "."));
+  const count = Math.min(20, Math.max(1, Math.round(number("boxes")) || 1));
+  const mm = (key: string) => (text(form, key).trim() ? Math.round(number(key) * 10) : null);
+  return Array.from({ length: count }, () => ({ weightGrams: Math.round(number("weightKg") * 1000), lengthMm: mm("lengthCm"), widthMm: mm("widthCm"), heightMm: mm("heightCm") }));
+};
+
+/** Books a label with a carrier. The choice arrives as "carrier|service" from the rate table or the service list. */
+export async function bookCarrierLabel(orderId: string, form: FormData) {
+  await run(
+    `/admin/orders/${orderId}`,
+    async (ctx) => {
+      const [carrier, ...service] = text(form, "choice").split("|");
+      await fulfilment.bookLabel(ctx, orderId, { carrier, service: service.join("|"), boxes: boxesFrom(form) });
+      afterResponse(() => processJobs(getPrisma()), "run after booking");
+    },
+    "Label booked. Print it from the shipment below.",
+  );
+}
+
+export async function cancelShipment(orderId: string, shipmentId: string) {
+  await run(`/admin/orders/${orderId}`, async (ctx) => {
+    const result = await fulfilment.cancelBooking(ctx, shipmentId);
+    const url = new URL(`/admin/orders/${orderId}`, "http://admin.local");
+    url.searchParams.set("ok", result.cancelledWithCarrier ? "Shipment cancelled with the carrier." : "Shipment cancelled here. This carrier has no cancellation API: do not hand the parcel over, and void the label in the carrier's own portal if it offers that.");
+    return `${url.pathname}${url.search}`;
+  });
+}
+
+export async function saveShipping(form: FormData) {
+  await run("/admin/settings", (ctx) => admin.saveSetting(ctx, "shipping", formData(form)), "Shipping origin saved.");
+}
+
+export async function bulkOrders(backTo: string, form: FormData) {
+  await run(backTo, async (ctx) => {
+    const result = await admin.bulkUpdateOrders(ctx, form.getAll("ids").map(String), text(form, "action"));
+    const skipped = result.skipped.length ? ` Skipped ${result.skipped.length}: ${result.skipped.slice(0, 5).map((row) => `${row.number} (${row.reason})`).join("; ")}${result.skipped.length > 5 ? "…" : ""}` : "";
+    const url = new URL(backTo, "http://admin.local");
+    url.searchParams.set(result.done.length ? "ok" : "error", `${result.done.length} order${result.done.length === 1 ? "" : "s"} updated.${skipped}`);
+    return `${url.pathname}${url.search}`;
+  });
 }
 
 export async function deliver(orderId: string) {
@@ -199,4 +256,92 @@ export async function runJobsNow() {
     const report = await processJobs(ctx.db);
     return `/admin/notifications?ok=${encodeURIComponent(`Ran ${report.claimed} job(s): ${report.done} sent, ${report.skipped} skipped, ${report.retried} to retry, ${report.failed} failed.`)}`;
   });
+}
+
+// ── Back office ──
+
+export async function reviewStatus(id: string, status: "APPROVED" | "REJECTED" | "PENDING") {
+  await run("/admin/reviews", async (ctx) => {
+    await backoffice.setReviewStatus(ctx, id, status);
+    updateTag("catalog");
+  }, status === "APPROVED" ? "Review approved and published." : status === "REJECTED" ? "Review rejected." : "Review moved back to pending.");
+}
+
+export async function saveSupplier(id: string | null, form: FormData) {
+  await run("/admin/suppliers", (ctx) => backoffice.saveSupplier(ctx, id, formData(form, { booleans: ["isActive"] })).then(() => undefined), "Supplier saved.");
+}
+
+export async function removeSupplier(id: string) {
+  await run("/admin/suppliers", async (ctx) => {
+    const outcome = await backoffice.removeSupplier(ctx, id);
+    return `/admin/suppliers?ok=${encodeURIComponent(outcome === "deleted" ? "Supplier deleted." : "Supplier has lots on record, so it was deactivated rather than deleted.")}`;
+  });
+}
+
+export async function savePost(id: string | null, form: FormData) {
+  await run(id ? `/admin/content/${id}` : "/admin/content/new", async (ctx) => {
+    const saved = await backoffice.savePost(ctx, id, formData(form, { booleans: ["isPublished"] }));
+    updateTag("journal");
+    return `/admin/content/${saved}`;
+  }, "Article saved.");
+}
+
+export async function deletePost(id: string) {
+  await run("/admin/content", async (ctx) => {
+    await backoffice.deletePost(ctx, id);
+    updateTag("journal");
+  }, "Article deleted.");
+}
+
+export async function saveContent(form: FormData) {
+  await run("/admin/content", async (ctx) => {
+    await admin.saveSetting(ctx, "content", formData(form, { booleans: ["announcementOn"] }));
+    updateTag("content");
+  }, "Announcement saved.");
+}
+
+export async function saveWholesale(customerId: string, backTo: string, form: FormData) {
+  await run(backTo, (ctx) => backoffice.setWholesale(ctx, customerId, formData(form)), "Wholesale terms saved.");
+}
+
+export async function addWholesale(form: FormData) {
+  await run("/admin/wholesale", (ctx) => backoffice.setWholesaleByEmail(ctx, text(form, "email"), formData(form)), "Wholesale account saved.");
+}
+
+export async function uploadPhoto(productId: string, form: FormData) {
+  await run(`/admin/products/${productId}`, async (ctx) => {
+    const file = form.get("photo");
+    const data = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array();
+    await backoffice.addProductPhoto(ctx, productId, { data, alt: text(form, "alt") });
+    updateTag("catalog");
+  }, "Photo uploaded.");
+}
+
+export async function deletePhoto(productId: string, imageId: string) {
+  await run(`/admin/products/${productId}`, async (ctx) => {
+    await backoffice.removeProductPhoto(ctx, imageId);
+    updateTag("catalog");
+  }, "Photo deleted.");
+}
+
+// ── Security ──
+
+export async function beginTwoFactor() {
+  await run("/admin/security", (ctx) => twoFactor.beginTotp(ctx).then(() => undefined), "Scan the key below with your authenticator app, then enter a code to finish.");
+}
+
+export async function confirmTwoFactor(form: FormData) {
+  await run("/admin/security", (ctx) => twoFactor.confirmTotp(ctx, text(form, "code")), "Two-factor sign-in is on. You will be asked for a code each time you sign in.");
+}
+
+export async function disableTwoFactor(form: FormData) {
+  await run("/admin/security", (ctx) => twoFactor.disableTotp(ctx, text(form, "password")), "Two-factor sign-in is off.");
+}
+
+export async function resetTwoFactor(adminUserId: string) {
+  await run("/admin/security", (ctx) => twoFactor.resetTotpFor(ctx, adminUserId), "Two-factor sign-in reset. That person has been signed out and can set it up again.");
+}
+
+export async function revokeSession(sessionId: string) {
+  await run("/admin/security", (ctx) => twoFactor.revokeSession(ctx, sessionId), "Session ended.");
 }

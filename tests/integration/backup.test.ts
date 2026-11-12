@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createBackup, restoreBackup } from "../../scripts/backup";
-import { db, resetDb, seedCatalog } from "../helpers";
+import { db, resetDb, seedCatalog, BILL } from "../helpers";
 import { TEST_DATABASE_URL } from "../testDb";
 
 async function fill() {
@@ -11,7 +11,7 @@ async function fill() {
   await db.setting.create({ data: { key: "store", value: { legalName: "Test BV", nested: { list: [1, 2, 3] } } } });
   for (let i = 0; i < 3; i++) {
     await db.order.create({
-      data: { customerId: customer.id, email: customer.email, subtotalCents: 1800, shippingCents: 695, totalCents: 2495, taxCents: null, shippingRateName: "Standard", weightGrams: 950, shipFirstName: "Ada", shipLastName: "L", shipLine1: "S 1", shipPostalCode: "1000", shipCity: "B", shipCountryCode: "BE", items: { create: [{ sku: "t-500", productName: "Test Oil", variantLabel: "500 ml", unitPriceCents: 1800, quantity: 1, lineTotalCents: 1800 }] } },
+      data: { customerId: customer.id, email: customer.email, subtotalCents: 1800, shippingCents: 695, totalCents: 2495, taxCents: null, shippingRateName: "Standard", weightGrams: 950, shipFirstName: "Ada", shipLastName: "L", shipLine1: "S 1", shipPostalCode: "1000", shipCity: "B", shipCountryCode: "BE", ...BILL, items: { create: [{ sku: "t-500", productName: "Test Oil", variantLabel: "500 ml", unitPriceCents: 1800, quantity: 1, lineTotalCents: 1800 }] } },
     });
   }
 }
@@ -49,7 +49,7 @@ describe("backup and restore", () => {
     await resetDb();
     await restoreBackup(TEST_DATABASE_URL, backup);
     const highest = (await db.order.aggregate({ _max: { sequence: true } }))._max.sequence ?? 0;
-    const next = await db.order.create({ data: { email: "n@example.com", subtotalCents: 1, shippingCents: 0, totalCents: 1, shippingRateName: "S", weightGrams: 1, shipFirstName: "A", shipLastName: "B", shipLine1: "S", shipPostalCode: "1", shipCity: "B", shipCountryCode: "BE" } });
+    const next = await db.order.create({ data: { email: "n@example.com", subtotalCents: 1, shippingCents: 0, totalCents: 1, shippingRateName: "S", weightGrams: 1, shipFirstName: "A", shipLastName: "B", shipLine1: "S", shipPostalCode: "1", shipCity: "B", shipCountryCode: "BE", ...BILL } });
     expect(next.sequence).toBe(highest + 1);
   });
 

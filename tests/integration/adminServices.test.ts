@@ -5,9 +5,9 @@ import type { Ctx } from "@/server/context";
 import { hashPassword } from "@/server/crypto";
 import { AppError } from "@/server/errors";
 import { setPaymentProvider, type PaymentProvider } from "@/server/payments";
-import { db, resetDb, seedCatalog } from "../helpers";
+import { db, resetDb, seedCatalog, BILL } from "../helpers";
 
-const ADDRESS = { shipFirstName: "Test", shipLastName: "Customer", shipLine1: "Teststraat 1", shipPostalCode: "1000", shipCity: "Brussels", shipCountryCode: "BE" };
+const ADDRESS = { shipFirstName: "Test", shipLastName: "Customer", shipLine1: "Teststraat 1", shipPostalCode: "1000", shipCity: "Brussels", shipCountryCode: "BE", ...BILL };
 
 async function as(role: AdminRole | null): Promise<Ctx> {
   const user = role ? await db.adminUser.create({ data: { email: `${role}-${Math.random().toString(36).slice(2)}@test.local`, name: role, role, passwordHash: "x" } }) : null;
@@ -172,8 +172,76 @@ describe("orders", () => {
     const order = await admin.getOrder(staff, orderId);
     expect(order.status).toBe("DELIVERED");
     expect(order.shipments[0]).toMatchObject({ carrier: "bpost", trackingNumber: "3232", status: "DELIVERED" });
-    expect(order.events.map((e) => e.kind)).toEqual(["fulfilling", "shipped", "delivered"]);
-    expect(await db.outboxJob.findFirstOrThrow()).toMatchObject({ kind: "notify.customer.shipped" });
+    expect(order.fulfilmentStatus).toBe("DELIVERED");
+    expect(order.events.map((e) => e.kind)).toEqual(["processing", "shipped", "delivered"]);
+    // Every step is attributed to the staff member who took it.
+    expect(order.events.every((e) => e.actor?.name === "STAFF")).toBe(true);
+    expect(order.messages).toMatchObject([{ kind: "notify.customer.shipped" }]);
+  });
+
+  it("keeps the packed-and-ready step off the customer's timeline", async () => {
+    const staff = await as("STAFF");
+    const orderId = await makeOrder("PAID");
+    await admin.markReady(staff, orderId);
+    const order = await admin.getOrder(staff, orderId);
+    expect(order).toMatchObject({ status: "READY_FOR_FULFILMENT", fulfilmentStatus: "READY" });
+    expect(order.events).toMatchObject([{ kind: "ready", isInternal: true }]);
+    await refused(admin.startFulfilment(staff, orderId), "BAD_INPUT"); // cannot go backwards
+  });
+
+  it("ships an order in parts, and calls it shipped only when every unit has left", async () => {
+    const staff = await as("STAFF");
+    const orderId = await makeOrder("PAID", 3);
+    const [item] = await db.orderItem.findMany({ where: { orderId } });
+
+    await refused(admin.createShipment(staff, orderId, { carrier: "bpost", items: [{ orderItemId: item.id, quantity: 4 }] }), "BAD_INPUT");
+    await admin.createShipment(staff, orderId, { carrier: "bpost", items: [{ orderItemId: item.id, quantity: 1 }], parcels: [{ weightGrams: 1100, lengthMm: 300, widthMm: 200, heightMm: 150 }] });
+    let order = await admin.getOrder(staff, orderId);
+    expect(order).toMatchObject({ status: "PARTIALLY_SHIPPED", fulfilmentStatus: "PARTIALLY_SHIPPED" });
+    expect(order.items[0].shippedQuantity).toBe(1);
+    expect(order.shipments[0].parcels).toMatchObject([{ weightGrams: 1100, lengthMm: 300, widthMm: 200, heightMm: 150 }]);
+    await refused(admin.markDelivered(staff, orderId), "BAD_INPUT");
+
+    // The second shipment takes whatever is left, in two boxes.
+    await admin.createShipment(staff, orderId, { carrier: "DHL", service: "Express", parcels: [{ weightGrams: 900 }, { weightGrams: 950 }] });
+    order = await admin.getOrder(staff, orderId);
+    expect(order).toMatchObject({ status: "SHIPPED", fulfilmentStatus: "SHIPPED" });
+    expect(order.items[0].shippedQuantity).toBe(3);
+    expect(order.shipments.map((s) => [s.carrier, s.parcels.length, s.items[0].quantity])).toEqual([["bpost", 1, 1], ["DHL", 2, 2]]);
+    expect(order.events.map((e) => e.kind)).toEqual(["partially_shipped", "shipped"]);
+    // One shipping email per shipment.
+    expect(await db.outboxJob.count({ where: { kind: "notify.customer.shipped" } })).toBe(2);
+    await refused(admin.createShipment(staff, orderId, { carrier: "bpost" }), "BAD_INPUT");
+  });
+
+  it("applies a step to many orders, skipping and reporting those that cannot take it", async () => {
+    const staff = await as("STAFF");
+    const paidA = await makeOrder("PAID");
+    const paidB = await makeOrder("PAID");
+    const unpaid = await makeOrder("PENDING_PAYMENT");
+    const result = await admin.bulkUpdateOrders(staff, [paidA, paidB, unpaid, paidA], "process");
+    expect(result.done).toHaveLength(2);
+    expect(result.skipped).toHaveLength(1);
+    expect(await db.order.count({ where: { fulfilmentStatus: "PROCESSING" } })).toBe(2);
+    await refused(admin.bulkUpdateOrders(staff, [paidA], "refund"), "BAD_INPUT");
+    await refused(admin.bulkUpdateOrders(staff, [], "process"), "BAD_INPUT");
+  });
+
+  it("filters orders by payment, fulfilment, destination and date", async () => {
+    const staff = await as("STAFF");
+    const shipped = await makeOrder("PAID");
+    await makeOrder("PAID");
+    await makeOrder("PENDING_PAYMENT");
+    await admin.createShipment(staff, shipped, { carrier: "bpost", trackingNumber: "TRACK-77" });
+    const today = new Date().toISOString().slice(0, 10);
+    expect((await admin.listOrders(staff, { fulfilment: "SHIPPED" })).count).toBe(1);
+    expect((await admin.listOrders(staff, { payment: "PAID", fulfilment: "UNFULFILLED" })).count).toBe(1);
+    expect((await admin.listOrders(staff, { payment: "UNPAID" })).count).toBe(1);
+    expect((await admin.listOrders(staff, { country: "BE", from: today, to: today })).count).toBe(3);
+    expect((await admin.listOrders(staff, { country: "FR" })).count).toBe(0);
+    expect((await admin.listOrders(staff, { from: "2999-01-01" })).count).toBe(0);
+    expect((await admin.listOrders(staff, { q: "track-77" })).count).toBe(1);
+    expect((await admin.listOrders(staff, { status: "not-a-status" })).count).toBe(3); // unknown filter values are ignored, never an error
   });
 
   it("will not ship an order that has not been paid", async () => {

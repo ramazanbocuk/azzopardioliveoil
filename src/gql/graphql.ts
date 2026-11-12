@@ -17,8 +17,25 @@ export type AddressInput = {
   region?: string | null | undefined;
 };
 
+/** Invoice address, when it differs from the delivery address. */
+export type BillingInput = {
+  city: string;
+  company?: string | null | undefined;
+  /** ISO 3166-1 alpha-2. */
+  countryCode: string;
+  firstName: string;
+  lastName: string;
+  line1: string;
+  line2?: string | null | undefined;
+  postalCode: string;
+  region?: string | null | undefined;
+  vatNumber?: string | null | undefined;
+};
+
 export type CheckoutInput = {
   address: AddressInput;
+  /** Omit to bill to the delivery address. */
+  billing?: BillingInput | null | undefined;
   customerNote?: string | null | undefined;
   email: string;
   locale?: string | null | undefined;
