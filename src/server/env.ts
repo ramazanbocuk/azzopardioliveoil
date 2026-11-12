@@ -21,7 +21,7 @@ export function checkEnvironment(env: Record<string, string | undefined> = proce
   if (!env.CRON_SECRET || env.CRON_SECRET.length < 24) warning("CRON_SECRET is missing or shorter than 24 characters: the scheduler cannot run, so retries, stock release and cleanup will not happen.");
 
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) warning("Stripe is not connected: orders will be created unpaid and refunds cannot be sent.");
-  else if (production && env.STRIPE_SECRET_KEY.startsWith("sk_test_")) warning("Stripe is using a TEST key in production: no real money will be taken.");
+  else if (production && /^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY)) warning("Stripe is using a TEST key in production: no real money will be taken.");
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) warning("Email (Resend) is not connected: no confirmation, shipping, reset or owner emails will be sent.");
   if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_API_VERSION || !env.WHATSAPP_TEMPLATE_NAME) warning("WhatsApp is not connected: no WhatsApp order alerts will be sent.");
 
