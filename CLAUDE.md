@@ -43,4 +43,5 @@ Phase 10 (system status, stored error reports, staging mode, admin host) is buil
 - `src/server/environment.ts` is pure and imports nothing: the request proxy and the email channel depend on it. Keep it that way.
 - Email leaves only through `sendEmail`, which refuses recipients not on the allow-list when `APP_ENV=staging`. Never call the provider from anywhere else.
 - A new integration or background duty gets a line in `systemChecks` (`src/server/system.ts`) that says in plain words what is wrong when it is.
+- Every folder under `src/app/admin/` that has a `page.tsx` also has a `loading.tsx` (one line, re-exporting `@/components/admin/Loading`). Admin pages read the session per request, so without it moving between pages blocks and Next.js reports "uncached data … outside of Suspense" in development. A loading file in a parent folder does not count for moves between its children; nor does a template.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost, UPS) have never called a carrier. Non-English text has not had a native review.
