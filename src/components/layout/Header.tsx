@@ -8,6 +8,7 @@ import { AccountIcon, BagIcon, SearchIcon } from "@/components/ui/icons";
 import { useCart } from "@/lib/store";
 import { LocaleSelector } from "./LocaleSelector";
 import { Wordmark } from "./Wordmark";
+import { SOLID_AFTER, initialHeaderScroll, nextHeaderScroll } from "./headerScroll";
 
 const NAV = [
   { href: "/shop", key: "shop" },
@@ -24,24 +25,29 @@ export function Header({ countries }: { countries: string[] }) {
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
-  const lastY = useRef(0);
+  const headerRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const count = useCart().cart.itemCount;
   const { m, plural } = useI18n();
 
-  // Solid after the first screen-edge; tucks away scrolling down, returns scrolling up.
+  // Solid once the page has moved; tucks away scrolling down, returns scrolling up.
+  // The rule, and why it ignores small movements, is in headerScroll.ts.
   useEffect(() => {
     let frame = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        setScrolled(y > 24);
-        setHidden(y > 480 && y > lastY.current);
-        lastY.current = y;
-      });
+    let state = initialHeaderScroll();
+    const read = () => {
+      frame = 0;
+      const y = window.scrollY;
+      state = nextHeaderScroll(state, y, document.documentElement.scrollHeight - window.innerHeight);
+      setScrolled(y > SOLID_AFTER);
+      // Never slides away from under someone who is using it (the keyboard, or the open country list).
+      setHidden(state.hidden && !headerRef.current?.contains(document.activeElement));
     };
-    onScroll();
+    // One reading per painted frame, however many scroll events arrive in it.
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(read);
+    };
+    read();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
@@ -69,8 +75,10 @@ export function Header({ countries }: { countries: string[] }) {
   return (
     <>
       <header
+        ref={headerRef}
         className={clsx(
-          "header-in fixed inset-x-0 top-0 z-50 transition-[transform,background-color,border-color,color] duration-700 ease-out-expo",
+          // Tailwind moves an element with the `translate` property, so that is the one to animate.
+          "header-in fixed inset-x-0 top-0 z-50 transition-[translate,background-color,border-color,color] duration-500 ease-out-expo will-change-[translate]",
           hidden && !open ? "-translate-y-full" : "translate-y-0",
           open
             ? "border-b border-transparent text-ivory"
