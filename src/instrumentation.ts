@@ -28,4 +28,13 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
       stack: failure.stack?.split("\n").slice(0, 6).join("\n"),
     }),
   );
+  // Also kept in the database and emailed to the shop once a day per distinct error (see src/server/system.ts).
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    try {
+      const [{ recordError }, { getPrisma }] = await Promise.all([import("@/server/system"), import("@/server/db")]);
+      await recordError(getPrisma(), { message: failure.message, code: (error as { code?: string }).code, digest: failure.digest, stack: failure.stack, path: request.path, method: request.method, route: context.routePath, kind: context.routeType });
+    } catch {
+      // Recording is best effort; the log line above is the record of last resort.
+    }
+  }
 };

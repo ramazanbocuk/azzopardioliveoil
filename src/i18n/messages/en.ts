@@ -21,6 +21,7 @@ export const en = {
     cancel: "Cancel",
     free: "Free",
     vatIncluded: "VAT included",
+    stagingNotice: "This is a test copy of the shop. Orders placed here are not real and nothing will be sent.",
     shopCta: "Shop the oil",
     backToShop: "Back to the shop",
     backHome: "Back to the home page",

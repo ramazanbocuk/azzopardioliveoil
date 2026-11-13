@@ -1,12 +1,13 @@
 import { purgeOldConversations } from "./ai/assistant";
 import { expireProposals } from "./ai/proposals";
 import { purgeOldStaffConversations } from "./ai/staffAssistant";
+import { purgeOldErrors, recordSchedulerRun } from "./system";
 import { afterShipment } from "./stock";
 import type { OutboxJob } from "@/generated/prisma/client";
 import { refreshTracking } from "./fulfilment";
 import { releaseExpiredReservations } from "./checkout";
 import type { Db } from "./db";
-import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Env, type Transport } from "./notifications/channels";
+import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Env, type Transport, Withheld } from "./notifications/channels";
 import { contactEmail, customerConfirmationEmail, customerShippedEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, passwordResetEmail, customerRefundEmail, staffAlertEmail, wholesaleApprovedEmail } from "./notifications/messages";
 
 /**
@@ -220,7 +221,7 @@ export async function processJobs(db: Db, options: Options = {}): Promise<JobRep
       report.done += 1;
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
-      if (error instanceof Skip || error instanceof NotConfigured) {
+      if (error instanceof Skip || error instanceof NotConfigured || error instanceof Withheld) {
         await finish({ status: "SKIPPED", lastError: message });
         report.skipped += 1;
       } else if ((error instanceof ChannelError && !error.retryable) || job.attempts >= MAX_ATTEMPTS) {
@@ -262,5 +263,9 @@ export async function runScheduledWork(db: Db, options: Options = {}) {
   const tracking = await refreshTracking(db, options.now);
   const conversations = (await purgeOldConversations(db, options.now)) + (await purgeOldStaffConversations(db, options.now));
   const proposals = await expireProposals(db, options.now);
-  return { releasedOrders: released, jobs, purged: { ...purged, conversations, proposals }, tracking };
+  const errors = await purgeOldErrors(db, options.now);
+  const report = { releasedOrders: released, jobs, purged: { ...purged, conversations, proposals, errors }, tracking };
+  // A heartbeat: the status screen notices when this stops being written.
+  await recordSchedulerRun(db, report, options.now);
+  return report;
 }

@@ -16,6 +16,7 @@ export const de: Messages = {
     cancel: "Abbrechen",
     free: "Kostenlos",
     vatIncluded: "inkl. MwSt.",
+    stagingNotice: "Dies ist eine Testkopie des Shops. Bestellungen hier sind nicht echt, und es wird nichts versendet.",
     shopCta: "Zum Shop",
     backToShop: "Zurück zum Shop",
     backHome: "Zurück zur Startseite",

@@ -12,6 +12,8 @@ Phase 7 (customer assistant, knowledge base, support requests) is built but has 
 
 Phase 9 (markets, fixed prices per currency, compulsory staff two-factor) is built: `docs/markets.md`.
 
+Phase 10 (system status, stored error reports, staging mode, admin host) is built: `docs/production-readiness.md`. Nothing is deployed.
+
 ## Commands
 
 - `npm run dev` — development server (needs `npm run db:start` first). After schema changes or odd caching: `npm run dev:clean`.
@@ -38,4 +40,7 @@ Phase 9 (markets, fixed prices per currency, compulsory staff two-factor) is bui
 - An amount is in one currency and is never converted. Use `priceIn(variant, currency)`, never `variant.priceCents`, for anything a customer pays; a null price means "not sold there". Never sum `totalCents` or `amountCents` across orders without filtering on one currency.
 - Format money with its currency: `money(cents, order.currency)` in the admin, `money(cents, cart.currency)` or `price(variant)` in the shop.
 - A service open to every role uses `requireStaff(ctx)`, not a bare `ctx.admin` check: it also enforces two-factor sign-in.
+- `src/server/environment.ts` is pure and imports nothing: the request proxy and the email channel depend on it. Keep it that way.
+- Email leaves only through `sendEmail`, which refuses recipients not on the allow-list when `APP_ENV=staging`. Never call the provider from anywhere else.
+- A new integration or background duty gets a line in `systemChecks` (`src/server/system.ts`) that says in plain words what is wrong when it is.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost, UPS) have never called a carrier. Non-English text has not had a native review.

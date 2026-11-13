@@ -30,6 +30,11 @@ Recommended setup: **Vercel** (Frankfurt, `fra1`) for the application and **Neon
 | `RESEND_API_KEY`, `EMAIL_FROM` | To send email | Domain must be verified in Resend |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | For WhatsApp alerts | See `notifications.md` |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Optional | SMS alerts |
+| `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL`, `ASSISTANT_EFFORT` | For the assistants | See `assistant.md`. Both stay off until switched on with a budget in the admin |
+| Carrier keys (`BPOST_…`, `DHL_EXPRESS_…`, `UPS_…`, `FEDEX_…`) | To book labels | See `shipping.md` |
+| `APP_ENV` | On staging only | `staging`. See "Staging" below |
+| `STAGING_EMAIL_ALLOW` | On staging only | Addresses or `@domains` that may be emailed from staging |
+| `ADMIN_HOST` | Optional | The admin panel's own host name; the panel then answers only there |
 
 The server refuses to start in production if a required variable is missing, and logs a `[config] warning` line for each integration that is not connected.
 
@@ -57,7 +62,18 @@ The language suggestion uses the visitor's country from the `x-vercel-ip-country
 
 Point the domain at the host, then set `APP_URL` to it and redeploy. The site sends HSTS with `preload`; only submit the domain to the browser preload list once you are certain every subdomain will always use HTTPS.
 
+## 5b. Staging
+
+Deploy the same repository a second time, to its own address and **its own database**, with `APP_ENV=staging`, Stripe **test** keys, and `STAGING_EMAIL_ALLOW` set to your own address. Staging then shows a test-site notice, tells search engines not to index it, refuses to start with a live Stripe key, and emails only the addresses you listed. Do the first deployment here, and try every later change here first. See `production-readiness.md`.
+
+## 5c. The admin panel's own address
+
+Once the domain exists, add `admin.your-domain` to the same deployment and set `ADMIN_HOST=admin.your-domain`. The panel then answers only on that host.
+
 ## 6. After the first deploy
+
+- Sign in to `/admin` and open **System status**. Every line should read "In order" except those you have chosen not to connect. On a live site the scheduler must show a run within the last few minutes.
+- The first sign-in asks you to set up two-factor sign-in with an authenticator app; so will every staff account.
 
 - `GET /api/health` returns `{"status":"ok"}`.
 - `/robots.txt` and `/sitemap.xml` show the production domain.
@@ -71,4 +87,4 @@ Redeploy the previous build from the host's deployment list. Migrations so far o
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs type-check, lint, unit and integration tests, a dependency audit and the end-to-end browser tests on every push and pull request. It has not been run on GitHub yet.
+`.github/workflows/ci.yml` runs type-check, lint, unit and integration tests, a dependency audit and the end-to-end browser tests on every push and pull request. It runs on GitHub on every pull request and has passed on each one merged.

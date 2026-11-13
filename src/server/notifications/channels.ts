@@ -1,3 +1,4 @@
+import { appEnvironment, emailAllowed } from "../environment";
 /**
  * Outbound channels: email (Resend), WhatsApp (Meta's official Cloud API)
  * and SMS (Twilio). Each talks to the provider's HTTPS API directly with
@@ -46,17 +47,28 @@ async function post(transport: Transport, channel: string, url: string, headers:
 
 export type Env = Record<string, string | undefined>;
 
+/** A message deliberately not sent (for example to a stranger from a staging copy). The job is recorded as skipped, with the reason. */
+export class Withheld extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "Withheld";
+  }
+}
+
 export type Email = { to: string; subject: string; html: string; text: string; replyTo?: string };
 
 /** Resend. `idempotencyKey` lets a retried job be sent at most once by the provider. */
 export async function sendEmail(email: Email, idempotencyKey: string, env: Env = process.env, transport: Transport = defaultTransport): Promise<void> {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) throw new NotConfigured("Email (RESEND_API_KEY and EMAIL_FROM)");
+  // A staging copy may hold real customers' addresses. It writes only to people the owner listed.
+  if (!emailAllowed(email.to, env)) throw new Withheld("Not sent: this is the staging site and the recipient is not in STAGING_EMAIL_ALLOW.");
+  const subject = appEnvironment(env) === "staging" ? `[Staging] ${email.subject}` : email.subject;
   await post(
     transport,
     "Email",
     "https://api.resend.com/emails",
     { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json", "idempotency-key": idempotencyKey },
-    JSON.stringify({ from: env.EMAIL_FROM, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { reply_to: email.replyTo } : {}) }),
+    JSON.stringify({ from: env.EMAIL_FROM, to: [email.to], subject, html: email.html, text: email.text, ...(email.replyTo ? { reply_to: email.replyTo } : {}) }),
   );
 }
 

@@ -16,6 +16,7 @@ export const nl: Messages = {
     cancel: "Annuleren",
     free: "Gratis",
     vatIncluded: "incl. btw",
+    stagingNotice: "Dit is een testkopie van de winkel. Bestellingen hier zijn niet echt en er wordt niets verzonden.",
     shopCta: "Naar de winkel",
     backToShop: "Terug naar de winkel",
     backHome: "Terug naar de startpagina",

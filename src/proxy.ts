@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { COUNTRY_COOKIE, LOCALE_COOKIE, ONE_YEAR, detectLocale, splitLocale } from "@/i18n/config";
+import { adminHostRule } from "@/server/environment";
+
+/** Everything that is not a storefront page: the admin panel, APIs, uploaded media, and files such as robots.txt. */
+const NOT_A_PAGE = /^\/(?:admin|api|media)(?:\/|$)|\.[a-zA-Z0-9]+$/;
 
 /**
  * Sends a visitor who arrives without a locale in the address to the one
@@ -9,6 +13,12 @@ import { COUNTRY_COOKIE, LOCALE_COOKIE, ONE_YEAR, detectLocale, splitLocale } fr
  */
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  // When the admin panel has a host of its own, it answers only there, and that host shows nothing else.
+  const rule = adminHostRule(request.headers.get("host"), pathname, process.env.ADMIN_HOST);
+  if (rule === "not-found") return new NextResponse("Not found", { status: 404, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } });
+  if (rule === "to-admin") return NextResponse.redirect(new URL("/admin", request.url), 307);
+  if (NOT_A_PAGE.test(pathname)) return NextResponse.next();
   // The host tells us the visitor's country; without such a header (local development) it is unknown.
   const country = (request.headers.get("x-vercel-ip-country") ?? request.headers.get("cf-ipcountry") ?? "").toUpperCase().slice(0, 2) || null;
 
@@ -29,6 +39,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Pages only: not the admin panel, APIs, uploaded media, Next.js internals, or files such as robots.txt and sitemap.xml.
-  matcher: ["/((?!admin|api|media|_next|.*\\.[a-zA-Z0-9]+$).*)"],
+  // Everything except Next.js internals. The admin panel and APIs pass straight through unless ADMIN_HOST says otherwise.
+  matcher: ["/((?!_next).*)"],
 };

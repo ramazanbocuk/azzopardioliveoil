@@ -24,6 +24,8 @@ What is in place, how it is checked, and what is knowingly missing. This is a de
 | GDPR | Customer can download their data and delete their account; administrators can erase on request; newsletter is double opt-in; only strictly necessary cookies | Integration tests |
 | Dependencies | `npm audit --omit=dev` reports 0 known vulnerabilities (12 Nov 2026) | Manual |
 
+A review of the whole application was done on 2026-11-19; its checklist and results are in `production-readiness.md`. It was not an independent test.
+
 ## Known gaps
 
 1. **Two-factor sign-in is compulsory for staff in production** (see `markets.md`). It uses authenticator-app codes only: there are no hardware keys or passkeys, and no recovery codes. A lost phone is reset by an administrator, or from the server with `npm run admin:set-password`.
