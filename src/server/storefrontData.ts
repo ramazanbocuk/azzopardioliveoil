@@ -1,3 +1,5 @@
+import { marketOf, type MarketRule } from "@/i18n/currency";
+import { listMarketRules } from "./markets";
 import { cacheLife, cacheTag } from "next/cache";
 import { journal, type CatalogItem, type Category, type JournalEntry, type Product } from "@/content/site";
 import { getPrisma } from "./db";
@@ -23,12 +25,21 @@ export async function getCatalogData(language = "en"): Promise<{ categories: Cat
 }
 
 /** Lowest free-shipping threshold among active rates, for "free from €X" messaging. Null if none. */
-export async function getFreeShippingThreshold(): Promise<number | null> {
+export async function getFreeShippingThreshold(): Promise<Record<string, number>> {
   "use cache";
   cacheLife("minutes");
   cacheTag("shipping");
-  const rate = await getPrisma().shippingRate.findFirst({ where: { isActive: true, freeAboveCents: { not: null }, zone: { isActive: true } }, orderBy: { freeAboveCents: "asc" } });
-  return rate?.freeAboveCents ?? null;
+  // One per currency: a threshold in euro says nothing about an order in dollars.
+  const rates = await getPrisma().shippingRate.findMany({ where: { isActive: true, freeAboveCents: { not: null }, zone: { isActive: true } }, orderBy: { freeAboveCents: "desc" }, select: { freeAboveCents: true, zone: { select: { currency: true } } } });
+  return Object.fromEntries(rates.map((rate) => [rate.zone.currency, rate.freeAboveCents ?? 0]));
+}
+
+/** The markets, for the page to pick the visitor's currency by the rule the server uses. */
+export async function getMarketRules(): Promise<MarketRule[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("shipping");
+  return listMarketRules(getPrisma());
 }
 
 /**
@@ -76,9 +87,10 @@ export async function getShippingCountries(): Promise<{ code: string; name: stri
   "use cache";
   cacheLife("minutes");
   cacheTag("shipping");
-  const zones = await getPrisma().shippingZone.findMany({ where: { isActive: true, rates: { some: { isActive: true } } }, select: { countries: true } });
+  const [zones, markets] = await Promise.all([getPrisma().shippingZone.findMany({ where: { isActive: true, rates: { some: { isActive: true } } }, select: { countries: true, currency: true } }), listMarketRules(getPrisma())]);
   const names = new Intl.DisplayNames(["en"], { type: "region" });
-  const codes = [...new Set(zones.flatMap((zone) => zone.countries))].filter((code) => /^[A-Z]{2}$/.test(code));
+  // A country is offered only when its market is open and a zone serves it in that market's currency.
+  const codes = [...new Set(zones.flatMap((zone) => zone.countries.filter((code) => /^[A-Z]{2}$/.test(code) && marketOf(markets, code).open && marketOf(markets, code).currency === zone.currency)))];
   return codes
     .map((code) => ({ code, name: names.of(code) ?? code }))
     .sort((a, b) => (a.code === "BE" ? -1 : b.code === "BE" ? 1 : a.name.localeCompare(b.name)));

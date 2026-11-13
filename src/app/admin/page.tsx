@@ -34,12 +34,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
   const [stats, params] = await Promise.all([dashboard(ctx), searchParams]);
+  // Revenue figures are in euro. Sales in other currencies are listed apart, never added in.
+  const elsewhere = stats.otherCurrencies.map((row) => `${money(row.revenueCents, row.currency)} from ${row.paidOrders} order${row.paidOrders === 1 ? "" : "s"}`).join("; ");
 
   return (
     <Page title="Dashboard" eyebrow="Overview" actions={<LinkButton href="/admin/export/orders">Export orders (CSV)</LinkButton>}>
       <Flash params={params} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Total revenue" value={money(stats.revenueCents)} note={`${stats.paidOrders} paid order${stats.paidOrders === 1 ? "" : "s"}`} />
+        <Stat label="Total revenue" value={money(stats.revenueCents)} note={`${stats.paidOrders} paid order${stats.paidOrders === 1 ? "" : "s"} in euro${elsewhere ? `. Not included: ${elsewhere}` : ""}`} />
         <Stat label="This month" value={money(stats.monthRevenueCents)} />
         <Stat label="Average order" value={money(stats.averageOrderCents)} />
         <Stat label="Orders today" value={String(stats.ordersToday)} note={`${stats.awaitingFulfilment} waiting to be packed`} />
@@ -89,7 +91,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
                 <td>
                   <Badge>{order.status}</Badge>
                 </td>
-                <td className="tabular-nums">{money(order.totalCents)}</td>
+                <td className="tabular-nums">{money(order.totalCents, order.currency)}</td>
               </tr>
             ))}
           </Table>

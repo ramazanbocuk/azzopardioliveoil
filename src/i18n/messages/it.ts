@@ -97,6 +97,8 @@ export const it: Messages = {
     showAll: "Mostra tutte le bottiglie",
     lot: "Lotto {lot}",
     soldOut: "Esaurito",
+    notSoldHere: "Non disponibile per la consegna nel tuo paese.",
+    notSoldInCart: "Non venduto per la consegna nel tuo paese. Rimuovilo per procedere al pagamento.",
     illustration: "{name} (illustrazione)",
   },
   product: {

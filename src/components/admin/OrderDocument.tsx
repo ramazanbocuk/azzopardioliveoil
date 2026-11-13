@@ -1,5 +1,5 @@
 import type { Order, OrderItem } from "@/generated/prisma/client";
-import { date, money } from "./ui";
+import { date, money as format } from "./ui";
 import { PrintButton } from "./PrintButton";
 
 type Store = Record<string, string | boolean | null>;
@@ -14,6 +14,7 @@ const rate = (bps: number) => `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
 export type SlipShipment = { index: number; of: number; carrier: string; trackingNumber: string | null; shippedAt: Date | null; weightGrams: number; lines: { orderItemId: string; quantity: number; lotNumber: string | null }[]; stillToFollow: { name: string; quantity: number }[] };
 
 export function OrderDocument({ kind, order, store, shipment }: { kind: "invoice" | "packing-slip"; order: Order & { items: OrderItem[] }; store: Store; shipment?: SlipShipment }) {
+  const money = (cents: number | null | undefined) => format(cents, order.currency);
   const invoice = kind === "invoice";
   // A slip for one shipment lists only what is in that parcel, with the lot each line was packed from.
   const rows = shipment

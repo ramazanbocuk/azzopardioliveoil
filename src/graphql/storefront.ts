@@ -6,7 +6,7 @@ import SchemaBuilder from "@pothos/core";
 import type { Backorder, Batch, BatchDocument, Category, Customer, Order, OrderEvent, OrderItem, Product, Review, Shipment, ShipmentItem, TrackingEvent, Variant } from "@/generated/prisma/client";
 import { chooseLanguage, deleteOwnAccount, login, logout, register, requestPasswordReset, requireCustomer, resetPassword } from "@/server/auth";
 import { exportCustomerData } from "@/server/privacy";
-import { addItem, applyDiscount, findCart, removeDiscount, removeItem, setQuantity, summarise, type CartSummary } from "@/server/cart";
+import { addItem, applyDiscount, findCart, removeDiscount, removeItem, setQuantity, viewCart, type CartSummary } from "@/server/cart";
 import { getProduct, listCategories, listProducts, lookupLot } from "@/server/catalog";
 import { findOrderByToken, findOrderForGuest, listOrdersForCustomer, placeOrder, shippingOptions } from "@/server/checkout";
 import { getPaymentProvider, startPayment } from "@/server/payments";
@@ -56,7 +56,7 @@ const VariantType = builder.objectRef<Variant>("Variant").implement({
     sku: t.exposeString("sku"),
     label: t.exposeString("label"),
     volumeMl: t.exposeInt("volumeMl"),
-    priceCents: t.exposeInt("priceCents", { description: "Price in euro cents, VAT included." }),
+    priceCents: t.exposeInt("priceCents", { description: "Price in euro cents, VAT included. Prices in other currencies are set separately and are never converted from this." }),
     compareAtCents: t.exposeInt("compareAtCents", { nullable: true }),
     // Exact stock is commercial information; the storefront only learns these two facts.
     inStock: t.boolean({ resolve: (v) => v.stock - v.reserved > 0 }),
@@ -180,6 +180,7 @@ const CartLineType = builder.objectRef<CartLine>("CartLine").implement({
     quantity: t.exposeInt("quantity"),
     unitPriceCents: t.exposeInt("unitPriceCents"),
     lineTotalCents: t.exposeInt("lineTotalCents"),
+    sold: t.exposeBoolean("sold", { description: "False when this size has no price in the cart's currency: it cannot be delivered to the chosen country and counts for nothing in the totals." }),
     enoughStock: t.boolean({ description: "False when the quantity cannot be ordered: more than is in stock, on a product that is not open to backorders.", resolve: (line) => line.available >= line.quantity || line.allowBackorder }),
     backorderQuantity: t.exposeInt("backorderQuantity", { description: "Units of this line that are not in stock now and would be sent when they arrive." }),
     variant: t.field({ type: VariantType, resolve: (line) => line.variant }),
@@ -190,6 +191,7 @@ const CartLineType = builder.objectRef<CartLine>("CartLine").implement({
 const CartType = builder.objectRef<CartSummary>("Cart").implement({
   description: "Totals are computed by the server from current prices.",
   fields: (t) => ({
+    currency: t.exposeString("currency", { description: "The currency of every amount in the cart: that of the delivery country the visitor chose." }),
     lines: t.field({ type: [CartLineType], resolve: (cart) => cart.lines }),
     itemCount: t.exposeInt("itemCount"),
     subtotalCents: t.exposeInt("subtotalCents"),
@@ -360,6 +362,7 @@ const CheckoutInput = builder.inputType("CheckoutInput", {
     billing: t.field({ type: BillingInput, description: "Omit to bill to the delivery address." }),
     customerNote: t.string(),
     locale: t.string(),
+    currency: t.string({ description: "The currency the customer was shown. The order is refused if the delivery address is charged in another." }),
   }),
 });
 
@@ -404,7 +407,7 @@ builder.queryType({
       description: "Everything held about the signed-in customer, as a JSON document (GDPR access and portability).",
       resolve: async (_root, _args, ctx) => JSON.stringify(await exportCustomerData(ctx.db, requireCustomer(ctx).id), null, 2),
     }),
-    cart: t.field({ type: CartType, resolve: async (_root, _args, ctx) => summarise(ctx.db, await findCart(ctx)) }),
+    cart: t.field({ type: CartType, resolve: async (_root, _args, ctx) => viewCart(ctx, await findCart(ctx)) }),
     shippingOptions: t.field({
       type: [ShippingOptionType],
       description: "Rates for the current cart to a country. Empty when we do not deliver there.",
@@ -474,16 +477,16 @@ builder.mutationType({
     cartAdd: t.field({
       type: CartType,
       args: { sku: t.arg.string({ required: true }), quantity: t.arg.int({ defaultValue: 1 }) },
-      resolve: async (_root, args, ctx) => summarise(ctx.db, await addItem(ctx, args.sku, args.quantity ?? 1)),
+      resolve: async (_root, args, ctx) => viewCart(ctx, await addItem(ctx, args.sku, args.quantity ?? 1)),
     }),
     cartSetQuantity: t.field({
       type: CartType,
       args: { sku: t.arg.string({ required: true }), quantity: t.arg.int({ required: true }) },
-      resolve: async (_root, args, ctx) => summarise(ctx.db, await setQuantity(ctx, args.sku, args.quantity)),
+      resolve: async (_root, args, ctx) => viewCart(ctx, await setQuantity(ctx, args.sku, args.quantity)),
     }),
-    cartRemove: t.field({ type: CartType, args: { sku: t.arg.string({ required: true }) }, resolve: async (_root, args, ctx) => summarise(ctx.db, await removeItem(ctx, args.sku)) }),
-    cartApplyDiscount: t.field({ type: CartType, args: { code: t.arg.string({ required: true }) }, resolve: async (_root, args, ctx) => summarise(ctx.db, await applyDiscount(ctx, args.code)) }),
-    cartRemoveDiscount: t.field({ type: CartType, resolve: async (_root, _args, ctx) => summarise(ctx.db, await removeDiscount(ctx)) }),
+    cartRemove: t.field({ type: CartType, args: { sku: t.arg.string({ required: true }) }, resolve: async (_root, args, ctx) => viewCart(ctx, await removeItem(ctx, args.sku)) }),
+    cartApplyDiscount: t.field({ type: CartType, args: { code: t.arg.string({ required: true }) }, resolve: async (_root, args, ctx) => viewCart(ctx, await applyDiscount(ctx, args.code)) }),
+    cartRemoveDiscount: t.field({ type: CartType, resolve: async (_root, _args, ctx) => viewCart(ctx, await removeDiscount(ctx)) }),
 
     checkout: t.field({
       type: OrderType,

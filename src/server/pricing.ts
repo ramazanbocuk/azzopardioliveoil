@@ -16,6 +16,8 @@ export type DiscountRule = {
   usageLimit: number | null;
   usedCount: number;
   isActive: boolean;
+  /** The currency of a FIXED value and of the minimum. Absent on rules that are a percentage only. */
+  currency?: string;
 };
 
 export type RateRule = {
@@ -40,8 +42,10 @@ export function totalWeightGrams(lines: Line[]): number {
 }
 
 /** Returns why a code cannot be used, or null when it can. */
-export function discountProblem(discount: DiscountRule, subtotal: number, now: Date): string | null {
+export function discountProblem(discount: DiscountRule, subtotal: number, now: Date, currency = "EUR"): string | null {
   if (!discount.isActive) return "This code is not active.";
+  // An amount in one currency means nothing against prices in another, and is never converted.
+  if (discount.currency && discount.currency !== currency && (discount.kind === "FIXED" || discount.minSubtotalCents > 0)) return `This code cannot be used with prices in ${currency}.`;
   if (discount.startsAt && now < discount.startsAt) return "This code is not valid yet.";
   if (discount.endsAt && now > discount.endsAt) return "This code has expired.";
   if (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit) return "This code has been fully used.";

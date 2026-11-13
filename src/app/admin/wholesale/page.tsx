@@ -63,7 +63,7 @@ export default async function WholesalePage({ searchParams }: PageProps<"/admin/
               <span className="font-medium">
                 {account.companyName ?? `${account.firstName} ${account.lastName}`}
                 <span className="text-small ml-3 font-normal text-stone-700">
-                  {account.email} · {account.wholesaleDiscountBps / 100}% · {account.paidOrders} paid order{account.paidOrders === 1 ? "" : "s"} · {money(account.spentCents)}
+                  {account.email} · {account.wholesaleDiscountBps / 100}% · {account.paidOrders} paid order{account.paidOrders === 1 ? "" : "s"} · {money(account.spentCents)}{account.otherSpend ? ` + ${account.otherSpend}` : ""}
                 </span>
               </span>
               <Badge tone={account.wholesaleStatus === "APPROVED" ? "PAID" : account.wholesaleStatus === "REJECTED" ? "FAILED" : "UNPAID"}>{account.wholesaleStatus}</Badge>

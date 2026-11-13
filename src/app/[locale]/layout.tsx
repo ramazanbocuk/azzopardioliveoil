@@ -3,6 +3,7 @@ import { StoreChrome } from "@/components/layout/StoreChrome";
 import { I18nProvider } from "@/i18n/client";
 import { LOCALE_CODES, tagOf } from "@/i18n/config";
 import { getI18n } from "@/i18n/server";
+import { getMarketRules } from "@/server/storefrontData";
 import { switzer, zodiak } from "@/lib/fonts";
 import "../globals.css";
 
@@ -35,14 +36,14 @@ const motionGate = `(function(){try{if(matchMedia('(prefers-reduced-motion: no-p
 
 /** Root layout of the storefront. The admin panel has its own root layout and no locale. */
 export default async function StoreRootLayout({ children }: LayoutProps<"/[locale]">) {
-  const { locale, m } = await getI18n();
+  const [{ locale, m }, markets] = await Promise.all([getI18n(), getMarketRules()]);
   return (
     <html lang={tagOf(locale)} className={`${zodiak.variable} ${switzer.variable} antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: motionGate }} />
       </head>
       <body className="flex min-h-svh flex-col">
-        <I18nProvider locale={locale} messages={m}>
+        <I18nProvider locale={locale} messages={m} markets={markets}>
           <StoreChrome>{children}</StoreChrome>
         </I18nProvider>
       </body>

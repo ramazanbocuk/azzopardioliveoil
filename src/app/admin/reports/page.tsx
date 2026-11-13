@@ -1,4 +1,4 @@
-import { Card, Field, Flash, LinkButton, Page, Stat, Submit, Table, money } from "@/components/admin/ui";
+import { Card, Field, Flash, LinkButton, Page, Select, Stat, Submit, Table, money as format } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
 import { salesReport } from "@/server/backoffice";
 
@@ -9,7 +9,8 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
   if (!ctx.admin) return null;
   const params = await searchParams;
   const value = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : undefined);
-  const report = await salesReport(ctx, { from: value("from"), to: value("to") });
+  const report = await salesReport(ctx, { from: value("from"), to: value("to"), currency: value("currency") });
+  const money = (cents: number | null | undefined) => format(cents, report.currency);
   const peak = Math.max(1, ...report.daily.map((day) => day.grossCents));
   const range = `from=${report.range.fromText}&to=${report.range.toText}`;
 
@@ -19,6 +20,15 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
       <Card>
         <form className="flex flex-wrap items-end gap-4">
           <Field label="From" name="from" type="date" defaultValue={report.range.fromText} />
+          {report.currencies.length > 1 && (
+            <Select label="Currency" name="currency" defaultValue={report.currency}>
+              {report.currencies.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </Select>
+          )}
           <Field label="To" name="to" type="date" defaultValue={report.range.toText} />
           <Submit variant="secondary">Show</Submit>
           <p className="text-small text-stone-700">Orders are counted on the day they were paid. Amounts include VAT unless stated.</p>

@@ -4,7 +4,7 @@ import { useMutation } from "@apollo/client/react";
 import clsx from "clsx";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
-import { useI18n } from "@/i18n/client";
+import { rememberShipTo, useI18n } from "@/i18n/client";
 import { COUNTRY_COOKIE, LANGUAGE_NAME, LOCALES, LOCALE_CODES, LOCALE_COOKIE, ONE_YEAR, SHIP_COOKIE, languagesOfCountry, localeFor, localizePath, splitLocale, type Locale } from "@/i18n/config";
 import { countryName } from "@/i18n/format";
 import { SetLanguage } from "@/lib/operations";
@@ -43,7 +43,7 @@ export function LocaleSelector({ countries, placement }: { countries: string[]; 
 
   const apply = async (form: FormData) => {
     const country = String(form.get("ship") ?? "");
-    if (country) writeCookie(SHIP_COOKIE, country);
+    if (country) rememberShipTo(country);
     const next = String(form.get("locale") ?? locale) as Locale;
     if (next !== locale) await choose(next);
     else dialog.current?.close();

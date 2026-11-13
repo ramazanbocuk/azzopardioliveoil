@@ -33,7 +33,7 @@ export default async function MarketingPage({ searchParams }: PageProps<"/admin/
           {data.discounts.map((discount) => (
             <tr key={discount.id}>
               <td className="font-mono">{discount.code}</td>
-              <td>{discount.kind === "PERCENT" ? `${discount.value}%` : discount.kind === "FIXED" ? money(discount.value) : "Free shipping"}</td>
+              <td>{discount.kind === "PERCENT" ? `${discount.value}%` : discount.kind === "FIXED" ? money(discount.value, discount.currency) : "Free shipping"}</td>
               <td>
                 <Badge tone={discount.isActive ? "PAID" : undefined}>{discount.isActive ? "ACTIVE" : "OFF"}</Badge>
               </td>
@@ -41,9 +41,12 @@ export default async function MarketingPage({ searchParams }: PageProps<"/admin/
                 {discount.usedCount}
                 {discount.usageLimit !== null ? ` / ${discount.usageLimit}` : ""}
               </td>
-              <td className="tabular-nums">{discount.paidOrders}</td>
-              <td className="tabular-nums">{money(discount.givenCents)}</td>
-              <td className="tabular-nums">{money(discount.revenueCents)}</td>
+              <td className="tabular-nums">
+                {discount.paidOrders}
+                {discount.ordersInOtherCurrencies > 0 && <span className="text-small block text-stone-700">{discount.ordersInOtherCurrencies} in another currency, not in the amounts</span>}
+              </td>
+              <td className="tabular-nums">{money(discount.givenCents, discount.currency)}</td>
+              <td className="tabular-nums">{money(discount.revenueCents, discount.currency)}</td>
               <td>{discount.endsAt ? date(discount.endsAt) : "—"}</td>
             </tr>
           ))}

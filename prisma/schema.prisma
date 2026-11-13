@@ -56,6 +56,8 @@ model Product {
   nutrition          Json?
   // Customs facts for shipments leaving the EU. Administrator-entered; null = not yet recorded.
   hsCode             String?
+  /// Countries this product may not be sent to (ISO codes). Empty means anywhere we deliver.
+  excludedCountries  String[]        @default([])
   customsDescription String?
   originCountry      String?         @db.Char(2)
   // Provenance and tasting profile. Administrator-entered; null = not yet recorded, and shown to customers as a dash.
@@ -135,6 +137,8 @@ model Variant {
   updatedAt         DateTime @updatedAt
 
   product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Prices in currencies other than euro. The euro price is `priceCents`.
+  prices        VariantPrice[]
   movements     InventoryMovement[]
   purchaseLines PurchaseOrderLine[]
   cartItems     CartItem[]
@@ -395,6 +399,8 @@ model Discount {
   /// Percent (1–100) for PERCENT, cents for FIXED, ignored for FREE_SHIPPING.
   value            Int          @default(0)
   minSubtotalCents Int          @default(0)
+  /// The currency of a FIXED value and of the minimum. A code with either works only on orders in this currency.
+  currency         String       @default("EUR") @db.Char(3)
   startsAt         DateTime?
   endsAt           DateTime?
   usageLimit       Int?
@@ -403,11 +409,41 @@ model Discount {
   createdAt        DateTime     @default(now())
 }
 
+/// A group of delivery countries sold to in one currency. The euro is the
+/// base: a country in no market is sold to in euro. Nothing is converted;
+/// a size without a price in a market's currency is not sold there.
+model Market {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  currency  String   @db.Char(3)
+  /// ISO 3166-1 alpha-2 codes. A country belongs to at most one market.
+  countries String[]
+  /// Switched off, its countries cannot be delivered to at all.
+  isActive  Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VariantPrice {
+  id         String   @id @default(cuid())
+  variantId  String
+  currency   String   @db.Char(3)
+  priceCents Int
+  updatedAt  DateTime @updatedAt
+  variant    Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, currency])
+}
+
 model ShippingZone {
   id        String         @id @default(cuid())
   name      String
   /// ISO 3166-1 alpha-2 codes.
   countries String[]
+  /// The currency its rates and free-shipping thresholds are written in. It serves only countries sold to in that currency.
+  currency  String         @default("EUR") @db.Char(3)
   isActive  Boolean        @default(true)
   rates     ShippingRate[]
 }

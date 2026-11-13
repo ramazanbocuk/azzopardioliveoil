@@ -61,7 +61,10 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
                 </span>
               </td>
               <td className="tabular-nums">{row.paidOrders}</td>
-              <td className="tabular-nums">{money(row.spentCents)}</td>
+              <td className="tabular-nums">
+                {money(row.spentCents)}
+                {row.otherSpend && <span className="text-small block text-stone-700">+ {row.otherSpend}</span>}
+              </td>
               <td className="tabular-nums">{row.paidOrders ? money(row.averageCents) : "—"}</td>
               <td className="whitespace-nowrap">{date(row.lastOrderAt)}</td>
               <td>{row.marketingOptIn ? "Agreed" : "No"}</td>

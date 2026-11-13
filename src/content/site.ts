@@ -15,6 +15,8 @@ export type Variant = {
   label: string;
   /** Price in euro cents, VAT included. */
   priceCents: number;
+  /** Every price the owner has set, by currency (always includes EUR). A currency that is missing means the size is not sold in it. */
+  prices: Record<string, number>;
   /** Relative bottle height used by the illustration. */
   scale: number;
   inStock: boolean;
@@ -87,7 +89,7 @@ export function bottleScale(ml: number): number {
 /** Illustrative item for the design-system page only. The shop reads the database. */
 export const sampleItem: CatalogItem = {
   category: { slug: "extra-virgin-olive-oil", name: "Extra Virgin Olive Oil", intro: "", languages: ["en"] },
-  variant: { sku: "sample-750", ml: 750, label: "750 ml", priceCents: 2600, scale: bottleScale(750), inStock: true, backorder: false },
+  variant: { sku: "sample-750", ml: 750, label: "750 ml", priceCents: 2600, prices: { EUR: 2600 }, scale: bottleScale(750), inStock: true, backorder: false },
   product: {
     slug: "extra-virgin-olive-oil",
     name: "Extra Virgin Olive Oil",

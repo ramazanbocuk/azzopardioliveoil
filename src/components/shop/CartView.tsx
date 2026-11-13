@@ -12,7 +12,7 @@ import { useCart, useCartActions } from "@/lib/store";
 
 export function CartView() {
   const { cart, ready } = useCart();
-  const { m, fill, plural, money, server } = useI18n();
+  const { m, fill, plural, money: format, server } = useI18n();
   const c = m.cart;
   const actions = useCartActions();
   const [error, setError] = useState("");
@@ -40,7 +40,9 @@ export function CartView() {
     );
   }
 
-  const blocked = cart.lines.some((line) => !line.enoughStock);
+  // The cart carries its own currency: that of the country it will be delivered to.
+  const money = (cents: number) => format(cents, cart.currency);
+  const blocked = cart.lines.some((line) => !line.enoughStock || !line.sold);
 
   return (
     <div className="grid gap-x-8 gap-y-12 lg:grid-cols-12">
@@ -67,14 +69,15 @@ export function CartView() {
                         </Link>
                       </h2>
                       <p className="text-small mt-1 text-stone-700">
-                        {line.variant.label} · {fill(c.each, { price: money(line.unitPriceCents) })}
+                        {line.variant.label}{line.sold ? ` · ${fill(c.each, { price: money(line.unitPriceCents) })}` : ""}
                       </p>
+                      {!line.sold && <p className="text-small mt-2 text-terracotta-700">{m.shop.notSoldInCart}</p>}
                       {!line.enoughStock && <p className="text-small mt-2 text-terracotta-700">{c.notEnough}</p>}
                       {line.enoughStock && line.backorderQuantity > 0 && (
                         <p className="text-small mt-2 text-ink/80">{line.backorderQuantity >= line.quantity ? m.fulfil.cartAll : fill(m.fulfil.cartPart, { now: line.quantity - line.backorderQuantity, later: line.backorderQuantity })}</p>
                       )}
                     </div>
-                    <p className="text-lead shrink-0 tabular-nums">{money(line.lineTotalCents)}</p>
+                    <p className="text-lead shrink-0 tabular-nums">{line.sold ? money(line.lineTotalCents) : "—"}</p>
                   </div>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-4 pt-5">
                     <QuantityStepper label={fill(c.quantityFor, { name })} value={line.quantity} onChange={(quantity) => run(() => actions.setQuantity(line.sku, quantity))} />

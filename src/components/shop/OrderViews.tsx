@@ -14,7 +14,9 @@ import { OrderByTokenQuery, StartPayment, TrackOrderQuery } from "@/lib/operatio
 import { useHydrated } from "@/lib/store";
 
 export function OrderSummary({ order }: { order: OrderFieldsFragment }) {
-  const { m, fill, money } = useI18n();
+  const { m, fill, money: format } = useI18n();
+  // An order keeps the currency it was placed in, whatever the visitor is browsing in now.
+  const money = (cents: number) => format(cents, order.currency);
   const o = m.order;
   return (
     <div>
@@ -230,7 +232,7 @@ export function ConfirmationView() {
               <>
                 <p className="max-w-[56ch] text-ink/80">{o.justPaid}</p>
                 <Button onClick={pay} disabled={payment.loading} arrow className="mt-6">
-                  {fill(o.pay, { amount: money(order.totalCents) })}
+                  {fill(o.pay, { amount: money(order.totalCents, order.currency) })}
                 </Button>
                 <p role="alert" className="text-small mt-3 min-h-5 text-terracotta-700">
                   {payError}

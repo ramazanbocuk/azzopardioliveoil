@@ -1,3 +1,4 @@
+import { allPrices } from "@/i18n/currency";
 import { bottleScale, type CatalogItem, type Category, type Product } from "@/content/site";
 import { tagOf, toLocale } from "@/i18n/config";
 import type { Db } from "./db";
@@ -29,7 +30,7 @@ export async function loadCatalog(db: Db, language = "en"): Promise<{ categories
         region: true,
         producer: { include: { region: true } },
         varieties: { include: { variety: { select: { name: true } } }, orderBy: [{ percent: "desc" }, { varietyId: "asc" }] },
-        variants: { where: { isActive: true }, orderBy: { position: "asc" } },
+        variants: { where: { isActive: true }, orderBy: { position: "asc" }, include: { prices: true } },
         batches: { where: { isPublished: true }, orderBy: { bottledAt: "desc" }, take: 1 },
       },
     }),
@@ -51,6 +52,7 @@ export async function loadCatalog(db: Db, language = "en"): Promise<{ categories
     const lot = p.batches[0] ?? null;
     const text = productText.get(p.id);
     return {
+      excludedCountries: p.excludedCountries,
       slug: p.slug,
       name: text?.name ?? p.name,
       categorySlug: p.category.slug,
@@ -77,7 +79,7 @@ export async function loadCatalog(db: Db, language = "en"): Promise<{ categories
         packaging: text?.packaging ?? p.packaging,
       },
       lab: (lot ? (lab.get(lot.id) ?? []) : []).map(({ testedAt, ...result }) => ({ ...result, tested: day(testedAt) })),
-      variants: p.variants.map((v) => ({ sku: v.sku, ml: v.volumeMl, label: v.label, priceCents: v.priceCents, scale: bottleScale(v.volumeMl), inStock: v.stock - v.reserved > 0, backorder: p.allowBackorder && v.stock - v.reserved <= 0 })),
+      variants: p.variants.map((v) => ({ sku: v.sku, ml: v.volumeMl, label: v.label, priceCents: v.priceCents, prices: allPrices(v), scale: bottleScale(v.volumeMl), inStock: v.stock - v.reserved > 0, backorder: p.allowBackorder && v.stock - v.reserved <= 0 })),
       facts: {
         origin: text?.origin ?? p.origin,
         cultivar: text?.cultivar ?? p.cultivar,

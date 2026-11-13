@@ -4,7 +4,8 @@ import type { ComponentProps, ReactNode } from "react";
 
 /** Admin design: the brand's type and olive, on a denser, neutral, tool-like surface. */
 
-export const money = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : new Intl.NumberFormat("en-BE", { style: "currency", currency: "EUR" }).format(cents / 100));
+/** An amount in its own currency. Pass the currency of the order, payment or report it belongs to; amounts in different currencies are never added. */
+export const money = (cents: number | null | undefined, currency: string = "EUR") => (cents === null || cents === undefined ? "—" : new Intl.NumberFormat("en-BE", { style: "currency", currency }).format(cents / 100));
 export const date = (value: Date | null | undefined) => (value ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "—");
 export const dateTime = (value: Date | null | undefined) => (value ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(value) : "—");
 export const euros = (cents: number | null | undefined) => (cents === null || cents === undefined ? "" : (cents / 100).toFixed(2));

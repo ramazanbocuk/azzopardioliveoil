@@ -8,6 +8,7 @@ import { graphql } from "@/gql";
 
 export const CartFields = graphql(`
   fragment CartFields on Cart {
+    currency
     itemCount
     subtotalCents
     discountCents
@@ -18,6 +19,7 @@ export const CartFields = graphql(`
       quantity
       unitPriceCents
       lineTotalCents
+      sold
       enoughStock
       backorderQuantity
       variant {
@@ -119,6 +121,7 @@ export const OrderFields = graphql(`
     shippingCents
     taxCents
     totalCents
+    currency
     shippingRateName
     shipName
     shipLines

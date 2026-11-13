@@ -145,7 +145,7 @@ export default async function FulfilmentPage({ searchParams }: PageProps<"/admin
               <td>
                 <Badge tone={order.fulfilmentStatus}>{FULFILMENT_LABEL[order.fulfilmentStatus]}</Badge>
               </td>
-              <td className="tabular-nums">{money(order.totalCents)}</td>
+              <td className="tabular-nums">{money(order.totalCents, order.currency)}</td>
             </tr>
           ))}
         </Table>

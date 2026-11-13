@@ -2,10 +2,11 @@ import { COOKIE, TTL, setCookie, type Ctx } from "./context";
 import { hashToken, newToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError } from "./errors";
+import { BASE_CURRENCY, currencyOf, priceIn } from "./markets";
 import { MAX_LINE_QUANTITY, discountAmount, discountProblem, subtotalCents, totalWeightGrams, type DiscountRule } from "./pricing";
 
 const cartInclude = {
-  items: { orderBy: { addedAt: "asc" }, include: { variant: { include: { product: true } } } },
+  items: { orderBy: { addedAt: "asc" }, include: { variant: { include: { product: true, prices: true } } } },
   customer: { select: { wholesaleStatus: true, wholesaleDiscountBps: true } },
 } as const;
 
@@ -44,7 +45,7 @@ function checkQuantity(quantity: number) {
 }
 
 async function purchasableVariant(db: Db, sku: string) {
-  const variant = await db.variant.findUnique({ where: { sku }, include: { product: true } });
+  const variant = await db.variant.findUnique({ where: { sku }, include: { product: true, prices: true } });
   if (!variant || !variant.isActive || !variant.product.isVisible || variant.product.deletedAt) {
     throw new AppError("NOT_FOUND", "This product is not available.", "sku");
   }
@@ -62,6 +63,8 @@ function checkAvailable(variant: { stock: number; reserved: number; product: { a
 export async function addItem(ctx: Ctx, sku: string, quantity: number): Promise<LoadedCart> {
   checkQuantity(quantity);
   const variant = await purchasableVariant(ctx.db, sku);
+  // No price in the visitor's currency means the size is not sold where they have it delivered.
+  if (priceIn(variant, await currencyOf(ctx)) === null) throw new AppError("NOT_FOUND", "This size is not sold for delivery to your country.", "sku");
   const cart = await getOrCreateCart(ctx);
   const current = cart.items.find((item) => item.variantId === variant.id)?.quantity ?? 0;
   const next = Math.min(MAX_LINE_QUANTITY, current + quantity);
@@ -97,7 +100,8 @@ export async function applyDiscount(ctx: Ctx, rawCode: string): Promise<LoadedCa
   // One message for "unknown" and "not usable" would hide useful detail from
   // honest customers; unknown codes get a generic answer, real ones a reason.
   if (!discount) throw new AppError("DISCOUNT_INVALID", "This code is not valid.", "code");
-  const problem = discountProblem(discount, subtotalCents(toLines(cart)), new Date());
+  const currency = await currencyOf(ctx);
+  const problem = discountProblem(discount, subtotalCents(toLines(cart, currency)), new Date(), currency);
   if (problem) throw new AppError("DISCOUNT_INVALID", problem, "code");
   await ctx.db.cart.update({ where: { id: cart.id }, data: { discountCode: code } });
   return load(ctx.db, cart.id);
@@ -109,8 +113,12 @@ export async function removeDiscount(ctx: Ctx): Promise<LoadedCart> {
   return load(ctx.db, cart.id);
 }
 
-export function toLines(cart: LoadedCart) {
-  return cart.items.map((item) => ({ unitPriceCents: item.variant.priceCents, quantity: item.quantity, weightGrams: item.variant.weightGrams }));
+/** The cart's lines priced in a currency. A size with no price in it is left out: it cannot be bought in that currency. */
+export function toLines(cart: LoadedCart, currency: string = BASE_CURRENCY) {
+  return cart.items.flatMap((item) => {
+    const unitPriceCents = priceIn(item.variant, currency);
+    return unitPriceCents === null ? [] : [{ unitPriceCents, quantity: item.quantity, weightGrams: item.variant.weightGrams }];
+  });
 }
 
 /** The discount on the cart, if it is still usable right now. */
@@ -126,30 +134,34 @@ function wholesaleRule(cart: LoadedCart): DiscountRule | null {
  * customer gets their standing terms or a code they entered, whichever takes
  * more off the goods.
  */
-export async function activeDiscount(db: Db, cart: LoadedCart): Promise<DiscountRule | null> {
-  const subtotal = subtotalCents(toLines(cart));
+export async function activeDiscount(db: Db, cart: LoadedCart, currency: string = BASE_CURRENCY): Promise<DiscountRule | null> {
+  const subtotal = subtotalCents(toLines(cart, currency));
   const wholesale = wholesaleRule(cart);
   const found = cart.discountCode ? await db.discount.findUnique({ where: { code: cart.discountCode } }) : null;
-  const code = found && !discountProblem(found, subtotal, new Date()) ? found : null;
+  const code = found && !discountProblem(found, subtotal, new Date(), currency) ? found : null;
   if (!wholesale) return code;
   if (!code) return wholesale;
   return discountAmount(code, subtotal).discountCents > discountAmount(wholesale, subtotal).discountCents ? code : wholesale;
 }
 
 /** What the storefront shows for a cart. Prices come from the database, never the client. */
-export async function summarise(db: Db, cart: LoadedCart | null) {
-  if (!cart) return { id: null, lines: [], itemCount: 0, subtotalCents: 0, discountCents: 0, discountCode: null, freeShippingDiscount: false, weightGrams: 0 };
-  const lines = toLines(cart);
+export async function summarise(db: Db, cart: LoadedCart | null, currency: string = BASE_CURRENCY) {
+  if (!cart) return { id: null, currency, lines: [], itemCount: 0, subtotalCents: 0, discountCents: 0, discountCode: null, freeShippingDiscount: false, weightGrams: 0 };
+  const lines = toLines(cart, currency);
   const subtotal = subtotalCents(lines);
-  const discount = await activeDiscount(db, cart);
+  const discount = await activeDiscount(db, cart, currency);
   const { discountCents, freeShipping } = discountAmount(discount, subtotal);
   return {
     id: cart.id,
+    /** Every amount below is in this currency. */
+    currency,
     lines: cart.items.map((item) => ({
       sku: item.variant.sku,
       quantity: item.quantity,
-      unitPriceCents: item.variant.priceCents,
-      lineTotalCents: item.variant.priceCents * item.quantity,
+      /** False when the size has no price in this currency: it stays in the cart, counts for nothing, and cannot be checked out. */
+      sold: priceIn(item.variant, currency) !== null,
+      unitPriceCents: priceIn(item.variant, currency) ?? 0,
+      lineTotalCents: (priceIn(item.variant, currency) ?? 0) * item.quantity,
       available: item.variant.stock - item.variant.reserved,
       /** Units of this line that are not on the shelf and would be sent later. Zero unless the product allows backorders. */
       backorderQuantity: item.variant.product.allowBackorder ? Math.max(0, item.quantity - Math.max(0, item.variant.stock - item.variant.reserved)) : 0,
@@ -157,7 +169,7 @@ export async function summarise(db: Db, cart: LoadedCart | null) {
       variant: item.variant,
       product: item.variant.product,
     })),
-    itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
+    itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
     subtotalCents: subtotal,
     discountCents,
     discountCode: discount?.code ?? null,
@@ -167,3 +179,6 @@ export async function summarise(db: Db, cart: LoadedCart | null) {
 }
 
 export type CartSummary = Awaited<ReturnType<typeof summarise>>;
+
+/** The visitor's cart in the currency of the country they have it delivered to. */
+export const viewCart = async (ctx: Ctx, cart: LoadedCart | null) => summarise(ctx.db, cart, await currencyOf(ctx));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useApolloClient, useQuery } from "@apollo/client/react";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { CartFieldsFragment } from "@/gql/graphql";
 import { CartAdd, CartApplyDiscount, CartQuery, CartRemove, CartRemoveDiscount, CartSetQuantity } from "./operations";
 
@@ -12,11 +12,17 @@ import { CartAdd, CartApplyDiscount, CartQuery, CartRemove, CartRemoveDiscount, 
 
 export type CartLine = CartFieldsFragment["lines"][number];
 
-const EMPTY: CartFieldsFragment = { itemCount: 0, subtotalCents: 0, discountCents: 0, discountCode: null, freeShippingDiscount: false, lines: [] };
+const EMPTY: CartFieldsFragment = { currency: "EUR", itemCount: 0, subtotalCents: 0, discountCents: 0, discountCode: null, freeShippingDiscount: false, lines: [] };
 
 export function useCart() {
   const hydrated = useHydrated();
-  const { data, loading } = useQuery(CartQuery, { skip: !hydrated });
+  const { data, loading, refetch } = useQuery(CartQuery, { skip: !hydrated });
+  // A new delivery country can mean another currency: the server prices the cart again.
+  useEffect(() => {
+    const reprice = () => void refetch().catch(() => undefined);
+    window.addEventListener("azz:ship", reprice);
+    return () => window.removeEventListener("azz:ship", reprice);
+  }, [refetch]);
   return { cart: data?.cart ?? EMPTY, ready: hydrated && !loading };
 }
 

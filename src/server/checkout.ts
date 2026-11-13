@@ -6,6 +6,7 @@ import type { Ctx } from "./context";
 import { hashToken, newToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError, parse } from "./errors";
+import { marketFor, priceIn } from "./markets";
 import { applicableRates, computeTotals, orderNumber, taxBreakdown } from "./pricing";
 import { enforce } from "./rateLimit";
 
@@ -46,11 +47,14 @@ const checkoutInput = z.object({
   customerNote: z.string().trim().max(500).nullish(),
   // GraphQL sends null for omitted optional inputs, so every optional field accepts it.
   locale: z.string().max(10).nullish(),
+  /** The currency the customer was shown. If the delivery address means another one, the order is refused rather than charged at prices they did not see. */
+  currency: z.string().max(3).nullish(),
 });
 
-async function zoneRates(db: Db, countryCode: string) {
+/** A zone's rates are written in one currency, so it serves a country only when that country is sold to in it. */
+async function zoneRates(db: Db, countryCode: string, currency: string) {
   const zone = await db.shippingZone.findFirst({
-    where: { isActive: true, countries: { has: countryCode } },
+    where: { isActive: true, currency, countries: { has: countryCode } },
     include: { rates: { where: { isActive: true }, orderBy: { position: "asc" } } },
   });
   return zone?.rates ?? [];
@@ -60,8 +64,11 @@ async function zoneRates(db: Db, countryCode: string) {
 export async function shippingOptions(ctx: Ctx, rawCountry: string) {
   const countryCode = rawCountry.trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(countryCode)) throw new AppError("BAD_INPUT", "Choose a country.", "countryCode");
-  const cart = await summarise(ctx.db, await findCart(ctx));
-  return applicableRates(await zoneRates(ctx.db, countryCode), cart.weightGrams, cart.subtotalCents - cart.discountCents, cart.freeShippingDiscount);
+  const market = await marketFor(ctx.db, countryCode);
+  if (!market.open) return [];
+  // Priced for the destination asked about, which may differ from the country the visitor has been browsing for.
+  const cart = await summarise(ctx.db, await findCart(ctx), market.currency);
+  return applicableRates(await zoneRates(ctx.db, countryCode, market.currency), cart.weightGrams, cart.subtotalCents - cart.discountCents, cart.freeShippingDiscount);
 }
 
 /**
@@ -86,13 +93,26 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
     }
   }
 
-  const lines = toLines(cart);
-  const discount = await activeDiscount(ctx.db, cart);
+  // The delivery address decides the market, and the market decides the currency and the prices.
+  const country = data.address.countryCode;
+  const market = await marketFor(ctx.db, country);
+  if (!market.open) throw new AppError("SHIPPING_UNAVAILABLE", "We do not deliver to this country at the moment.", "countryCode");
+  const currency = market.currency;
+  if (data.currency && data.currency !== currency) throw new AppError("BAD_INPUT", `Orders delivered to this country are charged in ${currency}. Please review your cart: the prices shown have been updated.`, "countryCode");
+  for (const item of cart.items) {
+    const name = `${item.variant.product.name} ${item.variant.label}`;
+    if (item.variant.product.excludedCountries.includes(country)) throw new AppError("SHIPPING_UNAVAILABLE", `${name} cannot be sent to this country. Remove it from your cart to continue.`, "countryCode");
+    if (priceIn(item.variant, currency) === null) throw new AppError("SHIPPING_UNAVAILABLE", `${name} is not sold for delivery to this country. Remove it from your cart to continue.`, "countryCode");
+  }
+  const unitPrice = (item: (typeof cart.items)[number]) => priceIn(item.variant, currency) ?? 0;
+
+  const lines = toLines(cart, currency);
+  const discount = await activeDiscount(ctx.db, cart, currency);
   // A code on the cart must still be usable, unless the customer's trade terms beat it anyway.
   if (cart.discountCode && !discount) throw new AppError("DISCOUNT_INVALID", "The discount code on your cart can no longer be used.", "code");
 
-  const summary = await summarise(ctx.db, cart);
-  const options = applicableRates(await zoneRates(ctx.db, data.address.countryCode), summary.weightGrams, summary.subtotalCents - summary.discountCents, summary.freeShippingDiscount);
+  const summary = await summarise(ctx.db, cart, currency);
+  const options = applicableRates(await zoneRates(ctx.db, country, currency), summary.weightGrams, summary.subtotalCents - summary.discountCents, summary.freeShippingDiscount);
   const rate = options.find((option) => option.id === data.shippingRateId);
   if (!rate) throw new AppError("SHIPPING_UNAVAILABLE", "That shipping method is not available for this address.", "shippingRateId");
 
@@ -127,6 +147,7 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
         email: data.email,
         // The language the customer shopped in; their emails follow it.
         locale: toLocale(data.locale ?? ctx.locale),
+        currency,
         subtotalCents: totals.subtotalCents,
         discountCents: totals.discountCents,
         shippingCents: totals.shippingCents,
@@ -166,10 +187,10 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
             sku: item.variant.sku,
             productName: item.variant.product.name,
             variantLabel: item.variant.label,
-            unitPriceCents: item.variant.priceCents,
+            unitPriceCents: unitPrice(item),
             quantity: item.quantity,
             backorderQuantity: holds.get(item.variantId)?.backorder ?? 0,
-            lineTotalCents: item.variant.priceCents * item.quantity,
+            lineTotalCents: unitPrice(item) * item.quantity,
             taxRateBps: tax?.rateBps ?? null,
             taxCents: breakdown.lineTaxCents[index],
             weightGrams: item.variant.weightGrams,
