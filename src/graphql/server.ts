@@ -60,7 +60,7 @@ function json(status: number, message: string, code: string): Response {
 }
 
 /** A cross-site page must not be able to drive the API with the visitor's cookies. */
-function originAllowed(request: Request): boolean {
+export function originAllowed(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true; // same-origin navigations and server-to-server calls send none
   const allowed = new Set([new URL(request.url).origin]);

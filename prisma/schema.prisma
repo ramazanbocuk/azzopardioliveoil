@@ -35,17 +35,16 @@ model Category {
   products Product[]
 }
 
-
 model Product {
-  id                 String    @id @default(cuid())
-  slug               String    @unique
+  id                 String          @id @default(cuid())
+  slug               String          @unique
   name               String
-  blurb              String    @default("")
-  description        String    @default("")
+  blurb              String          @default("")
+  description        String          @default("")
   categoryId         String
-  isVisible          Boolean   @default(false)
-  isFeatured         Boolean   @default(false)
-  position           Int       @default(0)
+  isVisible          Boolean         @default(false)
+  isFeatured         Boolean         @default(false)
+  position           Int             @default(0)
   seoTitle           String?
   seoDescription     String?
   // Administrator-entered label facts. Null = not yet recorded.
@@ -58,7 +57,7 @@ model Product {
   // Customs facts for shipments leaving the EU. Administrator-entered; null = not yet recorded.
   hsCode             String?
   customsDescription String?
-  originCountry      String?   @db.Char(2)
+  originCountry      String?         @db.Char(2)
   // Provenance and tasting profile. Administrator-entered; null = not yet recorded, and shown to customers as a dash.
   // The country of origin is `originCountry` above: one fact, used for customs and for the product page alike.
   producerId         String?
@@ -74,26 +73,25 @@ model Product {
   pairings           String?
   packaging          String?
   /// When true, customers may order more than is in stock; the rest is sent when it arrives. Off unless the owner switches it on.
-  allowBackorder     Boolean   @default(false)
+  allowBackorder     Boolean         @default(false)
   /// What the shop tells a customer about the wait, in the owner's words. Never generated.
   backorderNote      String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
   deletedAt          DateTime?
 
-  category     Category             @relation(fields: [categoryId], references: [id])
-  producer     Producer?            @relation(fields: [producerId], references: [id], onDelete: SetNull)
-  region       Region?              @relation(fields: [regionId], references: [id], onDelete: SetNull)
-  varieties    ProductVariety[]
-  variants     Variant[]
-  images       ProductImage[]
-  batches      Batch[]
-  reviews      Review[]
+  category  Category         @relation(fields: [categoryId], references: [id])
+  producer  Producer?        @relation(fields: [producerId], references: [id], onDelete: SetNull)
+  region    Region?          @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  varieties ProductVariety[]
+  variants  Variant[]
+  images    ProductImage[]
+  batches   Batch[]
+  reviews   Review[]
 
   @@index([categoryId])
   @@index([isVisible, position])
 }
-
 
 model ProductImage {
   id        String  @id @default(cuid())
@@ -552,33 +550,33 @@ model Order {
 }
 
 model OrderItem {
-  id              String         @id @default(cuid())
-  orderId         String
-  variantId       String?
-  sku             String
-  productName     String
-  variantLabel    String
-  lotNumber       String?
-  unitPriceCents  Int
-  quantity        Int
-  lineTotalCents  Int
+  id                String             @id @default(cuid())
+  orderId           String
+  variantId         String?
+  sku               String
+  productName       String
+  variantLabel      String
+  lotNumber         String?
+  unitPriceCents    Int
+  quantity          Int
+  lineTotalCents    Int
   /// VAT rate applied to this line (percent × 100) and the VAT contained in it after discount.
-  taxRateBps      Int?
-  taxCents        Int?
+  taxRateBps        Int?
+  taxCents          Int?
   /// Units of this line already sent in a shipment.
-  shippedQuantity Int            @default(0)
+  shippedQuantity   Int                @default(0)
   /// Units that were not in stock when the order was placed. Fixed at checkout; what is still owed is on the Backorder row.
-  backorderQuantity Int          @default(0)
+  backorderQuantity Int                @default(0)
   /// Units taken off the order after payment because they will not be supplied.
-  cancelledQuantity Int          @default(0)
+  cancelledQuantity Int                @default(0)
   // Customs snapshot, needed on labels for destinations outside the EU
-  weightGrams     Int            @default(0)
-  hsCode          String?
-  originCountry   String?        @db.Char(2)
-  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  shipmentItems   ShipmentItem[]
-  backorder       Backorder?
-  reservations    StockReservation[]
+  weightGrams       Int                @default(0)
+  hsCode            String?
+  originCountry     String?            @db.Char(2)
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shipmentItems     ShipmentItem[]
+  backorder         Backorder?
+  reservations      StockReservation[]
 
   @@index([orderId])
 }
@@ -643,7 +641,7 @@ model Payment {
 }
 
 model Refund {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   paymentId   String
   amountCents Int
   reason      String?
@@ -1218,4 +1216,118 @@ model TrackingEvent {
 
   @@unique([shipmentId, occurredAt, description])
   @@index([shipmentId, occurredAt])
+}
+
+/// One chat with an assistant. "customer" conversations happen on the shop; "admin" ones in the admin panel.
+/// A guest's conversation is tied to a random key kept in an HttpOnly cookie, never to an IP address.
+model AiConversation {
+  id              String           @id @default(cuid())
+  channel         String           @default("customer")
+  customerId      String?
+  adminUserId     String?
+  /// SHA-256 of the guest's conversation cookie. Null for signed-in customers and staff.
+  guestKeyHash    String?
+  locale          String           @default("en")
+  /// OPEN, HANDED_OVER (a person has been asked to take over) or CLOSED.
+  status          String           @default("OPEN")
+  /// What the customer thought of it, if they said: 1 helpful, -1 not helpful.
+  rating          Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  messages        AiMessage[]
+  toolCalls       AiToolCall[]
+  supportRequests SupportRequest[]
+
+  @@index([channel, updatedAt])
+  @@index([customerId])
+  @@index([guestKeyHash])
+}
+
+/// One turn. `content` holds the exact blocks exchanged with the model, so a conversation can be continued without altering what was said.
+model AiMessage {
+  id               String         @id @default(cuid())
+  conversationId   String
+  /// "user", "assistant", or "tool" (tool results sent back to the model).
+  role             String
+  /// The text a person typed or read. Empty for tool turns.
+  text             String         @default("")
+  content          Json
+  model            String?
+  stopReason       String?
+  inputTokens      Int            @default(0)
+  outputTokens     Int            @default(0)
+  cacheReadTokens  Int            @default(0)
+  cacheWriteTokens Int            @default(0)
+  /// Estimated cost in millionths of a US dollar, from the published price per token. An estimate, not an invoice.
+  costMicros       Int            @default(0)
+  /// Set when the turn failed; the message says why.
+  error            String?
+  createdAt        DateTime       @default(now())
+  conversation     AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([createdAt])
+}
+
+/// Every tool an assistant used: what it asked for, whether it was allowed, how long it took. The audit trail of what the AI did.
+model AiToolCall {
+  id             String         @id @default(cuid())
+  conversationId String
+  name           String
+  input          Json
+  ok             Boolean
+  /// Why it failed or was refused.
+  error          String?
+  durationMs     Int            @default(0)
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([name, createdAt])
+}
+
+/// A question for a person: created by the assistant when it hands over, or by staff.
+model SupportRequest {
+  id             String          @id @default(cuid())
+  sequence       Int             @unique @default(autoincrement())
+  conversationId String?
+  customerId     String?
+  email          String
+  name           String?
+  subject        String
+  body           String
+  orderNumber    String?
+  locale         String          @default("en")
+  /// "assistant", "contact" or "staff".
+  source         String          @default("assistant")
+  /// OPEN, ANSWERED or CLOSED.
+  status         String          @default("OPEN")
+  /// Set by the assistant when the customer sounds upset or the matter is about money, safety or a missing parcel.
+  urgent         Boolean         @default(false)
+  handledById    String?
+  handledAt      DateTime?
+  staffNote      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  conversation   AiConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}
+
+/// Approved knowledge the assistants may quote: how the shop works, how to store oil, what terms mean.
+/// Only published articles are searched. Facts about a product or a batch never live here; they come from the product's own data.
+model KnowledgeArticle {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  body        String
+  /// "customer" articles may be quoted to customers; "staff" ones only to the admin assistant.
+  audience    String   @default("customer")
+  isPublished Boolean  @default(false)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([audience, isPublished])
 }

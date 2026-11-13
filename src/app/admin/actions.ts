@@ -4,6 +4,7 @@ import { updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
+import * as assistantAdmin from "@/server/assistantAdmin";
 import * as provenance from "@/server/provenance";
 import * as stock from "@/server/stock";
 import * as tracking from "@/server/tracking";
@@ -521,4 +522,24 @@ export async function setTrackingNumber(orderId: string, shipmentId: string, for
 
 export async function testCarrier(key: string) {
   await run("/admin/fulfilment", async (ctx) => `/admin/fulfilment?ok=${encodeURIComponent(await tracking.testCarrier(ctx, key))}`);
+}
+
+// ── Assistant, knowledge base and support ──
+
+export async function saveAssistant(form: FormData) {
+  await run("/admin/assistant", (ctx) => assistantAdmin.saveAssistantSettings(ctx, formData(form, { booleans: ["customerEnabled"] })), "Assistant settings saved.");
+}
+
+export async function saveArticle(id: string | null, form: FormData) {
+  await run("/admin/knowledge", async (ctx) => {
+    await assistantAdmin.saveArticle(ctx, id, formData(form, { booleans: ["isPublished"] }));
+  }, "Article saved.");
+}
+
+export async function deleteArticle(id: string) {
+  await run("/admin/knowledge", (ctx) => assistantAdmin.deleteArticle(ctx, id), "Article deleted.");
+}
+
+export async function supportStatus(id: string, form: FormData) {
+  await run("/admin/support", (ctx) => assistantAdmin.setSupportStatus(ctx, id, formData(form)), "Request updated.");
 }

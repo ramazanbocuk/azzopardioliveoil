@@ -14,6 +14,9 @@ export async function eraseCustomerData(db: Db, id: string): Promise<void> {
     db.review.deleteMany({ where: { customerId: id } }),
     db.cart.deleteMany({ where: { customerId: id } }),
     db.customerNote.deleteMany({ where: { customerId: id } }),
+    // Conversations with the assistant go with the account; a request staff are still answering keeps its text but loses the link.
+    db.aiConversation.deleteMany({ where: { customerId: id } }),
+    db.supportRequest.updateMany({ where: { customerId: id }, data: { customerId: null, email: `erased-${id}@invalid`, name: null } }),
     db.order.updateMany({ where: { customerId: id }, data: { customerId: null } }),
     db.customer.update({ where: { id }, data: { email: `erased-${id}@invalid`, firstName: "Erased", lastName: "Customer", phone: null, passwordHash: "erased", marketingOptIn: false, erasedAt: new Date(), tags: [], wholesaleStatus: "NONE", companyName: null, companyVatNumber: null, wholesaleDiscountBps: 0, wholesaleNote: null } }),
   ]);
@@ -26,6 +29,10 @@ export async function exportCustomerData(db: Db, id: string) {
     include: { notes: { orderBy: { createdAt: "asc" } }, addresses: true, favourites: { include: { variant: { select: { sku: true } } } }, reviews: true, orders: { include: { items: true, shipments: true }, orderBy: { placedAt: "desc" } } },
   });
   const newsletter = await db.newsletterSubscriber.findUnique({ where: { email: customer.email } });
+  const [conversations, supportRequests] = await Promise.all([
+    db.aiConversation.findMany({ where: { customerId: id }, orderBy: { createdAt: "asc" }, include: { messages: { where: { role: { in: ["user", "assistant"] }, NOT: { text: "" } }, orderBy: { createdAt: "asc" }, select: { role: true, text: true, createdAt: true } } } }),
+    db.supportRequest.findMany({ where: { customerId: id }, orderBy: { createdAt: "asc" } }),
+  ]);
   return {
     exportedAt: new Date().toISOString(),
     account: { email: customer.email, firstName: customer.firstName, lastName: customer.lastName, phone: customer.phone, language: customer.locale, marketingOptIn: customer.marketingOptIn, createdAt: customer.createdAt },
@@ -35,6 +42,9 @@ export async function exportCustomerData(db: Db, id: string) {
     tags: customer.tags,
     wholesale: customer.wholesaleStatus === "NONE" ? null : { status: customer.wholesaleStatus, companyName: customer.companyName, companyVatNumber: customer.companyVatNumber, discountPercent: customer.wholesaleDiscountBps / 100 },
     staffNotes: customer.notes.map((note) => ({ body: note.body, createdAt: note.createdAt })),
+    // Conversations with the AI assistant, as written, and questions passed to the team.
+    assistantConversations: conversations.map((conversation) => ({ startedAt: conversation.createdAt, language: conversation.locale, messages: conversation.messages.map((message) => ({ from: message.role === "user" ? "you" : "assistant", text: message.text, at: message.createdAt })) })),
+    supportRequests: supportRequests.map((request) => ({ subject: request.subject, body: request.body, orderNumber: request.orderNumber, status: request.status, createdAt: request.createdAt })),
     favouriteSkus: customer.favourites.map((favourite) => favourite.variant.sku),
     reviews: customer.reviews.map((review) => ({ rating: review.rating, title: review.title, body: review.body, status: review.status, createdAt: review.createdAt })),
     orders: customer.orders.map((order) => ({

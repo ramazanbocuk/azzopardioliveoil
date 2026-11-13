@@ -25,6 +25,8 @@ export function checkEnvironment(env: Record<string, string | undefined> = proce
   if (!(env.BPOST_ACCOUNT_ID && env.BPOST_PASSPHRASE) && !(env.DHL_EXPRESS_API_KEY && env.DHL_EXPRESS_API_SECRET && env.DHL_EXPRESS_ACCOUNT_NUMBER) && !(env.FEDEX_CLIENT_ID && env.FEDEX_CLIENT_SECRET && env.FEDEX_ACCOUNT_NUMBER) && !(env.UPS_CLIENT_ID && env.UPS_CLIENT_SECRET && env.UPS_ACCOUNT_NUMBER)) {
     warning("No carrier is connected (bpost, DHL Express, UPS, FedEx): labels cannot be booked and shipments are recorded by hand.");
   }
+  if (!env.ANTHROPIC_API_KEY) warning("The assistant is not connected (ANTHROPIC_API_KEY): the shop shows no assistant.");
+  else if (env.ASSISTANT_EFFORT && !["low", "medium", "high"].includes(env.ASSISTANT_EFFORT)) warning("ASSISTANT_EFFORT must be low, medium or high; low is used.");
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) warning("Email (Resend) is not connected: no confirmation, shipping, reset or owner emails will be sent.");
   if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_API_VERSION || !env.WHATSAPP_TEMPLATE_NAME) warning("WhatsApp is not connected: no WhatsApp order alerts will be sent.");
 

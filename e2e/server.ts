@@ -21,6 +21,7 @@ const env = {
   SEED_ADMIN_PASSWORD: "",
   STRIPE_SECRET_KEY: "",
   STRIPE_WEBHOOK_SECRET: "",
+  ANTHROPIC_API_KEY: "", // the browser tests never call a model
 } as NodeJS.ProcessEnv;
 
 async function main() {
