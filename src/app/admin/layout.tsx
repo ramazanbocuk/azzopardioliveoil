@@ -49,6 +49,7 @@ const NAV = [
   { href: "/admin/staff", label: "Staff & permissions" },
   { href: "/admin/security", label: "Security" },
   { href: "/admin/integrations", label: "Integrations" },
+  { href: "/admin/system", label: "System status" },
   { href: "/admin/markets", label: "Markets & currencies" },
   { href: "/admin/settings", label: "System settings" },
 ];
@@ -132,6 +133,7 @@ async function Gate({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-svh bg-[#f3f1ea] font-sans text-ink lg:grid lg:grid-cols-[15rem_1fr]">
+      {process.env.APP_ENV === "staging" && <p className="bg-gold-300 px-5 py-2 text-center text-[0.8125rem] font-medium text-ink print:hidden lg:col-span-2">Staging: a test copy of the shop. Payments use test money and email goes only to the addresses on the allow-list.</p>}
       <aside className="bg-olive-950 text-ivory print:hidden lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-5">
           <Link href="/admin" className="font-serif text-[1.125rem] uppercase tracking-[0.2em]">

@@ -16,6 +16,17 @@ import { LanguagePrompt } from "./LocaleSelector";
 import { MainRegion } from "./MainRegion";
 import "lenis/dist/lenis.css";
 
+/** Shown on a staging copy only, so nobody mistakes it for the shop. */
+async function StagingNotice() {
+  if (process.env.APP_ENV !== "staging") return null;
+  const { m } = await getI18n();
+  return (
+    <p role="note" className="text-small bg-gold-300 px-5 py-2 text-center font-medium text-ink">
+      {m.common.stagingNotice}
+    </p>
+  );
+}
+
 /** The line set under Website content in the admin panel. It sits above the footer so it never covers the header or a hero. */
 async function Announcement() {
   const [announcement, { m }] = await Promise.all([getAnnouncement(), getI18n()]);
@@ -68,6 +79,7 @@ export async function StoreChrome({ children }: { children: ReactNode }) {
         </MainRegion>
       </Suspense>
       <Suspense>
+        <StagingNotice />
         <Announcement />
       </Suspense>
       <Footer />

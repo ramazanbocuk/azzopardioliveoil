@@ -12,6 +12,7 @@ export function checkEnvironment(env: Record<string, string | undefined> = proce
   const error = (message: string) => findings.push({ level: "error", message });
   const warning = (message: string) => findings.push({ level: "warning", message });
   const production = env.NODE_ENV === "production";
+  const staging = env.APP_ENV === "staging";
 
   if (!env.DATABASE_URL) error("DATABASE_URL is not set.");
   if (!env.APP_URL) error("APP_URL is not set (the public address of the site).");
@@ -22,6 +23,10 @@ export function checkEnvironment(env: Record<string, string | undefined> = proce
 
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) warning("Stripe is not connected: orders will be created unpaid and refunds cannot be sent.");
   else if (production && /^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY)) warning("Stripe is using a TEST key in production: no real money will be taken.");
+  // Staging exists to try things with test money. A live key there would charge real cards for test orders.
+  if (staging && /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY ?? "")) error("APP_ENV is staging but STRIPE_SECRET_KEY is a LIVE key. Use a test key on staging.");
+  if (staging && !env.STAGING_EMAIL_ALLOW) warning("APP_ENV is staging and STAGING_EMAIL_ALLOW is empty: no email will be sent to anyone from this site.");
+  if (env.APP_ENV && !["staging", "production"].includes(env.APP_ENV)) warning(`APP_ENV is "${env.APP_ENV}"; only "staging" changes anything.`);
   if (!(env.BPOST_ACCOUNT_ID && env.BPOST_PASSPHRASE) && !(env.DHL_EXPRESS_API_KEY && env.DHL_EXPRESS_API_SECRET && env.DHL_EXPRESS_ACCOUNT_NUMBER) && !(env.FEDEX_CLIENT_ID && env.FEDEX_CLIENT_SECRET && env.FEDEX_ACCOUNT_NUMBER) && !(env.UPS_CLIENT_ID && env.UPS_CLIENT_SECRET && env.UPS_ACCOUNT_NUMBER)) {
     warning("No carrier is connected (bpost, DHL Express, UPS, FedEx): labels cannot be booked and shipments are recorded by hand.");
   }

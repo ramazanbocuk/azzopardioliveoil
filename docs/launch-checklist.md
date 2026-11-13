@@ -29,7 +29,8 @@ The software cannot do these for you. Each is needed before taking real orders.
 - [ ] WhatsApp Business Platform: business verified, number registered, template approved
 - [ ] Anthropic: API key in the host's environment, a spending limit set in the Anthropic console as well as the monthly budget in the admin
 - [ ] Carrier contract, or Sendcloud (then the adapter must be built)
-- [ ] Uptime monitor and log alert
+- [ ] Uptime monitor on `/api/health`
+- [ ] A staging deployment (`APP_ENV=staging`, its own database, Stripe test keys) on which the first deployment and the load test are done
 
 ## Before opening
 - [ ] One real end-to-end purchase with a live card, then refund it from the admin
@@ -39,6 +40,10 @@ The software cannot do these for you. Each is needed before taking real orders.
 - [ ] Customer assistant, before switching it on: the privacy policy names Anthropic as a processor and says conversations are kept (90 days for guests); a first session of real questions in each language read by a person; the test questions in `assistant.md` asked and the answers checked
 - [ ] Every staff member has signed in once and set up two-factor sign-in (it is compulsory on the live site)
 - [ ] Before opening a dollar or pound market: tax and import advice taken; prices and a shipping zone entered in that currency; Stripe enabled for it; one test order placed to an address there
+- [ ] Admin → System status reads "In order" on every line you have chosen to connect, and the scheduler shows a recent run
+- [ ] Load test run against staging (`scripts/loadtest.ts`) and its numbers read
+- [ ] An independent security test, before taking payments at volume
+- [ ] The two keys that were pasted into a chat (Resend, Anthropic) replaced
 - [ ] One practice database restore
 - [ ] First administrator created; seed password removed; staff accounts created with the right roles
 - [ ] `security.txt` with a contact address
@@ -50,6 +55,7 @@ The software cannot do these for you. Each is needed before taking real orders.
 Measured against the full enterprise brief. "Not proven" means written and tested against documentation, never against the real service.
 
 **Not proven**
+- Deployment: nothing has been deployed. Staging mode, the admin host rule and the scheduler's timer have been tested on a development machine and in CI only. The load-test figures are from a laptop. See `production-readiness.md`.
 - Markets and currencies: no payment has been taken in USD or GBP. US sales tax and UK import VAT are not calculated. See `markets.md`.
 - Staff assistant: never run against the real model either. Permissions, proposals and approval are tested with a scripted model; what a real model chooses to propose or say is not. No automated evaluation against the real model exists yet.
 - Customer assistant: never run against the real model (no API key). The tools, limits, budget and records are tested with a scripted model; the wording of real answers, real token costs and the fallback model are not. See `assistant.md`.

@@ -955,6 +955,29 @@ model OutboxJob {
   @@index([status, runAfter])
 }
 
+/// An unhandled server error. One row per distinct error (message and
+/// route); repeats raise the count. No request body, cookie or header is kept.
+model ErrorEvent {
+  id           String    @id @default(cuid())
+  fingerprint  String    @unique
+  message      String
+  route        String?
+  /// What was being rendered or run: page, route handler, server action…
+  kind         String?
+  method       String?
+  lastPath     String?
+  /// The code shown to the visitor on the error page, to match a report to this row.
+  lastDigest   String?
+  stack        String?
+  count        Int       @default(1)
+  firstSeenAt  DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  @@index([resolvedAt, lastSeenAt])
+}
+
 model Setting {
   key       String   @id
   value     Json

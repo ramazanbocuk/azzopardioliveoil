@@ -11,6 +11,7 @@ import * as tracking from "@/server/tracking";
 import * as translations from "@/server/translations";
 import * as fulfilment from "@/server/fulfilment";
 import * as markets from "@/server/markets";
+import * as system from "@/server/system";
 import * as twoFactor from "@/server/twoFactor";
 import { formData, run } from "@/server/adminSession";
 import { afterResponse } from "@/server/afterResponse";
@@ -567,4 +568,10 @@ export async function deleteMarket(id: string) {
     updateTag("shipping");
     updateTag("catalog");
   }, "Market removed. Its countries are sold to in euro again.");
+}
+
+// ── System status ──
+
+export async function resolveSystemError(id: string) {
+  await run("/admin/system", (ctx) => system.resolveError(ctx, id), "Marked resolved. If it happens again it will reopen.");
 }

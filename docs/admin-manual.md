@@ -98,6 +98,12 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 - Closing a market stops delivery to its countries. "Not sent to these countries" on a product stops that one product.
 - Reports show one currency at a time; choose it at the top of the report.
 
+## System status
+
+- **System status** lists what is working and what is not, worst first, in plain words: the database, the scheduler, messages, payments, email, carriers, staff sign-in. Look here first when something seems wrong.
+- **Website errors** on the same page are failures the site could not handle. You are emailed the first time each happens on a day. Pass the technical detail to a developer, and mark the error resolved once it is fixed.
+- This page cannot tell you the whole site is down, or whether backups exist. An uptime monitor and the host's database settings do that.
+
 ## What the panel cannot do
 
 See "Known software gaps" in `launch-checklist.md`.

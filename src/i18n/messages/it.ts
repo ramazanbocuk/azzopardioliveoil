@@ -16,6 +16,7 @@ export const it: Messages = {
     cancel: "Annulla",
     free: "Gratis",
     vatIncluded: "IVA inclusa",
+    stagingNotice: "Questa è una copia di prova del negozio. Gli ordini effettuati qui non sono reali e nulla verrà spedito.",
     shopCta: "Vai al negozio",
     backToShop: "Torna al negozio",
     backHome: "Torna alla pagina iniziale",
