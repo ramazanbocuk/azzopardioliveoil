@@ -4,6 +4,8 @@ How to run the shop from the admin panel at `/admin`. For setting up accounts an
 
 ## Signing in
 
+Every staff account needs two-factor sign-in. The first time you sign in you are asked to set it up with an authenticator app on your phone; the panel opens once that is done. If you lose the phone, an administrator resets it for you under Security.
+
 Sign in with your email and password. If you have turned on two-factor sign-in (Security), enter the 6-digit code from your authenticator app as well. Five wrong passwords lock an address for 15 minutes. A lost phone: an administrator resets your two-factor sign-in under Security.
 
 ## The daily round
@@ -88,6 +90,13 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 - **Support requests**: questions the assistant passed to a person, with the customer's address and a summary. Urgent ones (damage, payment, complaint) are marked. Reply from the shop’s own mailbox, then mark the request answered.
 - **Staff assistant**: ask it about orders, shipments, stock, sales and support requests; have it draft an email (it cannot send one), a translation draft or an unpublished article. It works with your own permissions. For a refund, taking units off an order, a stock adjustment or a support request's state it writes a **proposal**: read it, then press Approve or Reject. Nothing happens before you approve, and a proposal expires after 24 hours. It can be wrong: check what matters against the record it links to. Administrators see every proposal under Customer assistant.
 - The assistant cannot place an order, take a payment, change an order or an address, or give a refund. It can only show an "add to cart" button the customer presses.
+
+## Markets and currencies
+
+- **Markets & currencies**: which countries are sold to in dollars or pounds. Everything else is sold in euro. Nothing is converted: a size is sold in another currency only if you typed its price in that currency on the product's page.
+- Before opening a market: prices in its currency, a shipping zone in its currency (Shipping & VAT), and tax advice for that country. The screen warns about countries with no shipping and sizes with no price.
+- Closing a market stops delivery to its countries. "Not sent to these countries" on a product stops that one product.
+- Reports show one currency at a time; choose it at the top of the report.
 
 ## What the panel cannot do
 

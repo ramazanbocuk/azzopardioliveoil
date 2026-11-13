@@ -358,7 +358,7 @@ describe("stock and orders", () => {
   it("shows each role only what its own screens show", async () => {
     await partlyShippedOrder();
     const calls: [string, object][] = [
-      ["sales_summary", { fromDate: "2026-11-01", toDate: "2026-11-30" }],
+      ["sales_summary", { fromDate: "2026-11-01", toDate: "2026-11-30", currency: null }],
       ["stock_levels", { lowOnly: false }],
       ["find_customers", { query: "greta" }],
       ["list_backorders", {}],
@@ -376,7 +376,7 @@ describe("stock and orders", () => {
     expect(await outcome("ACCOUNTANT")).toEqual(["ok", no, "ok", "ok", no, no]);
     expect(await outcome("CUSTOMER_SUPPORT")).toEqual([no, "ok", "ok", "ok", "ok", "ok"]);
 
-    const { results } = script(call(["sales_summary", { fromDate: "2026-11-01", toDate: "2026-11-30" }], ["stock_levels", { lowOnly: true }], ["list_backorders", {}]), say("Done."));
+    const { results } = script(call(["sales_summary", { fromDate: "2026-11-01", toDate: "2026-11-30", currency: null }], ["stock_levels", { lowOnly: true }], ["list_backorders", {}]), say("Done."));
     await staffMessage(await as("ADMINISTRATOR"), { message: "Figures" });
     const [sales, low, waiting] = results(1);
     expect(sales).toMatchObject({ paidOrders: 1, gross: "€86.95", refunded: "€0.00", unitsSold: 4 });

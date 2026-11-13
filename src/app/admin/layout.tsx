@@ -6,8 +6,10 @@ import { SignInError } from "@/components/admin/SignInError";
 import { Field, Submit } from "@/components/admin/ui";
 import { switzer, zodiak } from "@/lib/fonts";
 import { adminCtx } from "@/server/adminSession";
+import { mustEnrol } from "@/server/auth";
+import { pendingTotp } from "@/server/twoFactor";
 import "../globals.css";
-import { signIn, signOut } from "./actions";
+import { beginTwoFactor, confirmTwoFactor, signIn, signOut } from "./actions";
 
 export const metadata: Metadata = {
   title: { default: "Admin", template: "%s — Azzopardi Admin" },
@@ -47,6 +49,7 @@ const NAV = [
   { href: "/admin/staff", label: "Staff & permissions" },
   { href: "/admin/security", label: "Security" },
   { href: "/admin/integrations", label: "Integrations" },
+  { href: "/admin/markets", label: "Markets & currencies" },
   { href: "/admin/settings", label: "System settings" },
 ];
 
@@ -62,7 +65,7 @@ function SignIn() {
         <div className="mt-6 space-y-4">
           <Field label="Email address" name="email" type="email" required autoComplete="username" />
           <PasswordField label="Password" name="password" required autoComplete="current-password" />
-          <Field label="Authenticator code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} hint="Only if you have turned on two-factor sign-in." />
+          <Field label="Authenticator code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} hint="Needed once you have set up two-factor sign-in. On your first sign-in, leave it empty: you will set it up next." />
         </div>
         <Submit className="mt-6 w-full">Sign in</Submit>
         <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>
@@ -76,10 +79,56 @@ function SignIn() {
   );
 }
 
+/** The only screen a signed-in member of staff sees until their second factor is confirmed. */
+function SetUpTwoFactor({ name, pending }: { name: string; pending: { secret: string } | null }) {
+  return (
+    <div className="grid min-h-svh place-items-center bg-[#f3f1ea] px-5 py-10 font-sans text-ink">
+      <div className="w-full max-w-lg border border-ink/10 bg-white p-8">
+        <p className="font-serif text-[1.25rem] uppercase tracking-[0.2em]">Azzopardi</p>
+        <h1 className="mt-6 font-serif text-[1.75rem]">Set up two-factor sign-in</h1>
+        <p className="mt-4">
+          {name}, every staff account needs a second step at sign-in: a 6-digit code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password, Authy). The admin panel opens once it is set up.
+        </p>
+        <Suspense>
+          <SignInError />
+        </Suspense>
+        {pending ? (
+          <div className="mt-6 space-y-5">
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>Open your authenticator app and choose to add an account by entering a setup key.</li>
+              <li>
+                Enter this key (type: time-based):
+                <code className="mt-2 block w-fit select-all break-all border border-ink/20 bg-stone-300/30 px-3 py-2 font-mono text-[0.9375rem] tracking-wider">{pending.secret.match(/.{1,4}/g)?.join(" ")}</code>
+              </li>
+              <li>Enter the 6-digit code the app now shows.</li>
+            </ol>
+            <form action={confirmTwoFactor} className="flex flex-wrap items-end gap-4">
+              <Field label="Code from the app" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} required className="w-48" />
+              <Submit>Finish</Submit>
+            </form>
+          </div>
+        ) : (
+          <form action={beginTwoFactor} className="mt-6">
+            <Submit>Start</Submit>
+          </form>
+        )}
+        <p className="text-small mt-6 text-stone-700">If you lose your phone, an administrator can reset this for you under Security.</p>
+        <form action={signOut} className="mt-4">
+          <button type="submit" className="text-small underline underline-offset-4">
+            Sign out
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /** Nothing below this renders without a valid admin session; services re-check on every call. */
 async function Gate({ children }: { children: ReactNode }) {
   const ctx = await adminCtx();
   if (!ctx.admin) return <SignIn />;
+  // No part of the panel is shown to a member of staff who has no second factor yet. The services refuse them too.
+  if (mustEnrol(ctx.admin)) return <SetUpTwoFactor name={ctx.admin.name} pending={await pendingTotp(ctx)} />;
 
   return (
     <div className="min-h-svh bg-[#f3f1ea] font-sans text-ink lg:grid lg:grid-cols-[15rem_1fr]">

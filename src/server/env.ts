@@ -27,6 +27,7 @@ export function checkEnvironment(env: Record<string, string | undefined> = proce
   }
   if (!env.ANTHROPIC_API_KEY) warning("The assistant is not connected (ANTHROPIC_API_KEY): the shop shows no assistant.");
   else if (env.ASSISTANT_EFFORT && !["low", "medium", "high"].includes(env.ASSISTANT_EFFORT)) warning("ASSISTANT_EFFORT must be low, medium or high; low is used.");
+  if (!production && env.ADMIN_TWO_FACTOR !== "required") warning("Two-factor sign-in is not being enforced for staff, because this is not a production server. It always is in production; set ADMIN_TWO_FACTOR=required to enforce it here too.");
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) warning("Email (Resend) is not connected: no confirmation, shipping, reset or owner emails will be sent.");
   if (!env.WHATSAPP_ACCESS_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_API_VERSION || !env.WHATSAPP_TEMPLATE_NAME) warning("WhatsApp is not connected: no WhatsApp order alerts will be sent.");
 

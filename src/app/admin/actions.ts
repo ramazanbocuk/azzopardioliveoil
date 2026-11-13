@@ -1,6 +1,6 @@
 "use server";
 
-import { updateTag } from "next/cache";
+import { refresh, updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
@@ -10,6 +10,7 @@ import * as stock from "@/server/stock";
 import * as tracking from "@/server/tracking";
 import * as translations from "@/server/translations";
 import * as fulfilment from "@/server/fulfilment";
+import * as markets from "@/server/markets";
 import * as twoFactor from "@/server/twoFactor";
 import { formData, run } from "@/server/adminSession";
 import { afterResponse } from "@/server/afterResponse";
@@ -149,6 +150,8 @@ export async function returnStatus(orderId: string, returnId: string, status: "A
 export async function saveProduct(id: string | null, form: FormData) {
   await run(id ? `/admin/products/${id}` : "/admin/products/new", async (ctx) => {
     const product = await admin.saveProduct(ctx, id, formData(form, { booleans: ["isVisible", "isFeatured", "allowBackorder"] }));
+    // Only when the form carries the field: other forms that save a product must not clear it.
+    if (form.has("excludedCountries")) await markets.setExcludedCountries(ctx, product.id, formData(form, { lists: ["excludedCountries"] }).excludedCountries);
     updateTag("catalog");
     return `/admin/products/${product.id}`;
   });
@@ -164,7 +167,10 @@ export async function deleteProduct(id: string) {
 
 export async function saveVariant(productId: string, variantId: string | null, form: FormData) {
   await run(`/admin/products/${productId}`, async (ctx) => {
-    await admin.saveVariant(ctx, productId, variantId, formData(form, { booleans: ["isActive"], euros: ["priceCents", "compareAtCents", "costCents"] }));
+    const variant = await admin.saveVariant(ctx, productId, variantId, formData(form, { booleans: ["isActive"], euros: ["priceCents", "compareAtCents", "costCents"] }));
+    // Prices in the other currencies are typed in, never worked out. An empty field means the size is not sold in that currency.
+    const others = formData(form, { euros: ["priceUSD", "priceGBP"] });
+    for (const currency of ["USD", "GBP"] as const) if (form.has(`price${currency}`)) await markets.setVariantPrice(ctx, variant.id, currency, others[`price${currency}`]);
     updateTag("catalog");
   });
 }
@@ -204,7 +210,7 @@ export async function eraseCustomer(id: string) {
 export async function saveDiscount(id: string | null, form: FormData) {
   const kind = text(form, "kind");
   const input = formData(form, { booleans: ["isActive"], euros: ["minSubtotalCents"] });
-  // "Value" is a percentage for percent codes and an amount in euros for fixed ones.
+  // "Value" is a percentage for percent codes and an amount in the code's currency for fixed ones.
   if (kind === "FIXED") input.value = Math.round(Number(text(form, "value").replace(",", ".")) * 100);
   await run("/admin/discounts", (ctx) => admin.saveDiscount(ctx, id, input));
 }
@@ -373,15 +379,16 @@ export async function setCustomerTags(customerId: string, form: FormData) {
 // ── Security ──
 
 export async function beginTwoFactor() {
-  await run("/admin/security", (ctx) => twoFactor.beginTotp(ctx).then(() => undefined), "Scan the key below with your authenticator app, then enter a code to finish.");
+  // The layout decides between the setup screen and the panel, and a layout is not rendered again on its own after an action.
+  await run("/admin/security", (ctx) => twoFactor.beginTotp(ctx).then(() => refresh()), "Scan the key below with your authenticator app, then enter a code to finish.");
 }
 
 export async function confirmTwoFactor(form: FormData) {
-  await run("/admin/security", (ctx) => twoFactor.confirmTotp(ctx, text(form, "code")), "Two-factor sign-in is on. You will be asked for a code each time you sign in.");
+  await run("/admin/security", (ctx) => twoFactor.confirmTotp(ctx, text(form, "code")).then(() => refresh()), "Two-factor sign-in is on. You will be asked for a code each time you sign in.");
 }
 
 export async function disableTwoFactor(form: FormData) {
-  await run("/admin/security", (ctx) => twoFactor.disableTotp(ctx, text(form, "password")), "Two-factor sign-in is off.");
+  await run("/admin/security", (ctx) => twoFactor.disableTotp(ctx, text(form, "password")).then(() => refresh()), "Two-factor sign-in is off.");
 }
 
 export async function resetTwoFactor(adminUserId: string) {
@@ -542,4 +549,22 @@ export async function deleteArticle(id: string) {
 
 export async function supportStatus(id: string, form: FormData) {
   await run("/admin/support", (ctx) => assistantAdmin.setSupportStatus(ctx, id, formData(form)), "Request updated.");
+}
+
+// ── Markets and currencies ──
+
+export async function saveMarket(id: string | null, form: FormData) {
+  await run("/admin/markets", async (ctx) => {
+    await markets.saveMarket(ctx, id, formData(form, { booleans: ["isActive"], lists: ["countries"] }));
+    updateTag("shipping");
+    updateTag("catalog");
+  }, "Market saved.");
+}
+
+export async function deleteMarket(id: string) {
+  await run("/admin/markets", async (ctx) => {
+    await markets.deleteMarket(ctx, id);
+    updateTag("shipping");
+    updateTag("catalog");
+  }, "Market removed. Its countries are sold to in euro again.");
 }

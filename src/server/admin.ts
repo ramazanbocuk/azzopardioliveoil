@@ -491,7 +491,7 @@ export async function listProducts(ctx: Ctx) {
 
 export async function getProduct(ctx: Ctx, id: string) {
   requireAdmin(ctx, "VIEW", "catalog");
-  const product = await ctx.db.product.findFirst({ where: { id, deletedAt: null }, include: { variants: { orderBy: { position: "asc" } }, batches: { orderBy: { createdAt: "desc" } } } });
+  const product = await ctx.db.product.findFirst({ where: { id, deletedAt: null }, include: { variants: { orderBy: { position: "asc" }, include: { prices: true } }, batches: { orderBy: { createdAt: "desc" } } } });
   if (!product) throw new AppError("NOT_FOUND", "Product not found.");
   return product;
 }
@@ -692,6 +692,7 @@ const discountInput = z.object({
   kind: z.enum(["PERCENT", "FIXED", "FREE_SHIPPING"]),
   value: z.coerce.number().int().min(0).max(10_000_000).default(0),
   minSubtotalCents: cents.default(0),
+  currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"),
   startsAt: optionalDate,
   endsAt: optionalDate,
   usageLimit: z.coerce.number().int().min(1).nullish().or(z.literal("")).transform((value) => (value ? Number(value) : null)),
@@ -708,7 +709,7 @@ export async function saveDiscount(ctx: Ctx, id: string | null, input: unknown) 
   await audit(ctx, id ? "discount.update" : "discount.create", "Discount", discount.id, { code: data.code });
 }
 
-const zoneInput = z.object({ name: z.string().trim().min(1).max(120), countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1, "Add at least one country code.").max(60), isActive: z.boolean().default(true) });
+const zoneInput = z.object({ currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"), name: z.string().trim().min(1).max(120), countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1, "Add at least one country code.").max(60), isActive: z.boolean().default(true) });
 const rateInput = z.object({
   name: z.string().trim().min(1).max(120),
   carrier: optionalText(60),

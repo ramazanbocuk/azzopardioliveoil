@@ -1,4 +1,5 @@
 import type { AiConversation } from "@/generated/prisma/client";
+import { requireStaff } from "../auth";
 import type { Ctx } from "../context";
 import type { Db } from "../db";
 import { AppError } from "../errors";
@@ -75,8 +76,7 @@ const findConversation = (ctx: Ctx, id: string | null | undefined): Promise<AiCo
 
 /** One message from a member of staff in, one answer out. */
 export async function staffMessage(ctx: Ctx, input: { conversationId?: string | null; message: string }, options: { now?: Date; provider?: ModelProvider } = {}): Promise<StaffReply> {
-  if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
-  const admin = ctx.admin;
+  const admin = requireStaff(ctx);
   const now = options.now ?? new Date();
   const message = input.message.trim();
   if (message.length === 0) throw new AppError("BAD_INPUT", "Write a message first.", "message");
@@ -127,6 +127,6 @@ export async function latestStaffConversation(ctx: Ctx, now = new Date()) {
 
 /** Ends a conversation so the next message starts a fresh one. The record is kept. */
 export async function closeStaffConversation(ctx: Ctx, conversationId: string): Promise<void> {
-  if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
-  await ctx.db.aiConversation.updateMany({ where: { id: conversationId, channel: "staff", adminUserId: ctx.admin.id }, data: { status: "CLOSED" } });
+  const admin = requireStaff(ctx);
+  await ctx.db.aiConversation.updateMany({ where: { id: conversationId, channel: "staff", adminUserId: admin.id }, data: { status: "CLOSED" } });
 }

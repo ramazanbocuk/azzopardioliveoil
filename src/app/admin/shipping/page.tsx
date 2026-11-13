@@ -1,4 +1,4 @@
-import { Card, Check, Field, Flash, Page, Submit, Table, euros } from "@/components/admin/ui";
+import { Card, Check, Field, Flash, Page, Select, Submit, Table, euros } from "@/components/admin/ui";
 import { requireAdmin } from "@/server/auth";
 import { adminCtx } from "@/server/adminSession";
 import { deleteRate, deleteTax, saveRate, saveTax, saveZone } from "../actions";
@@ -15,15 +15,15 @@ export default async function ShippingPage({ searchParams }: PageProps<"/admin/s
     searchParams,
   ]);
 
-  const rateForm = (zoneId: string, rate: (typeof zones)[number]["rates"][number] | null) => (
+  const rateForm = (zoneId: string, rate: (typeof zones)[number]["rates"][number] | null, currency: string) => (
     <div key={rate?.id ?? "new"} className="flex flex-wrap items-end gap-3 border-t border-ink/10 pt-4">
       <form action={saveRate.bind(null, zoneId, rate?.id ?? null)} className="grid flex-1 items-end gap-3 sm:grid-cols-3 xl:grid-cols-[1.4fr_0.8fr_0.7fr_0.8fr_0.8fr_0.8fr_1fr_auto_auto]">
         <Field label={rate ? "Rate name" : "New rate"} name="name" required defaultValue={rate?.name} placeholder="Standard" />
         <Field label="Carrier" name="carrier" defaultValue={rate?.carrier ?? ""} placeholder="bpost" />
-        <Field label="Price (€)" name="priceCents" inputMode="decimal" required defaultValue={euros(rate?.priceCents)} />
+        <Field label={`Price (${currency})`} name="priceCents" inputMode="decimal" required defaultValue={euros(rate?.priceCents)} />
         <Field label="From (g)" name="minWeightGrams" inputMode="numeric" defaultValue={rate?.minWeightGrams ?? 0} />
         <Field label="Up to (g)" name="maxWeightGrams" inputMode="numeric" defaultValue={rate?.maxWeightGrams ?? ""} />
-        <Field label="Free from (€)" name="freeAboveCents" inputMode="decimal" defaultValue={euros(rate?.freeAboveCents)} />
+        <Field label={`Free from (${currency})`} name="freeAboveCents" inputMode="decimal" defaultValue={euros(rate?.freeAboveCents)} />
         <Field label="Delivery estimate" name="estimate" defaultValue={rate?.estimate ?? ""} placeholder="2–3 working days" />
         <Check label="Active" name="isActive" defaultChecked={rate?.isActive ?? true} />
         <Submit variant={rate ? "secondary" : "primary"}>{rate ? "Save" : "Add"}</Submit>
@@ -41,22 +41,33 @@ export default async function ShippingPage({ searchParams }: PageProps<"/admin/s
       <Flash params={params} />
       {zones.map((zone) => (
         <Card key={zone.id} title={zone.name} description="A customer sees the rates of the zone that contains their country, limited to the weight band their parcel falls in.">
-          <form action={saveZone.bind(null, zone.id)} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_auto_auto]">
+          <form action={saveZone.bind(null, zone.id)} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_auto_auto_auto]">
             <Field label="Zone name" name="name" required defaultValue={zone.name} />
             <Field label="Countries" name="countries" required defaultValue={zone.countries.join(", ")} hint="Two-letter codes, separated by commas: BE, NL, LU" />
+            <Select label="Rates are in" name="currency" defaultValue={zone.currency}>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="GBP">GBP</option>
+            </Select>
             <Check label="Active" name="isActive" defaultChecked={zone.isActive} />
             <Submit variant="secondary">Save zone</Submit>
           </form>
           <div className="mt-5 space-y-4">
-            {zone.rates.map((rate) => rateForm(zone.id, rate))}
-            {rateForm(zone.id, null)}
+            {zone.rates.map((rate) => rateForm(zone.id, rate, zone.currency))}
+            {rateForm(zone.id, null, zone.currency)}
           </div>
         </Card>
       ))}
       <Card title="New shipping zone">
-        <form action={saveZone.bind(null, null)} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_auto_auto]">
+        <p className="text-small mb-4 text-stone-700">A zone’s rates and free-shipping thresholds are amounts in one currency. A zone serves a country only when that country is sold to in the same currency (see Markets &amp; currencies); a country in no market is sold to in euro.</p>
+        <form action={saveZone.bind(null, null)} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_auto_auto_auto]">
           <Field label="Zone name" name="name" required placeholder="Rest of EU" />
           <Field label="Countries" name="countries" required placeholder="ES, PT, AT" />
+          <Select label="Rates are in" name="currency" defaultValue={"EUR"}>
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+          </Select>
           <Check label="Active" name="isActive" defaultChecked />
           <Submit>Create zone</Submit>
         </form>

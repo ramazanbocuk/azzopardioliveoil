@@ -4,6 +4,7 @@
  * production build, and the production server on port 3100.
  * Playwright launches this and stops it when the run ends.
  */
+import { E2E_ADMIN } from "./fixtures";
 import { execFileSync, spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import path from "node:path";
@@ -17,8 +18,9 @@ const env = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:54331/azzopardi_e2e",
   APP_URL: `http://localhost:${PORT}`,
   APP_SECRET: "e2e-only-secret-e2e-only-secret-e2e-only",
-  SEED_ADMIN_EMAIL: "",
-  SEED_ADMIN_PASSWORD: "",
+  // A staff account that exists only in this throwaway database, for the tests that need the admin panel.
+  SEED_ADMIN_EMAIL: E2E_ADMIN.email,
+  SEED_ADMIN_PASSWORD: E2E_ADMIN.password,
   STRIPE_SECRET_KEY: "",
   STRIPE_WEBHOOK_SECRET: "",
   ANTHROPIC_API_KEY: "", // the browser tests never call a model

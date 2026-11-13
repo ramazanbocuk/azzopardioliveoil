@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AiProposal, Prisma } from "@/generated/prisma/client";
 import { adjustStock, refundOrder } from "../admin";
 import { setSupportStatus } from "../assistantAdmin";
-import { requireAdmin } from "../auth";
+import { requireAdmin, requireStaff } from "../auth";
 import type { Ctx } from "../context";
 import { AppError } from "../errors";
 import type { Area, Level } from "../permissions";
@@ -28,11 +28,12 @@ import { cancelOutstanding, outstanding } from "../stock";
 
 export const PROPOSAL_HOURS = 24;
 const MAX_PENDING = 10;
-const euros = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+/** An amount with its currency. Euro keeps its sign; any other currency is written out. */
+const amount = (cents: number, currency = "EUR") => (currency === "EUR" ? `€${(cents / 100).toFixed(2)}` : `${(cents / 100).toFixed(2)} ${currency}`);
 export const proposalReference = (sequence: number) => `P-${String(sequence).padStart(5, "0")}`;
 
-const refundParams = z.object({ orderId: z.string(), orderNumber: z.string(), amountCents: z.number().int().min(1), reason: z.string().max(300).nullable(), restock: z.boolean() });
-const cancelParams = z.object({ orderId: z.string(), orderNumber: z.string(), orderItemId: z.string(), sku: z.string(), quantity: z.number().int().min(1) });
+const refundParams = z.object({ orderId: z.string(), orderNumber: z.string(), currency: z.string().length(3).default("EUR"), amountCents: z.number().int().min(1), reason: z.string().max(300).nullable(), restock: z.boolean() });
+const cancelParams = z.object({ orderId: z.string(), orderNumber: z.string(), currency: z.string().length(3).default("EUR"), orderItemId: z.string(), sku: z.string(), quantity: z.number().int().min(1) });
 const stockParams = z.object({ variantId: z.string(), sku: z.string(), delta: z.number().int(), reason: z.enum(["RECEIVED", "ADJUSTMENT", "RETURN", "DAMAGED"]), note: z.string().max(500).nullable() });
 const supportParams = z.object({ requestId: z.string(), reference: z.string(), status: z.enum(["OPEN", "ANSWERED", "CLOSED"]), note: z.string().max(2000).nullable() });
 
@@ -62,6 +63,9 @@ export const PROPOSAL_KINDS = {
       if (!order || !payment) throw new AppError("BAD_INPUT", "This order has no received payment to refund.");
       const already = payment.refunds.filter((refund) => refund.failedAt === null).reduce((sum, refund) => sum + refund.amountCents, 0);
       const refundable = payment.amountCents - already;
+      // The refund goes back in the currency the customer paid in. A proposal written in another is refused, not converted.
+      if (params.currency !== payment.currency) throw new AppError("BAD_INPUT", `This order was paid in ${payment.currency}.`);
+      const euros = (cents: number) => amount(cents, payment.currency);
       if (params.amountCents > refundable) throw new AppError("BAD_INPUT", `The amount is more than what remains refundable (${euros(refundable)}).`);
       return [
         `Refund ${euros(params.amountCents)} on order ${order.number} to ${order.email}, through the payment provider.`,
@@ -73,7 +77,7 @@ export const PROPOSAL_KINDS = {
     },
     async execute(ctx, params) {
       await refundOrder(ctx, params.orderId, { amountCents: params.amountCents, reason: params.reason ?? undefined, restock: params.restock });
-      return `${euros(params.amountCents)} refunded on order ${params.orderNumber}.`;
+      return `${amount(params.amountCents, params.currency)} refunded on order ${params.orderNumber}.`;
     },
     path: (params) => `/admin/orders/${params.orderId}`,
   }),
@@ -86,11 +90,11 @@ export const PROPOSAL_KINDS = {
       const item = await ctx.db.orderItem.findUnique({ where: { id: params.orderItemId }, include: { order: { select: { number: true } } } });
       if (!item || item.orderId !== params.orderId) throw new AppError("NOT_FOUND", "That line is not part of the order.");
       if (params.quantity > outstanding(item)) throw new AppError("BAD_INPUT", `${item.productName} ${item.variantLabel}: only ${outstanding(item)} not yet shipped.`);
-      return `Take ${params.quantity} × ${item.productName} ${item.variantLabel} (${item.sku}) off order ${item.order.number}: they will not be sent. ${outstanding(item) - params.quantity} of that line would remain to send. No money is returned by this step; those units cost ${euros(item.unitPriceCents * params.quantity)} at list price, and a refund is a separate decision.`;
+      return `Take ${params.quantity} × ${item.productName} ${item.variantLabel} (${item.sku}) off order ${item.order.number}: they will not be sent. ${outstanding(item) - params.quantity} of that line would remain to send. No money is returned by this step; those units cost ${amount(item.unitPriceCents * params.quantity, params.currency)} at list price, and a refund is a separate decision.`;
     },
     async execute(ctx, params) {
       const result = await cancelOutstanding(ctx, params.orderItemId, params.quantity);
-      return `${params.quantity} × ${params.sku} taken off order ${params.orderNumber}. No money was returned; the units cost ${euros(result.valueCents)} at list price.`;
+      return `${params.quantity} × ${params.sku} taken off order ${params.orderNumber}. No money was returned; the units cost ${amount(result.valueCents, params.currency)} at list price.`;
     },
     path: (params) => `/admin/orders/${params.orderId}`,
   }),
@@ -165,8 +169,8 @@ export function viewProposal(row: AiProposal, now = new Date()): ProposalView {
 
 /** The signed-in person's own proposals: those waiting, then the latest decided. */
 export async function listMyProposals(ctx: Ctx, now = new Date()): Promise<{ waiting: ProposalView[]; decided: ProposalView[] }> {
-  if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
-  const rows = await ctx.db.aiProposal.findMany({ where: { adminUserId: ctx.admin.id }, orderBy: { createdAt: "desc" }, take: 60 });
+  const me = requireStaff(ctx);
+  const rows = await ctx.db.aiProposal.findMany({ where: { adminUserId: me.id }, orderBy: { createdAt: "desc" }, take: 60 });
   const views = rows.map((row) => viewProposal(row, now));
   return { waiting: views.filter((view) => view.status === "PENDING"), decided: views.filter((view) => view.status !== "PENDING").slice(0, 20) };
 }
@@ -178,8 +182,7 @@ export async function listMyProposals(ctx: Ctx, now = new Date()): Promise<{ wai
  * then it fails with the reason and nothing is changed.
  */
 export async function decideProposal(ctx: Ctx, id: string, approve: boolean, now = new Date()): Promise<ProposalView> {
-  if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
-  const admin = ctx.admin;
+  const admin = requireStaff(ctx);
   const proposal = await ctx.db.aiProposal.findFirst({ where: { id, adminUserId: admin.id } });
   if (!proposal) throw new AppError("NOT_FOUND", "Proposal not found.");
   if (proposal.status !== "PENDING") throw new AppError("BAD_INPUT", "This proposal has already been decided.");

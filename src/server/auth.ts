@@ -176,6 +176,28 @@ export function requireCustomer(ctx: Ctx): Customer {
  */
 export function requireAdmin(ctx: Ctx, minimum: Level = "STAFF", area: Area = "general"): AdminUser {
   if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
+  // Without a second factor a person may do one thing: set one up (and manage their own sessions).
+  if (mustEnrol(ctx.admin) && !(area === "security" && minimum === "STAFF")) throw new AppError("FORBIDDEN", TWO_FACTOR_FIRST);
   if (!can(ctx.admin.role, minimum, area)) throw new AppError("FORBIDDEN", "Your role does not allow this action.");
+  return ctx.admin;
+}
+
+const TWO_FACTOR_FIRST = "Set up two-factor sign-in before using the admin panel: Admin → Security.";
+
+/**
+ * Two-factor sign-in is compulsory for staff. In production there is no way
+ * to switch that off. Outside production (tests, a developer's own machine)
+ * it applies only when ADMIN_TWO_FACTOR=required, so a fresh local database
+ * is not locked before anyone has a phone enrolled.
+ */
+export const twoFactorRequired = (env: Record<string, string | undefined> = process.env): boolean => env.NODE_ENV === "production" || env.ADMIN_TWO_FACTOR === "required";
+
+/** True when this person must set up a second factor before doing anything else. */
+export const mustEnrol = (admin: Pick<AdminUser, "totpEnabledAt">, env: Record<string, string | undefined> = process.env): boolean => twoFactorRequired(env) && !admin.totpEnabledAt;
+
+/** For actions open to every member of staff whatever their role: signed in, and with a second factor where one is required. */
+export function requireStaff(ctx: Ctx): AdminUser {
+  if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
+  if (mustEnrol(ctx.admin)) throw new AppError("FORBIDDEN", TWO_FACTOR_FIRST);
   return ctx.admin;
 }
