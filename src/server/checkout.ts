@@ -1,3 +1,4 @@
+import { toLocale } from "@/i18n/config";
 import { z } from "zod";
 import { WHOLESALE_CODE, activeDiscount, findCart, summarise, toLines } from "./cart";
 import type { Ctx } from "./context";
@@ -43,7 +44,7 @@ const checkoutInput = z.object({
     .nullish(),
   customerNote: z.string().trim().max(500).nullish(),
   // GraphQL sends null for omitted optional inputs, so every optional field accepts it.
-  locale: z.string().max(10).nullish().transform((value) => value ?? "en"),
+  locale: z.string().max(10).nullish(),
 });
 
 async function zoneRates(db: Db, countryCode: string) {
@@ -122,7 +123,8 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
       data: {
         customerId: ctx.customer?.id ?? null,
         email: data.email,
-        locale: data.locale,
+        // The language the customer shopped in; their emails follow it.
+        locale: toLocale(data.locale ?? ctx.locale),
         subtotalCents: totals.subtotalCents,
         discountCents: totals.discountCents,
         shippingCents: totals.shippingCents,

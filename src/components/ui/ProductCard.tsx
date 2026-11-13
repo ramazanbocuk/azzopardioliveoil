@@ -1,11 +1,15 @@
-import Link from "next/link";
+"use client";
+
+import { Link } from "@/components/ui/Link";
 import { FavouriteButton } from "@/components/shop/Actions";
-import { formatPrice, productHref, type CatalogItem } from "@/content/site";
+import { productHref, type CatalogItem } from "@/content/site";
+import { useI18n } from "@/i18n/client";
 import { Bottle } from "./Bottle";
 
 /** One purchasable variant. The whole card is the link; the heart sits above it. */
 export function ProductCard({ item }: { item: CatalogItem }) {
   const { product, variant, category } = item;
+  const { m, fill, money } = useI18n();
   const label = `${product.name} ${variant.ml} ml`;
   return (
     <article className="group/card relative">
@@ -17,11 +21,11 @@ export function ProductCard({ item }: { item: CatalogItem }) {
             className="w-auto transition-transform duration-[900ms] ease-out-expo group-hover/card:-translate-y-2"
             // Height carries the size difference between variants.
             style={{ height: `${Math.round(variant.scale * 100)}%` }}
-            title={`${label} (illustration)`}
+            title={fill(m.shop.illustration, { name: label })}
           />
         </div>
-        {product.lot && <span className="text-ticket absolute left-4 top-4 text-stone-700">Lot {product.lot}</span>}
-        {!variant.inStock && <span className="text-label absolute bottom-4 left-4 bg-ink px-3 py-2 text-ivory">Sold out</span>}
+        {product.lot && <span className="text-ticket absolute left-4 top-4 text-stone-700">{fill(m.shop.lot, { lot: product.lot })}</span>}
+        {!variant.inStock && <span className="text-label absolute bottom-4 left-4 bg-ink px-3 py-2 text-ivory">{m.shop.soldOut}</span>}
       </div>
 
       <div className="mt-5 flex items-start justify-between gap-6">
@@ -34,7 +38,7 @@ export function ProductCard({ item }: { item: CatalogItem }) {
           </h3>
           <p className="text-small mt-1 text-stone-700">{variant.ml} ml</p>
         </div>
-        <p className="text-lead shrink-0 pt-6 tabular-nums">{formatPrice(variant.priceCents)}</p>
+        <p className="text-lead shrink-0 pt-6 tabular-nums">{money(variant.priceCents)}</p>
       </div>
 
       <FavouriteButton sku={variant.sku} label={label} className="absolute right-2 top-2 z-10" />

@@ -6,6 +6,7 @@ import { SelectField, TextField } from "@/components/ui/Field";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { Button } from "@/components/ui/Button";
 import type { CatalogItem } from "@/content/site";
+import { useI18n } from "@/i18n/client";
 
 type Sort = "featured" | "price-asc" | "price-desc" | "size-asc";
 
@@ -22,6 +23,8 @@ const sorters: Record<Sort, (a: CatalogItem, b: CatalogItem) => number> = {
  * filtered GraphQL query instead.
  */
 export function ShopView({ items, autoFocusSearch = false }: { items: CatalogItem[]; autoFocusSearch?: boolean }) {
+  const { m, plural } = useI18n();
+  const s = m.shop;
   const [query, setQuery] = useState("");
   const [sizes, setSizes] = useState<number[]>([]);
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -56,17 +59,17 @@ export function ShopView({ items, autoFocusSearch = false }: { items: CatalogIte
     <div>
       <form role="search" onSubmit={(event) => event.preventDefault()} className="grid gap-x-8 gap-y-6 border-y border-ink/15 py-6 lg:grid-cols-12 lg:items-end">
         <TextField
-          label="Search"
+          label={s.search}
           type="search"
           name="q"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Name, size or lot number"
+          placeholder={s.searchPlaceholder}
           autoFocus={autoFocusSearch}
           className="lg:col-span-4"
         />
         <fieldset className="lg:col-span-5">
-          <legend className="text-label mb-3 opacity-80">Filter</legend>
+          <legend className="text-label mb-3 opacity-80">{s.filter}</legend>
           <div className="flex flex-wrap gap-2">
             {allSizes.map((ml) => (
               <button key={ml} type="button" aria-pressed={sizes.includes(ml)} onClick={() => toggleSize(ml)} className={chip(sizes.includes(ml))}>
@@ -74,25 +77,25 @@ export function ShopView({ items, autoFocusSearch = false }: { items: CatalogIte
               </button>
             ))}
             <button type="button" aria-pressed={inStockOnly} onClick={() => setInStockOnly((value) => !value)} className={chip(inStockOnly)}>
-              In stock
+              {s.inStock}
             </button>
           </div>
         </fieldset>
-        <SelectField label="Sort by" name="sort" value={sort} onChange={(event) => setSort(event.target.value as Sort)} className="lg:col-span-3">
-          <option value="featured">Featured</option>
-          <option value="price-asc">Price, low to high</option>
-          <option value="price-desc">Price, high to low</option>
-          <option value="size-asc">Size, small to large</option>
+        <SelectField label={s.sortBy} name="sort" value={sort} onChange={(event) => setSort(event.target.value as Sort)} className="lg:col-span-3">
+          <option value="featured">{s.featured}</option>
+          <option value="price-asc">{s.priceAsc}</option>
+          <option value="price-desc">{s.priceDesc}</option>
+          <option value="size-asc">{s.sizeAsc}</option>
         </SelectField>
       </form>
 
       <div className="mt-5 flex min-h-11 items-center justify-between gap-6">
         <p role="status" className="text-small text-stone-700">
-          {results.length} {results.length === 1 ? "bottle" : "bottles"}
+          {plural(results.length, s.count)}
         </p>
         {filtered && (
           <Button variant="text" onClick={reset}>
-            Clear filters
+            {s.clear}
           </Button>
         )}
       </div>
@@ -107,9 +110,9 @@ export function ShopView({ items, autoFocusSearch = false }: { items: CatalogIte
         </ul>
       ) : (
         <div className="mt-8 border border-dashed border-ink/30 px-6 py-20 text-center">
-          <p className="text-h3">Nothing matches those filters.</p>
+          <p className="text-h3">{s.none}</p>
           <Button variant="secondary" onClick={reset} className="mt-6">
-            Show every bottle
+            {s.showAll}
           </Button>
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { useId, useState, type ComponentProps } from "react";
+import { useI18n } from "@/i18n/client";
 import { MinusIcon, PlusIcon } from "./icons";
 
 const control =
@@ -121,7 +122,8 @@ export function SizeSelector({ legend, options, value, onChange, tone = "light" 
 }
 
 /** Uncontrolled by default; pass `value` to drive it from outside (the cart does). */
-export function QuantityStepper({ label = "Quantity", min = 1, max = 24, defaultValue = 1, value: controlled, onChange }: { label?: string; min?: number; max?: number; defaultValue?: number; value?: number; onChange?: (value: number) => void }) {
+export function QuantityStepper({ label, min = 1, max = 24, defaultValue = 1, value: controlled, onChange }: { label?: string; min?: number; max?: number; defaultValue?: number; value?: number; onChange?: (value: number) => void }) {
+  const { m } = useI18n();
   const [internal, setValue] = useState(defaultValue);
   const value = controlled ?? internal;
   const set = (next: number) => {
@@ -130,14 +132,14 @@ export function QuantityStepper({ label = "Quantity", min = 1, max = 24, default
     onChange?.(clamped);
   };
   return (
-    <div role="group" aria-label={label} className="inline-flex h-13 items-center border border-ink/30">
-      <button type="button" aria-label="Decrease quantity" disabled={value <= min} onClick={() => set(value - 1)} className="grid h-full w-12 place-items-center transition-colors hover:bg-ink/5 disabled:opacity-30">
+    <div role="group" aria-label={label ?? m.product.quantity} className="inline-flex h-13 items-center border border-ink/30">
+      <button type="button" aria-label={m.product.decrease} disabled={value <= min} onClick={() => set(value - 1)} className="grid h-full w-12 place-items-center transition-colors hover:bg-ink/5 disabled:opacity-30">
         <MinusIcon className="size-4" />
       </button>
       <output aria-live="polite" className="w-10 text-center tabular-nums">
         {value}
       </output>
-      <button type="button" aria-label="Increase quantity" disabled={value >= max} onClick={() => set(value + 1)} className="grid h-full w-12 place-items-center transition-colors hover:bg-ink/5 disabled:opacity-30">
+      <button type="button" aria-label={m.product.increase} disabled={value >= max} onClick={() => set(value + 1)} className="grid h-full w-12 place-items-center transition-colors hover:bg-ink/5 disabled:opacity-30">
         <PlusIcon className="size-4" />
       </button>
     </div>

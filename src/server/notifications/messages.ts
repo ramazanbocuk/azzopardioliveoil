@@ -1,5 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { Order, OrderItem, Shipment } from "@/generated/prisma/client";
+import { languageOf, localizePath, tagOf, toLocale, type Locale } from "@/i18n/config";
+import { EMAIL_TEXT, type EmailText } from "@/i18n/emails";
+import { countryName, fill, formatMoney } from "@/i18n/format";
 import type { Email } from "./channels";
 
 /** Message content. Pure functions of the order, so the exact wording is unit-tested. */
@@ -24,17 +27,33 @@ ${body}
 </div></body></html>`;
 }
 
-function itemsTable(order: FullOrder): string {
-  const rows = order.items
-    .map((item) => `<tr><td style="padding:8px 0;border-bottom:1px solid #d2cbbd">${escape(item.productName)} ${escape(item.variantLabel)} &times; ${item.quantity}${item.lotNumber ? `<br><span style="color:#6b6558;font-size:13px">Lot ${escape(item.lotNumber)}</span>` : ""}</td><td align="right" style="padding:8px 0;border-bottom:1px solid #d2cbbd">${money(item.lineTotalCents)}</td></tr>`)
-    .join("");
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0">${rows}
-<tr><td style="padding:8px 0">Shipping (${escape(order.shippingRateName)})</td><td align="right">${order.shippingCents === 0 ? "Free" : money(order.shippingCents)}</td></tr>
-${order.discountCents ? `<tr><td style="padding:8px 0">Discount</td><td align="right">&minus;${money(order.discountCents)}</td></tr>` : ""}
-<tr><td style="padding:8px 0;font-weight:bold">Total</td><td align="right" style="font-weight:bold">${money(order.totalCents)}</td></tr></table>`;
+/**
+ * Everything an email to a customer needs to speak their language: the
+ * wording, money and country names in their format, and links that open the
+ * shop in the same language. `stored` is what was saved with the order,
+ * account or subscription ("de-de", or a bare "en" from before languages existed).
+ */
+function speak(stored: string | null | undefined): { locale: Locale; t: EmailText; cash: (cents: number) => string; land: (code: string) => string; link: (path: string) => string } {
+  const locale = toLocale(stored);
+  const tag = tagOf(locale);
+  return { locale, t: EMAIL_TEXT[languageOf(locale)], cash: (cents) => formatMoney(tag, cents), land: (code) => countryName(tag, code), link: (path) => `${appUrl()}${localizePath(locale, path)}` };
 }
 
-const address = (order: Order) => [`${order.shipFirstName} ${order.shipLastName}`, order.shipLine1, order.shipLine2, `${order.shipPostalCode} ${order.shipCity}`, country(order.shipCountryCode)].filter(Boolean) as string[];
+/** Escapes a sentence for HTML and sets one value inside it in bold. */
+const bold = (sentence: string, value: string) => escape(sentence).replace(escape(value), `<strong>${escape(value)}</strong>`);
+
+function itemsTable(order: FullOrder): string {
+  const { t, cash } = speak(order.locale);
+  const rows = order.items
+    .map((item) => `<tr><td style="padding:8px 0;border-bottom:1px solid #d2cbbd">${escape(item.productName)} ${escape(item.variantLabel)} &times; ${item.quantity}${item.lotNumber ? `<br><span style="color:#6b6558;font-size:13px">${escape(fill(t.lot, { lot: item.lotNumber }))}</span>` : ""}</td><td align="right" style="padding:8px 0;border-bottom:1px solid #d2cbbd">${cash(item.lineTotalCents)}</td></tr>`)
+    .join("");
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0">${rows}
+<tr><td style="padding:8px 0">${escape(fill(t.shipping, { name: order.shippingRateName }))}</td><td align="right">${order.shippingCents === 0 ? escape(t.free) : cash(order.shippingCents)}</td></tr>
+${order.discountCents ? `<tr><td style="padding:8px 0">${escape(t.discount)}</td><td align="right">&minus;${cash(order.discountCents)}</td></tr>` : ""}
+<tr><td style="padding:8px 0;font-weight:bold">${escape(t.total)}</td><td align="right" style="font-weight:bold">${cash(order.totalCents)}</td></tr></table>`;
+}
+
+const address = (order: Order, land: (code: string) => string = country) => [`${order.shipFirstName} ${order.shipLastName}`, order.shipLine1, order.shipLine2, `${order.shipPostalCode} ${order.shipCity}`, land(order.shipCountryCode)].filter(Boolean) as string[];
 
 /**
  * The owner's WhatsApp alert, as the six body parameters of the approved
@@ -76,29 +95,39 @@ export function ownerEmail(order: FullOrder, to: string): Email {
 }
 
 export function customerConfirmationEmail(order: FullOrder): Email {
+  const { t, cash, land, link } = speak(order.locale);
+  const c = t.confirmation;
+  const number = order.number ?? "";
+  const title = fill(c.title, { name: order.shipFirstName });
+  const received = fill(c.received, { number });
+  const tracking = link("/order-tracking");
   return {
     to: order.email,
-    subject: `Your Azzopardi order ${order.number}`,
-    text: [`Thank you, ${order.shipFirstName}. We have received your payment for order ${order.number}.`, "", ...order.items.map((item) => `- ${itemLine(item)}`), `Total: ${money(order.totalCents)}`, "", "Deliver to:", ...address(order), "", "We will email you a tracking link when your parcel leaves.", `Track your order: ${appUrl()}/order-tracking`].join("\n"),
+    subject: fill(c.subject, { number }),
+    text: [`${title} ${received}`, "", ...order.items.map((item) => `- ${itemLine(item)}`), `${t.total}: ${cash(order.totalCents)}`, "", `${c.deliverTo}:`, ...address(order, land), "", c.trackingLater, fill(c.trackText, { url: tracking })].join("\n"),
     html: layout(
-      `Thank you, ${order.shipFirstName}.`,
-      `<p>We have received your payment for order <strong>${escape(order.number ?? "")}</strong>. We will email you a tracking link when your parcel leaves.</p>${itemsTable(order)}
-<p><strong>Deliver to</strong><br>${address(order).map(escape).join("<br>")}</p>
-<p>You can follow your order at <a href="${appUrl()}/order-tracking" style="color:#2f3a22">${appUrl()}/order-tracking</a> with your order number and this email address.</p>`,
+      title,
+      `<p>${bold(received, number)} ${escape(c.trackingLater)}</p>${itemsTable(order)}
+<p><strong>${escape(c.deliverTo)}</strong><br>${address(order, land).map(escape).join("<br>")}</p>
+<p>${escape(c.follow).replace("{url}", `<a href="${tracking}" style="color:#2f3a22">${tracking}</a>`)}</p>`,
     ),
   };
 }
 
 export function customerShippedEmail(order: FullOrder, shipment: Shipment | null): Email {
-  const tracking = shipment?.trackingUrl ? `Track it here: ${shipment.trackingUrl}` : shipment?.trackingNumber ? `Tracking number: ${shipment.trackingNumber}` : "";
+  const { t } = speak(order.locale);
+  const sh = t.shipped;
+  const number = order.number ?? "";
+  const carrier = shipment?.carrier ?? sh.ourCarrier;
+  const tracking = shipment?.trackingUrl ? fill(sh.trackHere, { url: shipment.trackingUrl }) : shipment?.trackingNumber ? fill(sh.trackingNumber, { number: shipment.trackingNumber }) : "";
   return {
     to: order.email,
-    subject: `Your Azzopardi order ${order.number} is on its way`,
-    text: [`Good news, ${order.shipFirstName}: order ${order.number} has left with ${shipment?.carrier ?? "our carrier"}.`, tracking, "", ...order.items.map((item) => `- ${itemLine(item)}${item.lotNumber ? ` (lot ${item.lotNumber})` : ""}`)].filter((line) => line !== undefined).join("\n"),
+    subject: fill(sh.subject, { number }),
+    text: [fill(sh.left, { name: order.shipFirstName, number, carrier }), tracking, "", ...order.items.map((item) => `- ${itemLine(item)}${item.lotNumber ? ` (${fill(t.lot, { lot: item.lotNumber }).toLowerCase()})` : ""}`)].filter((line) => line !== undefined).join("\n"),
     html: layout(
-      "Your order is on its way.",
-      `<p>Order <strong>${escape(order.number ?? "")}</strong> has left with ${escape(shipment?.carrier ?? "our carrier")}.</p>
-${shipment?.trackingUrl ? `<p><a href="${escape(shipment.trackingUrl)}" style="color:#2f3a22">Track your parcel</a></p>` : shipment?.trackingNumber ? `<p>Tracking number: ${escape(shipment.trackingNumber)}</p>` : ""}${itemsTable(order)}`,
+      sh.title,
+      `<p>${bold(fill(sh.leftShort, { number, carrier }), number)}</p>
+${shipment?.trackingUrl ? `<p><a href="${escape(shipment.trackingUrl)}" style="color:#2f3a22">${escape(sh.trackParcel)}</a></p>` : shipment?.trackingNumber ? `<p>${escape(fill(sh.trackingNumber, { number: shipment.trackingNumber }))}</p>` : ""}${itemsTable(order)}`,
     ),
   };
 }
@@ -119,21 +148,23 @@ export function verifyLink(purpose: string, id: string, signature: string, secre
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function newsletterConfirmEmail(subscriber: { id: string; email: string }): Email | null {
+export function newsletterConfirmEmail(subscriber: { id: string; email: string; locale?: string | null }): Email | null {
   const confirm = signLink("newsletter-confirm", subscriber.id);
   const leave = signLink("newsletter-unsubscribe", subscriber.id);
   if (!confirm || !leave) return null;
-  const link = `${appUrl()}/newsletter?action=confirm&id=${subscriber.id}&sig=${confirm}`;
-  const out = `${appUrl()}/newsletter?action=unsubscribe&id=${subscriber.id}&sig=${leave}`;
+  const { t, link: local } = speak(subscriber.locale);
+  const n = t.newsletter;
+  const link = `${local("/newsletter")}?action=confirm&id=${subscriber.id}&sig=${confirm}`;
+  const out = `${local("/newsletter")}?action=unsubscribe&id=${subscriber.id}&sig=${leave}`;
   return {
     to: subscriber.email,
-    subject: "Confirm your subscription to letters from the grove",
-    text: `Please confirm that you would like to receive letters from Azzopardi Olive Oil:\n${link}\n\nIf you did not ask for this, ignore this email and you will hear nothing more.\nUnsubscribe at any time: ${out}`,
+    subject: n.subject,
+    text: `${n.text}\n${link}\n\n${n.ignore}\n${fill(n.unsubscribeText, { url: out })}`,
     html: layout(
-      "One step left.",
-      `<p>Please confirm that you would like to receive letters from Azzopardi Olive Oil, a few times a year.</p>
-<p><a href="${link}" style="display:inline-block;background:#2f3a22;color:#f4efe4;padding:14px 24px;text-decoration:none;letter-spacing:1px;text-transform:uppercase;font-size:13px">Confirm subscription</a></p>
-<p style="color:#6b6558;font-size:13px">If you did not ask for this, ignore this email and you will hear nothing more. <a href="${out}" style="color:#6b6558">Unsubscribe</a></p>`,
+      n.title,
+      `<p>${escape(n.body)}</p>
+<p><a href="${link}" style="display:inline-block;background:#2f3a22;color:#f4efe4;padding:14px 24px;text-decoration:none;letter-spacing:1px;text-transform:uppercase;font-size:13px">${escape(n.button)}</a></p>
+<p style="color:#6b6558;font-size:13px">${escape(n.ignore)} <a href="${out}" style="color:#6b6558">${escape(n.unsubscribe)}</a></p>`,
     ),
   };
 }
@@ -162,24 +193,31 @@ export function staffAlertEmail(to: string, alert: { subject: string; heading: s
 }
 
 export function customerRefundEmail(order: Order, amountCents: number, full: boolean): Email {
-  const intro = full ? `We have refunded your order ${order.number} in full.` : `We have refunded ${money(amountCents)} of your order ${order.number}.`;
-  const timing = "The money goes back to the payment method you used. Your bank decides how quickly it appears, usually within a few working days.";
+  const { t, cash } = speak(order.locale);
+  const r = t.refund;
+  const number = order.number ?? "";
+  const intro = full ? fill(r.full, { number }) : fill(r.partial, { amount: cash(amountCents), number });
+  const amount = fill(r.amount, { amount: cash(amountCents) });
+  const dear = fill(t.dear, { name: order.shipFirstName });
   return {
     to: order.email,
-    subject: `Refund for your order ${order.number}`,
-    text: [`Dear ${order.shipFirstName},`, "", intro, `Amount refunded: ${money(amountCents)}`, "", timing, "", "Azzopardi Olive Oil"].join("\n"),
-    html: layout("Your refund", `<p>Dear ${escape(order.shipFirstName)},</p><p>${escape(intro)}</p><p><strong>Amount refunded: ${money(amountCents)}</strong></p><p>${timing}</p>`),
+    subject: fill(r.subject, { number }),
+    text: [dear, "", intro, amount, "", r.timing, "", t.signature].join("\n"),
+    html: layout(r.title, `<p>${escape(dear)}</p><p>${escape(intro)}</p><p><strong>${escape(amount)}</strong></p><p>${escape(r.timing)}</p>`),
   };
 }
 
-export function wholesaleApprovedEmail(customer: { email: string; firstName: string; companyName: string | null; wholesaleDiscountBps: number }): Email {
-  const terms = `${(customer.wholesaleDiscountBps / 100).toLocaleString("en-GB", { maximumFractionDigits: 2 })}%`;
-  const lines = [`Your wholesale account${customer.companyName ? ` for ${customer.companyName}` : ""} has been approved.`, `Your trade discount of ${terms} on goods is applied automatically at checkout whenever you are signed in. It does not combine with discount codes.`, "At checkout you can enter your company invoice address and VAT number."];
+export function wholesaleApprovedEmail(customer: { email: string; firstName: string; companyName: string | null; wholesaleDiscountBps: number; locale?: string | null }): Email {
+  const { t, locale, link } = speak(customer.locale);
+  const w = t.wholesale;
+  const terms = `${(customer.wholesaleDiscountBps / 100).toLocaleString(tagOf(locale), { maximumFractionDigits: 2 })}%`;
+  const lines = [customer.companyName ? fill(w.approvedFor, { company: customer.companyName }) : w.approved, fill(w.discount, { terms }), w.invoice];
+  const dear = fill(t.dear, { name: customer.firstName });
   return {
     to: customer.email,
-    subject: "Your Azzopardi wholesale account is approved",
-    text: [`Dear ${customer.firstName},`, "", ...lines, "", `${appUrl()}/account`, "", "Azzopardi Olive Oil"].join("\n"),
-    html: layout("Wholesale account approved", `<p>Dear ${escape(customer.firstName)},</p>${lines.map((line) => `<p>${escape(line)}</p>`).join("")}<p><a href="${appUrl()}/account">Sign in to your account</a></p>`),
+    subject: w.subject,
+    text: [dear, "", ...lines, "", link("/account"), "", t.signature].join("\n"),
+    html: layout(w.title, `<p>${escape(dear)}</p>${lines.map((line) => `<p>${escape(line)}</p>`).join("")}<p><a href="${link("/account")}">${escape(w.signIn)}</a></p>`),
   };
 }
 
@@ -196,20 +234,23 @@ export function resetPurpose(expiresAt: number, passwordHash: string): string {
   return `password-reset:${expiresAt}:${createHash("sha256").update(passwordHash).digest("hex").slice(0, 24)}`;
 }
 
-export function passwordResetEmail(customer: { id: string; email: string; firstName: string; passwordHash: string }, now = new Date()): Email | null {
+export function passwordResetEmail(customer: { id: string; email: string; firstName: string; passwordHash: string; locale?: string | null }, now = new Date()): Email | null {
   const expiresAt = now.getTime() + RESET_MINUTES * 60_000;
   const signature = signLink(resetPurpose(expiresAt, customer.passwordHash), customer.id);
   if (!signature) return null;
-  const link = `${appUrl()}/account/reset?id=${customer.id}&exp=${expiresAt}&sig=${signature}`;
+  const { t, link: local } = speak(customer.locale);
+  const r = t.reset;
+  const values = { name: customer.firstName, minutes: RESET_MINUTES };
+  const link = `${local("/account/reset")}?id=${customer.id}&exp=${expiresAt}&sig=${signature}`;
   return {
     to: customer.email,
-    subject: "Reset your Azzopardi password",
-    text: `Hello ${customer.firstName},\n\nUse this link within ${RESET_MINUTES} minutes to choose a new password:\n${link}\n\nIf you did not ask for this, ignore this email. Your password has not changed.`,
+    subject: r.subject,
+    text: `${fill(r.text, values)}\n${link}\n\n${r.ignore}`,
     html: layout(
-      "Choose a new password.",
-      `<p>Hello ${escape(customer.firstName)}, use the button below within ${RESET_MINUTES} minutes to choose a new password.</p>
-<p><a href="${link}" style="display:inline-block;background:#2f3a22;color:#f4efe4;padding:14px 24px;text-decoration:none;letter-spacing:1px;text-transform:uppercase;font-size:13px">Reset password</a></p>
-<p style="color:#6b6558;font-size:13px">If you did not ask for this, ignore this email. Your password has not changed.</p>`,
+      r.title,
+      `<p>${escape(fill(r.body, values))}</p>
+<p><a href="${link}" style="display:inline-block;background:#2f3a22;color:#f4efe4;padding:14px 24px;text-decoration:none;letter-spacing:1px;text-transform:uppercase;font-size:13px">${escape(r.button)}</a></p>
+<p style="color:#6b6558;font-size:13px">${escape(r.ignore)}</p>`,
     ),
   };
 }

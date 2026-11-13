@@ -141,6 +141,11 @@ type Mutation {
   sendContactMessage(email: String!, message: String!, name: String!, reference: String): Boolean!
 
   """
+  Remembers the visitor's chosen language on this device and, when signed in, on their account.
+  """
+  setLanguage(locale: String!): String!
+
+  """
   Returns the provider's hosted payment page URL for an unpaid order. Paying is confirmed only by the provider's signed webhook.
   """
   startPayment(number: String!, token: String!): String!

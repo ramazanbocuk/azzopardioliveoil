@@ -1,17 +1,19 @@
 "use client";
 
 import { useLazyQuery, useMutation } from "@apollo/client/react";
-import Link from "next/link";
+import { Link } from "@/components/ui/Link";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
 import { errorMessage } from "@/lib/apollo";
+import { useI18n } from "@/i18n/client";
 import { LotQuery, SubscribeNewsletter } from "@/lib/operations";
 
-const date = (value: string | null | undefined) => (value ? new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" }).format(new Date(value)) : "—");
 
 /** Looks a lot number up in the published lot records. Shown on a dark ground. */
 export function TraceForm() {
+  const { m, fill, date: format, server } = useI18n();
+  const date = (value: string | null | undefined) => (value ? format(value, { dateStyle: "long", timeZone: "UTC" }) : "—");
   const [lookup, { data, loading, called, error }] = useLazyQuery(LotQuery, { fetchPolicy: "network-only" });
   const record = data?.lot ?? null;
 
@@ -23,17 +25,17 @@ export function TraceForm() {
   return (
     <div className="max-w-md">
       <form onSubmit={submit} className="flex items-end gap-4">
-        <TextField tone="dark" label="Lot number" name="lot" placeholder="AZ-0000" required autoComplete="off" className="flex-1" />
+        <TextField tone="dark" label={m.trace.lotNumber} name="lot" placeholder="AZ-0000" required autoComplete="off" className="flex-1" />
         <Button type="submit" variant="inverse" arrow disabled={loading}>
-          Trace
+          {m.trace.trace}
         </Button>
       </form>
       <div aria-live="polite" className="mt-4 min-h-6">
-        {error && <p className="text-small text-gold-300">{errorMessage(error)}</p>}
-        {called && !loading && !error && !record && <p className="text-small text-gold-300">No published record for that lot number yet.</p>}
+        {error && <p className="text-small text-gold-300">{server(errorMessage(error))}</p>}
+        {called && !loading && !error && !record && <p className="text-small text-gold-300">{m.trace.none}</p>}
         {record && (
           <div className="border border-ivory/35 p-5">
-            <p className="text-ticket text-gold-300">Lot {record.lot.lotNumber}</p>
+            <p className="text-ticket text-gold-300">{fill(m.shop.lot, { lot: record.lot.lotNumber })}</p>
             <p className="mt-2">
               <Link href={`/products/${record.productSlug}`} className="underline underline-offset-4">
                 {record.productName}
@@ -42,11 +44,11 @@ export function TraceForm() {
             <dl className="text-ticket mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
               {(
                 [
-                  ["Harvest", date(record.lot.harvestDate)],
-                  ["Grove", record.lot.grove ?? "—"],
-                  ["Mill", record.lot.mill ?? "—"],
-                  ["Bottled", date(record.lot.bottledAt)],
-                  ["Best before", date(record.lot.bestBefore)],
+                  [m.product.harvest, date(record.lot.harvestDate)],
+                  [m.trace.grove, record.lot.grove ?? "—"],
+                  [m.product.mill, record.lot.mill ?? "—"],
+                  [m.product.bottled, date(record.lot.bottledAt)],
+                  [m.product.bestBefore, date(record.lot.bestBefore)],
                 ] as const
               ).map(([label, value]) => (
                 <div key={label} className="contents">
@@ -74,6 +76,7 @@ export function TraceForm() {
 }
 
 export function NewsletterForm() {
+  const { m, server } = useI18n();
   const [message, setMessage] = useState("");
   const [subscribe, { loading }] = useMutation(SubscribeNewsletter);
 
@@ -84,18 +87,18 @@ export function NewsletterForm() {
       await subscribe({ variables: { email: String(new FormData(form).get("email") ?? "") } });
       form.reset();
       // Double opt-in: nothing is sent to this address until the link in the confirmation email is used.
-      setMessage("Thank you. Please confirm your address with the link we are emailing you.");
+      setMessage(m.newsletter.thanks);
     } catch (cause) {
-      setMessage(errorMessage(cause));
+      setMessage(server(errorMessage(cause)));
     }
   };
 
   return (
     <form onSubmit={submit}>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-        <TextField tone="dark" label="Email address" name="email" type="email" placeholder="you@example.com" required autoComplete="email" className="flex-1" />
+        <TextField tone="dark" label={m.checkout.email} name="email" type="email" placeholder={m.newsletter.placeholder} required autoComplete="email" className="flex-1" />
         <Button type="submit" variant="inverse" arrow disabled={loading}>
-          Subscribe
+          {m.newsletter.subscribe}
         </Button>
       </div>
       <p role="status" className="text-small mt-3 min-h-6">

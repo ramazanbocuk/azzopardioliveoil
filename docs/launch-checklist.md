@@ -64,3 +64,4 @@ Measured against the full enterprise brief. "Not proven" means written and teste
 
 **Needs a person, not software**
 - Everything under "Legal and tax" above, FAVV/AFSCA registration, packaging obligations, customs advice per destination, an EORI number for exports.
+- *Languages:* the five non-English languages have had no native-speaker review; the home, story, FAQ and legal pages are English only; product text is English until translated in Admin → Translations. See `docs/internationalisation.md`.

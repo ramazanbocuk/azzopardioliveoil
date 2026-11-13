@@ -35,6 +35,7 @@ type Documents = {
     "\n  mutation RequestReturn($number: String!, $reason: String!) {\n    requestReturn(number: $number, reason: $reason)\n  }\n": typeof types.RequestReturnDocument,
     "\n  mutation SendContactMessage($name: String!, $email: String!, $reference: String, $message: String!) {\n    sendContactMessage(name: $name, email: $email, reference: $reference, message: $message)\n  }\n": typeof types.SendContactMessageDocument,
     "\n  mutation SubscribeNewsletter($email: String!) {\n    subscribeNewsletter(email: $email)\n  }\n": typeof types.SubscribeNewsletterDocument,
+    "\n  mutation SetLanguage($locale: String!) {\n    setLanguage(locale: $locale)\n  }\n": typeof types.SetLanguageDocument,
     "\n  mutation RequestPasswordReset($email: String!) {\n    requestPasswordReset(email: $email)\n  }\n": typeof types.RequestPasswordResetDocument,
     "\n  mutation ResetPassword($id: String!, $exp: String!, $sig: String!, $password: String!) {\n    resetPassword(id: $id, exp: $exp, sig: $sig, password: $password)\n  }\n": typeof types.ResetPasswordDocument,
     "\n  query MyData {\n    myData\n  }\n": typeof types.MyDataDocument,
@@ -62,6 +63,7 @@ const documents: Documents = {
     "\n  mutation RequestReturn($number: String!, $reason: String!) {\n    requestReturn(number: $number, reason: $reason)\n  }\n": types.RequestReturnDocument,
     "\n  mutation SendContactMessage($name: String!, $email: String!, $reference: String, $message: String!) {\n    sendContactMessage(name: $name, email: $email, reference: $reference, message: $message)\n  }\n": types.SendContactMessageDocument,
     "\n  mutation SubscribeNewsletter($email: String!) {\n    subscribeNewsletter(email: $email)\n  }\n": types.SubscribeNewsletterDocument,
+    "\n  mutation SetLanguage($locale: String!) {\n    setLanguage(locale: $locale)\n  }\n": types.SetLanguageDocument,
     "\n  mutation RequestPasswordReset($email: String!) {\n    requestPasswordReset(email: $email)\n  }\n": types.RequestPasswordResetDocument,
     "\n  mutation ResetPassword($id: String!, $exp: String!, $sig: String!, $password: String!) {\n    resetPassword(id: $id, exp: $exp, sig: $sig, password: $password)\n  }\n": types.ResetPasswordDocument,
     "\n  query MyData {\n    myData\n  }\n": types.MyDataDocument,
@@ -166,6 +168,10 @@ export function graphql(source: "\n  mutation SendContactMessage($name: String!,
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SubscribeNewsletter($email: String!) {\n    subscribeNewsletter(email: $email)\n  }\n"): (typeof documents)["\n  mutation SubscribeNewsletter($email: String!) {\n    subscribeNewsletter(email: $email)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetLanguage($locale: String!) {\n    setLanguage(locale: $locale)\n  }\n"): (typeof documents)["\n  mutation SetLanguage($locale: String!) {\n    setLanguage(locale: $locale)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -4,6 +4,7 @@ import { updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
+import * as translations from "@/server/translations";
 import * as fulfilment from "@/server/fulfilment";
 import * as twoFactor from "@/server/twoFactor";
 import { formData, run } from "@/server/adminSession";
@@ -385,4 +386,28 @@ export async function resetTwoFactor(adminUserId: string) {
 
 export async function revokeSession(sessionId: string) {
   await run("/admin/security", (ctx) => twoFactor.revokeSession(ctx, sessionId), "Session ended.");
+}
+
+// ── Translations ──
+
+const translationPath = (entity: string, id: string, language: string) => `/admin/translations/${entity}/${id}/${language}`;
+
+export async function saveTranslationAction(entity: string, id: string, language: string, form: FormData) {
+  await run(translationPath(entity, id, language), async (ctx) => {
+    await translations.saveTranslationDraft(ctx, entity, id, language, formData(form));
+  }, "Draft saved. Customers still see the published version.");
+}
+
+export async function publishTranslationAction(entity: string, id: string, language: string) {
+  await run(translationPath(entity, id, language), async (ctx) => {
+    await translations.publishTranslation(ctx, entity, id, language);
+    updateTag(entity === "journal" ? "journal" : "catalog");
+  }, "Published. Customers now see this translation.");
+}
+
+export async function unpublishTranslationAction(entity: string, id: string, language: string) {
+  await run(translationPath(entity, id, language), async (ctx) => {
+    await translations.unpublishTranslation(ctx, entity, id, language);
+    updateTag(entity === "journal" ? "journal" : "catalog");
+  }, "Taken off the shop. Customers see English again.");
 }

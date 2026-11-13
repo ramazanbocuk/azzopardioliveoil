@@ -32,20 +32,9 @@ model Category {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  products     Product[]
-  translations CategoryTranslation[]
+  products Product[]
 }
 
-model CategoryTranslation {
-  id         String   @id @default(cuid())
-  categoryId String
-  locale     String
-  name       String
-  intro      String   @default("")
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@unique([categoryId, locale])
-}
 
 model Product {
   id                 String    @id @default(cuid())
@@ -79,25 +68,11 @@ model Product {
   images       ProductImage[]
   batches      Batch[]
   reviews      Review[]
-  translations ProductTranslation[]
 
   @@index([categoryId])
   @@index([isVisible, position])
 }
 
-model ProductTranslation {
-  id             String  @id @default(cuid())
-  productId      String
-  locale         String
-  name           String
-  blurb          String  @default("")
-  description    String  @default("")
-  seoTitle       String?
-  seoDescription String?
-  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([productId, locale])
-}
 
 model ProductImage {
   id        String  @id @default(cuid())
@@ -1000,4 +975,46 @@ model JournalPost {
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+/// A translation of one record (product, category, journal post) into one language.
+/// English is the source and lives on the record itself; it is never stored here.
+/// Customers only ever see `published`. `draft` is the editor's working copy.
+model Translation {
+  id            String    @id @default(cuid())
+  /// "product", "category" or "journal".
+  entity        String
+  entityId      String
+  /// Two-letter language: de, nl, fr, it, es.
+  language      String
+  /// Field name → text, as being edited. Never shown to customers.
+  draft         Json
+  /// Field name → text, as customers see it. Null until someone with permission publishes.
+  published     Json?
+  /// Fingerprint of the English source when this was published. A different fingerprint today means the source has changed since.
+  sourceHash    String?
+  updatedById   String?
+  publishedById String?
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  revisions TranslationRevision[]
+
+  @@unique([entity, entityId, language])
+  @@index([entity, language])
+}
+
+/// Every save, publication and withdrawal of a translation, with who did it.
+model TranslationRevision {
+  id            String      @id @default(cuid())
+  translationId String
+  /// "draft", "publish" or "unpublish".
+  action        String
+  fields        Json
+  adminUserId   String?
+  createdAt     DateTime    @default(now())
+  translation   Translation @relation(fields: [translationId], references: [id], onDelete: Cascade)
+
+  @@index([translationId, createdAt])
 }

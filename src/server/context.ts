@@ -1,4 +1,5 @@
 import type { AdminUser, Customer } from "@/generated/prisma/client";
+import { LOCALE_COOKIE, ONE_YEAR, isLocale, type Locale } from "@/i18n/config";
 import { hashToken } from "./crypto";
 import type { Db } from "./db";
 
@@ -17,6 +18,8 @@ export type Ctx = {
   setCookies: string[];
   customer: Customer | null;
   admin: AdminUser | null;
+  /** The language of the page that sent the request (header x-azz-locale). Absent for staff and system calls, which are English. */
+  locale?: Locale;
 };
 
 export function parseCookies(header: string | null): Record<string, string> {
@@ -35,6 +38,16 @@ export function setCookie(ctx: Ctx, name: string, value: string, maxAgeSeconds: 
   ctx.cookies[name] = value;
 }
 
+/**
+ * Remembers the language a visitor chose. Unlike every other cookie here it is readable by scripts:
+ * it holds no secret, and the page needs to know whether a choice has been made.
+ */
+export function rememberLocale(ctx: Ctx, locale: Locale) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  ctx.setCookies.push(`${LOCALE_COOKIE}=${locale}; Path=/; SameSite=Lax; Max-Age=${ONE_YEAR}${secure}`);
+  ctx.cookies[LOCALE_COOKIE] = locale;
+}
+
 export function clearCookie(ctx: Ctx, name: string) {
   setCookie(ctx, name, "", 0);
   delete ctx.cookies[name];
@@ -44,6 +57,7 @@ export async function buildContext(db: Db, request: { headers: Headers }): Promi
   const cookies = parseCookies(request.headers.get("cookie"));
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const now = new Date();
+  const sent = request.headers.get("x-azz-locale");
 
   const [session, adminSession] = await Promise.all([
     cookies[COOKIE.session]
@@ -62,5 +76,6 @@ export async function buildContext(db: Db, request: { headers: Headers }): Promi
     setCookies: [],
     customer: session && session.expiresAt > now && !session.customer.erasedAt ? session.customer : null,
     admin: adminSession && adminSession.expiresAt > now && adminSession.adminUser.isActive ? adminSession.adminUser : null,
+    locale: isLocale(sent) ? sent : undefined,
   };
 }

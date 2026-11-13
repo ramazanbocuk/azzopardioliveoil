@@ -6,7 +6,9 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Page";
-import {formatPrice } from "@/content/site";
+import { useI18n } from "@/i18n/client";
+import { SHIP_COOKIE } from "@/i18n/config";
+import { countryName } from "@/i18n/format";
 import { errorMessage } from "@/lib/apollo";
 import { Checkout, ShippingOptionsQuery, StartPayment } from "@/lib/operations";
 import { useCart, useCartActions } from "@/lib/store";
@@ -33,9 +35,16 @@ function Step({ number, title, children }: { number: number; title: string; chil
  */
 export function CheckoutView({ countries }: { countries: { code: string; name: string }[] }) {
   const router = useRouter();
+  const { m, tag, href, fill, money, server } = useI18n();
+  const c = m.checkout;
   const { cart, ready } = useCart();
   const actions = useCartActions();
-  const [country, setCountry] = useState(countries.some((option) => option.code === "BE") ? "BE" : (countries[0]?.code ?? "BE"));
+  const [country, setCountry] = useState(() => {
+    // The delivery country chosen in the selector, if we deliver there; it has nothing to do with the language.
+    const chosen = typeof document === "undefined" ? null : (document.cookie.match(new RegExp(`(?:^|; )${SHIP_COOKIE}=([A-Z]{2})`))?.[1] ?? null);
+    if (chosen && countries.some((option) => option.code === chosen)) return chosen;
+    return countries.some((option) => option.code === "BE") ? "BE" : (countries[0]?.code ?? "BE");
+  });
   const [chosenRate, setChosenRate] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [codeMessage, setCodeMessage] = useState("");
@@ -47,14 +56,14 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
   const [placeOrder] = useMutation(Checkout);
   const [startPayment] = useMutation(StartPayment);
 
-  if (!ready) return <p className="text-lead py-20 text-stone-700">Loading checkout…</p>;
+  if (!ready) return <p className="text-lead py-20 text-stone-700">{c.loading}</p>;
 
   if (cart.lines.length === 0 && !submitting) {
     return (
       <div className="border border-dashed border-ink/30 px-6 py-24 text-center">
-        <p className="text-h2">There is nothing to check out.</p>
+        <p className="text-h2">{c.empty}</p>
         <ButtonLink href="/shop" arrow className="mt-8">
-          Shop the oil
+          {m.common.shopCta}
         </ButtonLink>
       </div>
     );
@@ -72,7 +81,7 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
       setCode("");
       await shipping.refetch();
     } catch (cause) {
-      setCodeMessage(errorMessage(cause));
+      setCodeMessage(server(errorMessage(cause)));
     }
   };
 
@@ -123,10 +132,10 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
         },
       });
       const order = placed.data?.checkout;
-      if (!order?.accessToken) throw new Error("The order could not be created.");
+      if (!order?.accessToken) throw new Error(c.failed);
       await actions.refresh();
 
-      const confirmation = `/order-confirmation?order=${encodeURIComponent(order.number)}&token=${encodeURIComponent(order.accessToken)}`;
+      const confirmation = href("/order-confirmation") + `?order=${encodeURIComponent(order.number)}&token=${encodeURIComponent(order.accessToken)}`;
       if (!paymentAvailable) {
         router.push(confirmation);
         return;
@@ -135,7 +144,7 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
       if (payment.data?.startPayment) window.location.assign(payment.data.startPayment);
       else router.push(confirmation);
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(server(errorMessage(cause)));
       setSubmitting(false);
     }
   };
@@ -143,20 +152,20 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
   return (
     <form onSubmit={submit} className="grid gap-x-8 gap-y-12 lg:grid-cols-12">
       <div className="space-y-12 lg:col-span-7">
-        <Step number={1} title="Contact">
-          <TextField label="Email address" name="email" type="email" required autoComplete="email" hint="For your order confirmation and tracking link." />
+        <Step number={1} title={c.contact}>
+          <TextField label={c.email} name="email" type="email" required autoComplete="email" hint={c.emailHint} />
         </Step>
 
-        <Step number={2} title="Delivery address">
+        <Step number={2} title={c.delivery}>
           <div className="grid gap-x-6 gap-y-6 sm:grid-cols-2">
-            <TextField label="First name" name="firstName" required autoComplete="given-name" />
-            <TextField label="Last name" name="lastName" required autoComplete="family-name" />
-            <TextField label="Street and number" name="address1" required autoComplete="address-line1" className="sm:col-span-2" />
-            <TextField label="Apartment, box (optional)" name="address2" autoComplete="address-line2" className="sm:col-span-2" />
-            <TextField label="Postal code" name="postalCode" required autoComplete="postal-code" />
-            <TextField label="City" name="city" required autoComplete="address-level2" />
+            <TextField label={c.firstName} name="firstName" required autoComplete="given-name" />
+            <TextField label={c.lastName} name="lastName" required autoComplete="family-name" />
+            <TextField label={c.street} name="address1" required autoComplete="address-line1" className="sm:col-span-2" />
+            <TextField label={c.apartment} name="address2" autoComplete="address-line2" className="sm:col-span-2" />
+            <TextField label={c.postalCode} name="postalCode" required autoComplete="postal-code" />
+            <TextField label={c.city} name="city" required autoComplete="address-level2" />
             <SelectField
-              label="Country"
+              label={c.country}
               name="country"
               required
               autoComplete="country"
@@ -169,26 +178,26 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
             >
               {countries.map((option) => (
                 <option key={option.code} value={option.code}>
-                  {option.name}
+                  {countryName(tag, option.code)}
                 </option>
               ))}
             </SelectField>
-            <TextField label="Phone (optional)" name="phone" type="tel" autoComplete="tel" className="sm:col-span-2" hint="Only used by the carrier for delivery." />
-            <TextField label="Note for your order (optional)" name="note" maxLength={500} className="sm:col-span-2" />
+            <TextField label={c.phone} name="phone" type="tel" autoComplete="tel" className="sm:col-span-2" hint={c.phoneHint} />
+            <TextField label={c.note} name="note" maxLength={500} className="sm:col-span-2" />
           </div>
-          <Checkbox label="Send the invoice to a different address or company" name="separateBilling" checked={separateBilling} onChange={(event) => setSeparateBilling(event.target.checked)} className="mt-6" />
+          <Checkbox label={c.separateBilling} name="separateBilling" checked={separateBilling} onChange={(event) => setSeparateBilling(event.target.checked)} className="mt-6" />
           {separateBilling && (
             <div className="mt-6 grid gap-x-6 gap-y-6 border-t border-ink/20 pt-7 sm:grid-cols-2">
-              <p className="text-label sm:col-span-2">Invoice address</p>
-              <TextField label="First name" name="billFirstName" required autoComplete="billing given-name" />
-              <TextField label="Last name" name="billLastName" required autoComplete="billing family-name" />
-              <TextField label="Company (optional)" name="billCompany" autoComplete="billing organization" />
-              <TextField label="VAT number (optional)" name="billVatNumber" />
-              <TextField label="Street and number" name="billAddress1" required autoComplete="billing address-line1" className="sm:col-span-2" />
-              <TextField label="Apartment, box (optional)" name="billAddress2" autoComplete="billing address-line2" className="sm:col-span-2" />
-              <TextField label="Postal code" name="billPostalCode" required autoComplete="billing postal-code" />
-              <TextField label="City" name="billCity" required autoComplete="billing address-level2" />
-              <SelectField label="Country" name="billCountry" required autoComplete="billing country" defaultValue={country} className="sm:col-span-2">
+              <p className="text-label sm:col-span-2">{c.invoiceAddress}</p>
+              <TextField label={c.firstName} name="billFirstName" required autoComplete="billing given-name" />
+              <TextField label={c.lastName} name="billLastName" required autoComplete="billing family-name" />
+              <TextField label={c.company} name="billCompany" autoComplete="billing organization" />
+              <TextField label={c.vatNumber} name="billVatNumber" />
+              <TextField label={c.street} name="billAddress1" required autoComplete="billing address-line1" className="sm:col-span-2" />
+              <TextField label={c.apartment} name="billAddress2" autoComplete="billing address-line2" className="sm:col-span-2" />
+              <TextField label={c.postalCode} name="billPostalCode" required autoComplete="billing postal-code" />
+              <TextField label={c.city} name="billCity" required autoComplete="billing address-level2" />
+              <SelectField label={c.country} name="billCountry" required autoComplete="billing country" defaultValue={country} className="sm:col-span-2">
                 {countries.map((option) => (
                   <option key={option.code} value={option.code}>
                     {option.name}
@@ -199,15 +208,15 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
           )}
         </Step>
 
-        <Step number={3} title="Shipping method">
+        <Step number={3} title={c.shippingMethod}>
           {shipping.loading && options.length === 0 ? (
-            <p className="text-stone-700">Finding shipping options…</p>
+            <p className="text-stone-700">{c.finding}</p>
           ) : options.length === 0 ? (
             <p role="alert" className="text-terracotta-700">
-              We do not deliver to this country yet.
+              {c.noDelivery}
             </p>
           ) : (
-            <div role="radiogroup" aria-label="Shipping method" className="space-y-3">
+            <div role="radiogroup" aria-label={c.shippingMethod} className="space-y-3">
               {options.map((option) => (
                 <label
                   key={option.id}
@@ -220,20 +229,18 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
                       {option.estimate && <span className="text-small block text-stone-700">{option.estimate}</span>}
                     </span>
                   </span>
-                  <span className="tabular-nums">{option.priceCents === 0 ? "Free" : formatPrice(option.priceCents)}</span>
+                  <span className="tabular-nums">{option.priceCents === 0 ? m.common.free : money(option.priceCents)}</span>
                 </label>
               ))}
             </div>
           )}
         </Step>
 
-        <Step number={4} title="Payment">
+        <Step number={4} title={c.payment}>
           {paymentAvailable ? (
-            <p className="max-w-[60ch] text-ink/80">You will be taken to our payment provider’s secure page to pay. Card details are never seen or stored by this site. Your order is confirmed once the payment has been received.</p>
+            <p className="max-w-[60ch] text-ink/80">{c.paymentText}</p>
           ) : (
-            <Notice title="Online payment is not connected yet">
-              No payment provider is configured, so this order will be saved as <strong>awaiting payment</strong> and its stock held for 40 minutes. Nothing is charged.
-            </Notice>
+            <Notice title={c.noProviderTitle}>{c.noProviderText}</Notice>
           )}
         </Step>
       </div>
@@ -241,7 +248,7 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
       <aside aria-labelledby="order-title" className="lg:col-span-4 lg:col-start-9">
         <div className="bg-paper p-7 lg:sticky lg:top-[calc(var(--header-h)+2rem)]">
           <h2 id="order-title" className="text-h3">
-            Your order
+            {c.yourOrder}
           </h2>
           <ul className="mt-6 space-y-4 border-b border-ink/20 pb-6">
             {cart.lines.map((line) => (
@@ -252,25 +259,23 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
                     {line.variant.label} × {line.quantity}
                   </span>
                 </span>
-                <span className="tabular-nums">{formatPrice(line.lineTotalCents)}</span>
+                <span className="tabular-nums">{money(line.lineTotalCents)}</span>
               </li>
             ))}
           </ul>
 
           {cart.discountCode ? (
             <div className="mt-6 flex items-center justify-between gap-4">
-              <p>
-                Code <strong>{cart.discountCode}</strong> applied
-              </p>
+              <p>{fill(c.codeApplied, { code: cart.discountCode })}</p>
               <Button variant="text" onClick={removeCode}>
-                Remove
+                {m.common.remove}
               </Button>
             </div>
           ) : (
             <div className="mt-6 flex items-end gap-3">
-              <TextField label="Discount code" name="discount" autoComplete="off" value={code} onChange={(event) => setCode(event.target.value)} className="flex-1" />
+              <TextField label={c.discountCode} name="discount" autoComplete="off" value={code} onChange={(event) => setCode(event.target.value)} className="flex-1" />
               <Button variant="secondary" size="sm" disabled={code.trim() === ""} onClick={applyCode}>
-                Apply
+                {c.apply}
               </Button>
             </div>
           )}
@@ -280,29 +285,29 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
 
           <dl className="mt-4 space-y-3 border-t border-ink/20 pt-6">
             <div className="flex justify-between gap-6">
-              <dt>Subtotal</dt>
-              <dd className="tabular-nums">{formatPrice(cart.subtotalCents)}</dd>
+              <dt>{c.subtotal}</dt>
+              <dd className="tabular-nums">{money(cart.subtotalCents)}</dd>
             </div>
             {cart.discountCents > 0 && (
               <div className="flex justify-between gap-6">
-                <dt>Discount</dt>
-                <dd className="tabular-nums">−{formatPrice(cart.discountCents)}</dd>
+                <dt>{c.discount}</dt>
+                <dd className="tabular-nums">−{money(cart.discountCents)}</dd>
               </div>
             )}
             <div className="flex justify-between gap-6">
-              <dt>Shipping</dt>
-              <dd className="tabular-nums">{rate ? (rate.priceCents === 0 ? "Free" : formatPrice(rate.priceCents)) : "—"}</dd>
+              <dt>{c.shipping}</dt>
+              <dd className="tabular-nums">{rate ? (rate.priceCents === 0 ? m.common.free : money(rate.priceCents)) : "—"}</dd>
             </div>
             <div className="flex items-baseline justify-between gap-6 border-t border-ink/20 pt-4">
-              <dt className="text-h3">Total</dt>
-              <dd className="font-serif text-[1.75rem] tabular-nums">{formatPrice(totalCents)}</dd>
+              <dt className="text-h3">{c.total}</dt>
+              <dd className="font-serif text-[1.75rem] tabular-nums">{money(totalCents)}</dd>
             </div>
           </dl>
-          <p className="text-small mt-2 text-stone-700">VAT included. The final amount is confirmed by the server when you place the order.</p>
+          <p className="text-small mt-2 text-stone-700">{c.vatNote}</p>
 
-          <Checkbox label="I have read the terms and conditions and the privacy policy" name="terms" required className="mt-6" />
+          <Checkbox label={c.terms} name="terms" required className="mt-6" />
           <Button type="submit" disabled={submitting || !rate} className="mt-5 w-full">
-            {submitting ? "Placing order…" : paymentAvailable ? "Continue to payment" : "Place order (unpaid)"}
+            {submitting ? c.placing : paymentAvailable ? c.continueToPayment : c.placeUnpaid}
           </Button>
           <p role="alert" className="text-small mt-3 min-h-5 text-terracotta-700">
             {error}
