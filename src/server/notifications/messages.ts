@@ -4,6 +4,7 @@ import { languageOf, localizePath, tagOf, toLocale, type Locale } from "@/i18n/c
 import { EMAIL_TEXT, type EmailText } from "@/i18n/emails";
 import { countryName, fill, formatMoney } from "@/i18n/format";
 import type { Email } from "./channels";
+import { EMAIL_LOGO } from "./logo";
 
 /** Message content. Pure functions of the order, so the exact wording is unit-tested. */
 
@@ -21,7 +22,7 @@ const paymentLabel = (order: Order) => (order.paymentStatus === "PAID" ? "Paid" 
 function layout(title: string, body: string): string {
   return `<!doctype html><html><body style="margin:0;background:#f4efe4;font-family:Helvetica,Arial,sans-serif;color:#1a1c16;line-height:1.55">
 <div style="max-width:560px;margin:0 auto;padding:32px 24px">
-<p style="font-family:Georgia,serif;letter-spacing:4px;text-transform:uppercase;font-size:18px;margin:0 0 28px">Azzopardi</p>
+<p style="margin:0 0 28px"><img src="cid:${EMAIL_LOGO.contentId}" width="${EMAIL_LOGO.width}" height="${EMAIL_LOGO.height}" alt="Azzopardi Olive Oil" style="display:block;border:0;font-family:Georgia,serif;font-size:18px;letter-spacing:4px;text-transform:uppercase;color:#1a1c16"></p>
 <h1 style="font-family:Georgia,serif;font-weight:400;font-size:26px;margin:0 0 20px">${escape(title)}</h1>
 ${body}
 </div></body></html>`;
