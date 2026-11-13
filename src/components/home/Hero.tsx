@@ -9,7 +9,7 @@ import { SplitHeading } from "@/motion/SplitHeading";
 import { DUR, EASE, MOTION_OK, gsap, useGSAP } from "@/motion/gsap";
 
 /**
- * Opening shot. The grove settles into frame, the headline rises, and on
+ * Opening shot. A grove settles into frame, the headline rises, and on
  * scroll the hills separate by depth while the copy lifts away.
  */
 export function Hero({ scene }: { scene: ReactNode }) {
@@ -43,7 +43,7 @@ export function Hero({ scene }: { scene: ReactNode }) {
       <div className="container-page relative z-10 flex h-full flex-col pt-[calc(var(--header-h)+clamp(1.5rem,6vh,5rem))]">
         <div data-hero-copy>
           <Reveal immediate delay={0.25}>
-            <p className="text-label text-olive-900">Sicilian extra virgin olive oil</p>
+            <p className="text-label text-olive-900">Extra virgin olive oil, chosen lot by lot</p>
           </Reveal>
           <SplitHeading
             as="h1"
@@ -51,7 +51,7 @@ export function Hero({ scene }: { scene: ReactNode }) {
             delay={0.4}
             className="mt-5 max-w-[15ch] font-serif text-[clamp(3rem,7.4vw,8rem)] leading-[0.96] tracking-[-0.035em] text-olive-900"
           >
-            Every bottle begins on a single morning.
+            Every bottle knows where it came from.
           </SplitHeading>
           <Reveal immediate delay={1.1} className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3">
             <ButtonLink href="/shop" arrow>
@@ -72,7 +72,7 @@ export function Hero({ scene }: { scene: ReactNode }) {
               lot={SAMPLE_LOT}
               rows={[
                 { label: "Harvest", value: "—" },
-                { label: "Grove", value: "—" },
+                { label: "Producer", value: "—" },
               ]}
             />
           </Reveal>

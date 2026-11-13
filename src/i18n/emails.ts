@@ -49,7 +49,7 @@ const en = {
     timing: "The money goes back to the payment method you used. Your bank decides how quickly it appears, usually within a few working days.",
   },
   newsletter: {
-    subject: "Confirm your subscription to letters from the grove",
+    subject: "Confirm your subscription to our letters",
     title: "One step left.",
     text: "Please confirm that you would like to receive letters from Azzopardi Olive Oil:",
     body: "Please confirm that you would like to receive letters from Azzopardi Olive Oil, a few times a year.",

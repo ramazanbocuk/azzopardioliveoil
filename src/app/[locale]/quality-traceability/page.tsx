@@ -15,7 +15,7 @@ export const generateMetadata = localizedMetadata("/quality-traceability", {
 export default function QualityTraceabilityPage() {
   return (
     <>
-      <PageHeader eyebrow="Quality & traceability" title="Every bottle answers for itself." lead="A lot number is printed on each label. It leads to what was recorded for that bottling, and to nothing we cannot back up." />
+      <PageHeader eyebrow="Quality & traceability" title="Every bottle answers for itself." lead="A lot number is printed on each label. It leads to what was recorded for that lot, and to nothing we cannot back up." />
       <DraftBand>Lot lookup is live. No lots have been published yet, so every number currently returns “no published record”.</DraftBand>
 
       <Traceability />
@@ -27,7 +27,7 @@ export default function QualityTraceabilityPage() {
         items={[
           { title: "Find the number", body: "It is on the label of your bottle and on your order confirmation." },
           { title: "Enter it", body: "Use the lot lookup on this page or scan the code on the bottle, once codes are printed." },
-          { title: "Read the record", body: "Harvest day, grove, mill, bottling date and any documents on file for that lot." },
+          { title: "Read the record", body: "Producer, harvest, mill, bottling date and any documents on file for that lot." },
         ]}
       />
 

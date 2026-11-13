@@ -114,18 +114,18 @@ export function productHref(p: Pick<Product, "slug">, ml?: number): string {
 export const navigation = [
   { href: "/shop", label: "Shop" },
   { href: "/our-story", label: "Our Story" },
-  { href: "/olive-groves", label: "Groves" },
+  { href: "/olive-groves", label: "Origins" },
   { href: "/harvest-production", label: "Harvest" },
   { href: "/quality-traceability", label: "Traceability" },
   { href: "/journal", label: "Journal" },
 ] as const;
 
 export const processSteps = [
-  { title: "Picked", body: "Olives come off the branch into nets, never off the ground. The day’s fruit stays together from this moment on." },
-  { title: "Carried", body: "Shallow crates, a short road. Fruit that waits loses what makes it worth pressing." },
-  { title: "Milled", body: "Leaves out, fruit washed, then crushed whole — skin, flesh and stone — into a green paste." },
-  { title: "Settled", body: "Oil is drawn from the paste and left to rest until it clears on its own." },
-  { title: "Numbered", body: "Each bottling receives a lot number. That number follows the bottle to your door." },
+  { title: "Sourced", body: "Each oil comes from a named producer. We record who made it, where, and from which olives." },
+  { title: "Tasted", body: "A lot is tasted before it is taken on. If it does not taste right, nothing else about it matters." },
+  { title: "Measured", body: "We ask for a laboratory report on each lot. What it found appears on the bottle’s page once the report has been checked." },
+  { title: "Numbered", body: "Each lot receives a number. That number follows the bottle to your door." },
+  { title: "Sent", body: "Orders are packed in Belgium and sent with tracking." },
 ] as const;
 
 export type JournalEntry = {
@@ -164,7 +164,7 @@ export const journal: JournalEntry[] = [
     title: "Winter oranges with fennel and black olives",
     tone: "gold",
     label: "orange and fennel salad",
-    standfirst: "A Sicilian winter salad that asks for good oil and little else.",
+    standfirst: "A winter salad that asks for good oil and little else.",
     body: ["Sweet, bitter, salt and oil. It takes ten minutes and is better for being made just before you eat."],
     recipe: {
       serves: "Serves 4",
@@ -188,7 +188,7 @@ export const journal: JournalEntry[] = [
     standfirst: "The harvest is over. The work that decides the next one has begun.",
     body: [
       "In winter the grove looks idle. It is not. Pruning opens each tree to light and air, and what is cut now shapes what the tree will carry in autumn.",
-      "Draft article. The published version will follow the real calendar of the groves.",
+      "Draft article. The published version will follow the real calendar of a producer’s grove.",
     ],
   },
 ];
@@ -201,7 +201,8 @@ export const faq: { group: string; items: { q: string; a: string }[] }[] = [
   {
     group: "The oil",
     items: [
-      { q: "What is a lot number?", a: "Each bottling is given a number. It links your bottle to what has been recorded for that bottling: harvest day, grove, mill and any analysis on file." },
+      { q: "What is a lot number?", a: "Each lot is given a number. It links your bottle to what has been recorded for that lot: producer, harvest, mill and any analysis on file." },
+      { q: "Where do the oils come from?", a: "From producers around the Mediterranean. The country, region and producer recorded for each oil are shown on its page; a dash means it has not been recorded yet." },
       { q: "Where can I find it?", a: "On the label of every bottle, and on your order confirmation." },
       { q: "How should I store the oil?", a: "Storage guidance is printed on each bottle and shown on the product page once it has been entered for that lot." },
     ],

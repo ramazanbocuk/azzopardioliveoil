@@ -20,12 +20,12 @@ export function Intro() {
         </Reveal>
         <div className="lg:col-span-9">
           <SplitHeading id="intro-title" className="text-h1 max-w-[19ch]">
-            Olive oil from Sicily, bottled in small lots and sent to your door from Belgium.
+            Extra virgin olive oils from producers around the Mediterranean, chosen lot by lot and sent to your door from Belgium.
           </SplitHeading>
           <Reveal delay={0.15} className="mt-10 grid gap-8 sm:grid-cols-2 lg:max-w-[52rem]">
             <p className="text-lead text-ink/80">We would rather tell you exactly where a bottle comes from than tell you it is the best. So each one carries a number.</p>
             <div>
-              <p className="text-ink/80">The number leads to a day, a grove and a mill. What we can show you, we publish. What we cannot show you, we do not say.</p>
+              <p className="text-ink/80">The number leads to a producer, a harvest and a mill. What we can show you, we publish. What we cannot show you, we do not say.</p>
               <ButtonLink href="/our-story" variant="text" arrow className="mt-5">
                 Our story
               </ButtonLink>
@@ -43,21 +43,21 @@ export function Heritage() {
       <div className="container-page grid gap-x-8 gap-y-14 lg:grid-cols-12">
         <div className="lg:col-span-6">
           <div className="relative aspect-[4/5]">
-            <Plate parallax={10} tone="olive" label="old olive tree, low light" />
+            <Plate parallax={10} tone="olive" label="a producer in the grove" />
           </div>
         </div>
 
         <div className="flex flex-col justify-between gap-14 lg:col-span-5 lg:col-start-8 lg:pt-[8vw]">
           <div>
             <Reveal>
-              <p className="text-label text-stone-700">Sicilian heritage</p>
+              <p className="text-label text-stone-700">Where the oils come from</p>
             </Reveal>
             <SplitHeading id="heritage-title" className="text-h2 mt-5 max-w-[15ch]">
-              The olive has been at home here for a very long time. We try to stay out of its way.
+              Morocco, Turkey, Italy, Greece, Spain. We go where the oil is good.
             </SplitHeading>
             <Reveal delay={0.1} className="mt-8 max-w-[44ch] space-y-5 text-ink/80">
-              <p>Dry summers, stony ground, wind off the sea. The island does most of the work, and has done for longer than anyone has kept count.</p>
-              <p>Our part is small and practical: pick at the right moment, mill without delay, and keep each day’s oil apart so it can be named.</p>
+              <p>The olive grows right around the Mediterranean, and no one shore has the best of it. Each country has its own varieties, its own ground and its own way of working.</p>
+              <p>We do not grow or press the oil ourselves. Our part is to choose: taste each lot, ask for its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it.</p>
               <ButtonLink href="/our-story" variant="secondary" arrow className="!mt-9">
                 Read the story
               </ButtonLink>
@@ -66,7 +66,7 @@ export function Heritage() {
 
           <div className="ml-auto w-3/5 lg:w-2/3">
             <div className="relative aspect-[4/3]">
-              <Plate parallax={14} tone="terracotta" label="village rooftops" />
+              <Plate parallax={14} tone="terracotta" label="the mill" />
             </div>
           </div>
         </div>
@@ -82,7 +82,7 @@ export function Groves() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
-              <p className="text-label text-stone-700">Groves &amp; harvest</p>
+              <p className="text-label text-stone-700">Producers &amp; harvest</p>
             </Reveal>
             <SplitHeading id="groves-title" className="text-h1 mt-4">
               In the grove
@@ -90,7 +90,7 @@ export function Groves() {
           </div>
           <Reveal>
             <ButtonLink href="/olive-groves" variant="text" arrow>
-              Visit the groves
+              See where each oil comes from
             </ButtonLink>
           </Reveal>
         </div>
@@ -120,8 +120,8 @@ export function Groves() {
 }
 
 const principles = [
-  { title: "Early rather than easy", body: "Fruit is picked when it tastes right, not when it is most convenient or weighs the most." },
-  { title: "One day, one lot", body: "A day’s harvest is milled and kept as its own lot. Lots are not blended to hide a weak one." },
+  { title: "Chosen by tasting and by measurement", body: "An oil is taken on for how it tastes and for what its laboratory report says. Not for where it is from, and not for what it costs." },
+  { title: "One lot, one number", body: "Each lot is kept apart under its own number, with its producer’s name. Lots are not blended to hide a weak one." },
   { title: "Say only what we can show", body: "Certificates, analyses and awards appear on a bottle’s page only when the documents exist." },
 ];
 
@@ -131,7 +131,7 @@ export function Philosophy() {
       <div className="container-page">
         <div className="grid gap-x-8 gap-y-8 lg:grid-cols-12">
           <Reveal className="lg:col-span-3">
-            <p className="text-label text-stone-700">Production philosophy</p>
+            <p className="text-label text-stone-700">How we choose</p>
           </Reveal>
           <SplitHeading id="philosophy-title" className="text-h1 max-w-[14ch] lg:col-span-9">
             Three rules. We wrote them down so you can hold us to them.
@@ -185,7 +185,7 @@ export function Featured({ items }: { items: CatalogItem[] }) {
   );
 }
 
-const ticketRows = ["Harvest", "Grove", "Milled", "Bottled"];
+const ticketRows = ["Producer", "Harvest", "Milled", "Bottled"];
 
 export function Traceability() {
   return (
@@ -199,7 +199,7 @@ export function Traceability() {
             Every bottle answers for itself.
           </SplitHeading>
           <Reveal delay={0.1}>
-            <p className="text-lead mt-7 max-w-[40ch] text-ivory/85">Find the lot number on your label. Enter it, and see what has been recorded for that lot — harvest day, grove, mill and any analysis on file.</p>
+            <p className="text-lead mt-7 max-w-[40ch] text-ivory/85">Find the lot number on your label. Enter it, and see what has been recorded for that lot: producer, harvest, mill and any analysis on file.</p>
             <div className="mt-10">
               <TraceForm />
             </div>
@@ -314,10 +314,10 @@ export function Newsletter() {
       <div className="container-page relative z-10 grid gap-x-8 gap-y-12 py-section-sm lg:grid-cols-12 lg:items-end">
         <div className="lg:col-span-6">
           <SplitHeading id="newsletter-title" className="text-h1 max-w-[12ch]">
-            Letters from the grove
+            Letters from the house
           </SplitHeading>
           <Reveal delay={0.1}>
-            <p className="text-lead mt-6 max-w-[38ch] text-ivory/90">A few times a year: when the harvest starts, when a new lot is bottled, and something to cook.</p>
+            <p className="text-lead mt-6 max-w-[38ch] text-ivory/90">A few times a year: when a harvest comes in, when a new lot arrives, and something to cook.</p>
           </Reveal>
         </div>
         <Reveal className="lg:col-span-5 lg:col-start-8">

@@ -45,7 +45,7 @@ export function Bottle({ ml, lot, className, style, title }: BottleProps) {
         Extra Virgin Olive Oil
       </text>
       <text x="100" y="380" textAnchor="middle" fontSize="5.2" letterSpacing="1.4" fill="#6b6558" style={{ fontFamily: "var(--sans)" }}>
-        SICILIA
+        NUMBERED LOT
       </text>
       <line x1="60" y1="420" x2="140" y2="420" stroke="#1a1c16" strokeOpacity="0.35" strokeWidth="0.6" strokeDasharray="2 2" />
       <text x="60" y="436" fontSize="5.4" letterSpacing="0.6" fill="#1a1c16" style={{ fontFamily: "var(--mono)" }}>
