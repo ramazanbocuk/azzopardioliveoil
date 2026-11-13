@@ -75,7 +75,7 @@ export const it: Messages = {
   },
   shop: {
     metaTitle: "Tutti i prodotti",
-    metaDescription: "Ogni bottiglia Azzopardi, per formato e per lotto.",
+    metaDescription: "Olio extravergine di oliva ricco di polifenoli, da produttori indicati per nome intorno al Mediterraneo. Ogni bottiglia porta il suo numero di lotto.",
     eyebrow: "Negozio",
     title: "Ogni bottiglia",
     lead: "Ciascuna imbottigliata per lotto. Cerca per nome, formato o numero di lotto.",
@@ -134,7 +134,7 @@ export const it: Messages = {
     shippingText: "Gli ordini sono spediti con tracciamento. Tariffe, destinazioni e condizioni di reso si trovano nella {link}.",
     shippingLink: "pagina spedizioni e resi",
     dashTitle: "Perché alcuni campi mostrano un trattino",
-    dashText: "Origine, raccolta, ingredienti, valori nutrizionali e conservazione sono registrati per lotto dall’amministratore. Non vengono mai compilati automaticamente: un trattino indica che l’informazione non è ancora stata inserita.",
+    dashText: "Origine, raccolta, ingredienti, valori nutrizionali e conservazione li registriamo noi, lotto per lotto. Nulla viene compilato automaticamente: un trattino indica che non abbiamo ancora inserito l’informazione.",
     reviews: "Recensioni",
     noReviews: "Ancora nessuna recensione.",
     reviewsText: "I clienti possono lasciare una recensione dopo la consegna dell’ordine. Appare qui dopo la verifica.",
@@ -424,7 +424,7 @@ export const it: Messages = {
   },
   contact: {
     metaTitle: "Contatti",
-    metaDescription: "Contatta Azzopardi.",
+    metaDescription: "Scrivi ad Azzopardi, azienda familiare dell’olio d’oliva, per un ordine, un numero di lotto o l’olio stesso.",
     eyebrow: "Contatti",
     title: "Scrivici.",
     lead: "Domande su un ordine, un lotto o sull’olio stesso. Rispondiamo di persona.",

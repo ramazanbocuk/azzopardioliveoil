@@ -60,7 +60,7 @@ export const shippingReturns: LegalDoc = {
   title: "Shipping & returns",
   intro: "Where we send orders, what it costs, and how to return a bottle.",
   sections: [
-    { heading: "Where we ship", body: ["Orders are packed and sent from Belgium. At launch we plan to deliver to Belgium, Luxembourg, the Netherlands, France, Germany and Italy, with other EU destinations to follow. Destinations outside the EU are not offered until customs and food-import requirements have been confirmed for each."] },
+    { heading: "Where we ship", body: ["At launch we plan to deliver to Belgium, Luxembourg, the Netherlands, France, Germany and Italy, with other EU destinations to follow. Destinations outside the EU are not offered until customs and food-import requirements have been confirmed for each."] },
     { heading: "Rates and delivery times", body: ["Rates depend on destination and parcel weight and are shown at checkout before you pay. [Insert the rate table and delivery estimates once carrier contracts are in place.] The figures currently shown on this site are placeholders."] },
     { heading: "Tracking", body: ["Every parcel is tracked. You receive a tracking link by email when your order is handed to the carrier, and you can follow it from the order tracking page."] },
     { heading: "Damaged or missing parcels", body: ["Glass travels well when packed properly, but accidents happen. If a bottle arrives broken, send us your order number and a photograph within [number] days and we will replace it or refund you."] },

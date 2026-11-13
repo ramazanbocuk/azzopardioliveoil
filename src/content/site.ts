@@ -181,7 +181,7 @@ export const journal: JournalEntry[] = [
   {
     slug: "what-the-trees-are-doing-in-february",
     kind: "Story",
-    kicker: "From the grove",
+    kicker: "With the producers",
     title: "What the trees are doing in February",
     tone: "olive",
     label: "pruned olive tree",
@@ -201,11 +201,15 @@ export const faq: { group: string; items: { q: string; a: string }[] }[] = [
   {
     group: "The oil",
     items: [
-      { q: "What is a lot number?", a: "Each lot is given a number. It links your bottle to what has been recorded for that lot: producer, harvest, mill and any analysis on file." },
+      { q: "Who is behind Azzopardi?", a: "A husband and wife. We choose every oil ourselves, from producers we name on each bottle’s page. We also produce olive oil ourselves, which will be offered as our house blend." },
       { q: "Where do the oils come from?", a: "From producers around the Mediterranean. The country, region and producer recorded for each oil are shown on its page; a dash means it has not been recorded yet." },
-      { q: "Where can I find it?", a: "On the label of every bottle, and on your order confirmation." },
-      { q: "How do I know an oil is high in polyphenols?", a: "By its laboratory report. The polyphenol content measured for a lot is shown on the oil’s page, with the laboratory’s name and the date of the test, once the report has been checked. If no figure is shown, none has been verified yet." },
-      { q: "How should I store the oil?", a: "Storage guidance is printed on each bottle and shown on the product page once it has been entered for that lot." },
+      { q: "What does “extra virgin” mean?", a: "It is the highest grade of olive oil under EU rules. The oil is taken from the olives by mechanical means only, its free acidity is no more than 0.8%, and a trained tasting panel finds fruitiness and no defects." },
+      { q: "What are polyphenols?", a: "Natural compounds found in olives. They are part of what makes an oil taste bitter and peppery. How much an oil contains depends on the olive variety, when the fruit was picked, and how the oil was made and stored. What may be said about them and health is regulated in the EU, so we publish the measured figure and leave it there." },
+      { q: "How do I know an oil is high in polyphenols?", a: "By its laboratory report. The polyphenol content measured for a lot is shown on the oil’s page, with the laboratory’s name and the date of the test, once we have checked the report. If no figure is shown, none has been verified yet." },
+      { q: "Why does the oil taste bitter or peppery?", a: "Bitterness, and a peppery catch at the back of the throat, are normal in a fresh extra virgin olive oil. Tasting panels count both as good qualities, not faults." },
+      { q: "What is a lot number?", a: "Each lot is given a number. It links your bottle to what has been recorded for that lot: producer, harvest, mill and any analysis on file." },
+      { q: "Where can I find the lot number?", a: "On the label of every bottle, and on your order confirmation." },
+      { q: "How should I store the oil?", a: "Away from light and heat, with the cap closed: a cupboard is better than a windowsill or a shelf beside the cooker. The best-before date is printed on each bottle." },
     ],
   },
   {

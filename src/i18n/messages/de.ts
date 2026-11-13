@@ -75,7 +75,7 @@ export const de: Messages = {
   },
   shop: {
     metaTitle: "Alle Produkte",
-    metaDescription: "Jede Flasche von Azzopardi, nach Größe und Charge.",
+    metaDescription: "Natives Olivenöl extra mit hohem Polyphenolgehalt von namentlich genannten Erzeugern rund ums Mittelmeer. Jede Flasche trägt ihre Chargennummer.",
     eyebrow: "Shop",
     title: "Jede Flasche",
     lead: "Jede nach Charge abgefüllt. Suchen Sie nach Name, Größe oder Chargennummer.",
@@ -134,7 +134,7 @@ export const de: Messages = {
     shippingText: "Bestellungen werden mit Sendungsverfolgung verschickt. Tarife, Zielländer und Rückgabebedingungen finden Sie auf der {link}.",
     shippingLink: "Seite zu Versand und Rücksendung",
     dashTitle: "Warum manche Felder einen Strich zeigen",
-    dashText: "Herkunft, Ernte, Zutaten, Nährwerte und Lagerung werden je Charge von der Verwaltung erfasst. Sie werden nie automatisch ausgefüllt; ein Strich bedeutet, dass die Angabe noch nicht eingetragen wurde.",
+    dashText: "Herkunft, Ernte, Zutaten, Nährwerte und Lagerung erfassen wir selbst, Charge für Charge. Nichts wird automatisch ausgefüllt; ein Strich bedeutet, dass wir die Angabe noch nicht eingetragen haben.",
     reviews: "Bewertungen",
     noReviews: "Noch keine Bewertungen.",
     reviewsText: "Kundinnen und Kunden können eine Bewertung abgeben, sobald ihre Bestellung zugestellt wurde. Sie erscheint hier nach Prüfung.",
@@ -424,7 +424,7 @@ export const de: Messages = {
   },
   contact: {
     metaTitle: "Kontakt",
-    metaDescription: "Nehmen Sie Kontakt mit Azzopardi auf.",
+    metaDescription: "Schreiben Sie Azzopardi, einem Familienbetrieb für Olivenöl, zu einer Bestellung, einer Chargennummer oder zum Öl selbst.",
     eyebrow: "Kontakt",
     title: "Schreiben Sie uns.",
     lead: "Fragen zu einer Bestellung, einer Charge oder zum Öl selbst. Wir antworten persönlich.",

@@ -16,10 +16,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const { m, tag } = await getI18n();
   return {
     metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
-    title: { default: m.meta.title, template: "%s — Azzopardi" },
+    title: { default: m.meta.title, template: "%s — Azzopardi Olive Oil" },
     description: m.meta.description,
-    openGraph: { type: "website", siteName: "Azzopardi", locale: tag.replace("-", "_"), title: "Azzopardi", description: m.meta.description },
-    twitter: { card: "summary" },
+    openGraph: { type: "website", siteName: "Azzopardi Olive Oil", locale: tag.replace("-", "_"), title: m.meta.title, description: m.meta.description, images: [{ url: "/brand/share.png", width: 1200, height: 630, alt: "Azzopardi Olive Oil" }] },
+    twitter: { card: "summary_large_image" },
   };
 }
 

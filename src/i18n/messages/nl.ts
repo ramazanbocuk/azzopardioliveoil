@@ -75,7 +75,7 @@ export const nl: Messages = {
   },
   shop: {
     metaTitle: "Alle producten",
-    metaDescription: "Elke fles van Azzopardi, per formaat en per lot.",
+    metaDescription: "Extra vierge olijfolie met een hoog polyfenolgehalte van bij naam genoemde producenten rond de Middellandse Zee. Elke fles draagt haar lotnummer.",
     eyebrow: "Winkel",
     title: "Elke fles",
     lead: "Elk per lot gebotteld. Zoek op naam, formaat of lotnummer.",
@@ -134,7 +134,7 @@ export const nl: Messages = {
     shippingText: "Bestellingen worden verzonden met tracking. Tarieven, bestemmingen en retourvoorwaarden staan op de {link}.",
     shippingLink: "pagina over verzending en retour",
     dashTitle: "Waarom sommige velden een streepje tonen",
-    dashText: "Herkomst, oogst, ingrediënten, voedingswaarden en bewaaradvies worden per lot door de beheerder ingevuld. Ze worden nooit automatisch aangevuld; een streepje betekent dat de informatie nog niet is ingevoerd.",
+    dashText: "Herkomst, oogst, ingrediënten, voedingswaarden en bewaaradvies vullen we zelf in, lot per lot. Niets wordt automatisch aangevuld; een streepje betekent dat we de informatie nog niet hebben ingevoerd.",
     reviews: "Beoordelingen",
     noReviews: "Nog geen beoordelingen.",
     reviewsText: "Klanten kunnen een beoordeling achterlaten zodra hun bestelling is geleverd. Ze verschijnt hier na controle.",
@@ -424,7 +424,7 @@ export const nl: Messages = {
   },
   contact: {
     metaTitle: "Contact",
-    metaDescription: "Neem contact op met Azzopardi.",
+    metaDescription: "Schrijf Azzopardi, een familiebedrijf in olijfolie, over een bestelling, een lotnummer of de olie zelf.",
     eyebrow: "Contact",
     title: "Schrijf ons.",
     lead: "Vragen over een bestelling, een lot of de olie zelf. We antwoorden persoonlijk.",

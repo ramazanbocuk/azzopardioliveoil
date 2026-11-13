@@ -80,7 +80,7 @@ export const en = {
   },
   shop: {
     metaTitle: "Shop all",
-    metaDescription: "Every bottle from Azzopardi, by size and by lot.",
+    metaDescription: "Shop high-polyphenol extra virgin olive oil from named producers around the Mediterranean. Every bottle carries its lot number.",
     eyebrow: "Shop",
     title: "Every bottle",
     lead: "Each bottled by the lot. Search by name, size or lot number.",
@@ -139,7 +139,7 @@ export const en = {
     shippingText: "Orders are sent with tracking. Rates, destinations and the conditions for returns are on the {link}.",
     shippingLink: "shipping and returns page",
     dashTitle: "Why some fields show a dash",
-    dashText: "Origin, harvest, ingredients, nutrition and storage are recorded per lot by the administrator. They are never filled in automatically, so a dash means the information has not been entered yet.",
+    dashText: "We record origin, harvest, ingredients, nutrition and storage ourselves, lot by lot. Nothing is filled in automatically, so a dash means we have not entered it yet.",
     reviews: "Reviews",
     noReviews: "No reviews yet.",
     reviewsText: "Reviews can be left by customers once their order has been delivered. They appear here after verification.",
@@ -429,7 +429,7 @@ export const en = {
   },
   contact: {
     metaTitle: "Contact",
-    metaDescription: "Get in touch with Azzopardi.",
+    metaDescription: "Write to Azzopardi, a family olive oil business, about an order, a lot number or the oil itself.",
     eyebrow: "Contact",
     title: "Write to us.",
     lead: "Questions about an order, a lot, or the oil itself. We answer in person.",

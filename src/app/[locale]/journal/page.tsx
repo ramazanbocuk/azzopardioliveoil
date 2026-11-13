@@ -11,7 +11,7 @@ import { Reveal } from "@/motion/Reveal";
 // The text of this page exists in English only for now, so it is not announced as translated.
 export const generateMetadata = localizedMetadata("/journal", {
   title: "Journal",
-  description: "Recipes, the table, and news from the producers.",
+  description: "Recipes, notes on choosing and tasting olive oil, and news from the producers we work with.",
 }, ENGLISH_ONLY);
 
 export default async function JournalPage() {

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/Page";
 
 // The text of this page exists in English only for now, so it is not announced as translated.
 export const generateMetadata = localizedMetadata("/harvest-production", {
-  title: "Harvest & production",
+  title: "Harvest & production: from the producer to your door",
   description: "How an olive oil is chosen, measured, numbered and sent by Azzopardi, and what is recorded about its harvest and milling.",
 }, ENGLISH_ONLY);
 

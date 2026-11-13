@@ -9,7 +9,7 @@ import { SplitHeading } from "@/motion/SplitHeading";
 // The text of this page exists in English only for now, so it is not announced as translated.
 export const generateMetadata = localizedMetadata("/quality-traceability", {
   title: "Quality & traceability",
-  description: "How every bottle of Azzopardi olive oil is traced by its lot number.",
+  description: "Every bottle of Azzopardi olive oil carries a lot number. Enter it to see the producer, harvest, mill and any laboratory report on file for that lot.",
 }, ENGLISH_ONLY);
 
 export default function QualityTraceabilityPage() {
@@ -39,7 +39,7 @@ export default function QualityTraceabilityPage() {
             </Reveal>
             <SplitHeading className="text-h2 mt-5 max-w-[14ch]">Proof is published, not promised.</SplitHeading>
             <Reveal delay={0.1} className="mt-6 max-w-[44ch] space-y-4 text-ink/80">
-              <p>Laboratory analyses, certifications and awards are shown for a lot only when the document has been uploaded and checked by the administrator.</p>
+              <p>Laboratory analyses, certifications and awards are shown for a lot only when we hold the document and have checked it ourselves.</p>
               <p>Until then the record shows a dash. We do not describe an oil with numbers we do not hold.</p>
             </Reveal>
           </div>

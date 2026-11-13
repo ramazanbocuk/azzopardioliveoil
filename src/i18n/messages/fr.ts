@@ -75,7 +75,7 @@ export const fr: Messages = {
   },
   shop: {
     metaTitle: "Tous les produits",
-    metaDescription: "Toutes les bouteilles Azzopardi, par format et par lot.",
+    metaDescription: "Huile d’olive vierge extra riche en polyphénols, de producteurs nommés autour de la Méditerranée. Chaque bouteille porte son numéro de lot.",
     eyebrow: "Boutique",
     title: "Toutes les bouteilles",
     lead: "Chacune embouteillée par lot. Recherchez par nom, format ou numéro de lot.",
@@ -134,7 +134,7 @@ export const fr: Messages = {
     shippingText: "Les commandes sont expédiées avec suivi. Les tarifs, les destinations et les conditions de retour figurent sur la {link}.",
     shippingLink: "page livraison et retours",
     dashTitle: "Pourquoi certains champs affichent un tiret",
-    dashText: "L’origine, la récolte, les ingrédients, les valeurs nutritionnelles et la conservation sont saisis par lot par l’administrateur. Ils ne sont jamais remplis automatiquement : un tiret signifie que l’information n’a pas encore été saisie.",
+    dashText: "Nous saisissons nous-mêmes, lot par lot, l’origine, la récolte, les ingrédients, les valeurs nutritionnelles et la conservation. Rien n’est rempli automatiquement : un tiret signifie que nous n’avons pas encore saisi l’information.",
     reviews: "Avis",
     noReviews: "Pas encore d’avis.",
     reviewsText: "Les clients peuvent laisser un avis une fois leur commande livrée. Il apparaît ici après vérification.",
@@ -424,7 +424,7 @@ export const fr: Messages = {
   },
   contact: {
     metaTitle: "Contact",
-    metaDescription: "Contactez Azzopardi.",
+    metaDescription: "Écrivez à Azzopardi, entreprise familiale d’huile d’olive, au sujet d’une commande, d’un numéro de lot ou de l’huile elle-même.",
     eyebrow: "Contact",
     title: "Écrivez-nous.",
     lead: "Des questions sur une commande, un lot ou l’huile elle-même. Nous répondons en personne.",
