@@ -1,4 +1,5 @@
 import { appEnvironment, emailAllowed } from "../environment";
+import { EMAIL_LOGO } from "./logo";
 /**
  * Outbound channels: email (Resend), WhatsApp (Meta's official Cloud API)
  * and SMS (Twilio). Each talks to the provider's HTTPS API directly with
@@ -57,6 +58,10 @@ export class Withheld extends Error {
 
 export type Email = { to: string; subject: string; html: string; text: string; replyTo?: string };
 
+// A message that shows the logo carries it along, so it appears without the reader loading pictures from the shop.
+const LOGO_REFERENCE = `cid:${EMAIL_LOGO.contentId}`;
+const LOGO_ATTACHMENT = { filename: EMAIL_LOGO.filename, content: EMAIL_LOGO.base64, content_id: EMAIL_LOGO.contentId };
+
 /** Resend. `idempotencyKey` lets a retried job be sent at most once by the provider. */
 export async function sendEmail(email: Email, idempotencyKey: string, env: Env = process.env, transport: Transport = defaultTransport): Promise<void> {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) throw new NotConfigured("Email (RESEND_API_KEY and EMAIL_FROM)");
@@ -68,7 +73,7 @@ export async function sendEmail(email: Email, idempotencyKey: string, env: Env =
     "Email",
     "https://api.resend.com/emails",
     { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json", "idempotency-key": idempotencyKey },
-    JSON.stringify({ from: env.EMAIL_FROM, to: [email.to], subject, html: email.html, text: email.text, ...(email.replyTo ? { reply_to: email.replyTo } : {}) }),
+    JSON.stringify({ from: env.EMAIL_FROM, to: [email.to], subject, html: email.html, text: email.text, ...(email.replyTo ? { reply_to: email.replyTo } : {}), ...(email.html.includes(LOGO_REFERENCE) ? { attachments: [LOGO_ATTACHMENT] } : {}) }),
   );
 }
 

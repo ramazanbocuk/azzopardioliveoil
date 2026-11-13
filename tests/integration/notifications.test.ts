@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { GET as cron } from "@/app/api/cron/jobs/route";
 import { MAX_ATTEMPTS, processJobs, requeueJob } from "@/server/jobs";
 import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Transport } from "@/server/notifications/channels";
-import { customerConfirmationEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, signLink, verifyLink } from "@/server/notifications/messages";
+import { contactEmail, customerConfirmationEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, signLink, verifyLink } from "@/server/notifications/messages";
 import { db, resetDb, seedCatalog, BILL } from "../helpers";
 
 // Placeholder values: nothing here is a real credential and no request leaves the machine.
@@ -92,7 +92,10 @@ describe("message content", () => {
     const hostile = { ...order, shipFirstName: `<script>alert(1)</script>`, customerNote: `"><img src=x onerror=1>` };
     const html = ownerEmail(hostile, "owner@example.com").html + customerConfirmationEmail(hostile).html;
     expect(html).not.toContain("<script>");
-    expect(html).not.toContain("<img");
+    // The only pictures are the logo, one in each of the two emails; the customer's own "<img" arrives as text.
+    expect(html.match(/<img/g)).toHaveLength(2);
+    expect(html.match(/<img src="cid:azzopardi-logo"/g)).toHaveLength(2);
+    expect(html).toContain("&lt;img src=x");
     expect(html).toContain("&lt;script&gt;");
   });
 
@@ -115,6 +118,21 @@ describe("channels", () => {
     expect(calls[0].headers).toMatchObject({ authorization: "Bearer re_test_placeholder", "idempotency-key": "job-1" });
     expect(JSON.parse(calls[0].body)).toMatchObject({ from: ENV.EMAIL_FROM, to: ["a@b.co"], subject: "Hi" });
     expect(calls[0].body).not.toContain("re_test_placeholder");
+  });
+
+  it("carries the logo inside an email that shows it, and attaches nothing otherwise", async () => {
+    const { calls, transport } = recorder();
+    const email = contactEmail({ name: "A reader", email: "reader@example.com", body: "Hello" }, "owner@example.com");
+    expect(email.html).toContain('src="cid:azzopardi-logo"');
+    expect(email.html).toContain('alt="Azzopardi Olive Oil"');
+    await sendEmail(email, "job-logo", ENV, transport);
+    await sendEmail({ to: "a@b.co", subject: "Hi", html: "<p>Hi</p>", text: "Hi" }, "job-plain", ENV, transport);
+    const [withLogo, plain] = calls.map((call) => JSON.parse(call.body));
+    expect(withLogo.attachments).toHaveLength(1);
+    expect(withLogo.attachments[0]).toMatchObject({ filename: "azzopardi.png", content_id: "azzopardi-logo" });
+    // A PNG file, base64-encoded.
+    expect(Buffer.from(withLogo.attachments[0].content, "base64").subarray(1, 4).toString()).toBe("PNG");
+    expect(plain.attachments).toBeUndefined();
   });
 
   it("sends WhatsApp as an approved template with clean parameters", async () => {
