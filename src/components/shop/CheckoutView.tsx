@@ -2,12 +2,12 @@
 
 import { useMutation, useQuery } from "@apollo/client/react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Page";
-import { useI18n } from "@/i18n/client";
-import { SHIP_COOKIE } from "@/i18n/config";
+import { rememberShipTo, useI18n } from "@/i18n/client";
+import { LOCALES, SHIP_COOKIE } from "@/i18n/config";
 import { countryName } from "@/i18n/format";
 import { errorMessage } from "@/lib/apollo";
 import { Checkout, ShippingOptionsQuery, StartPayment } from "@/lib/operations";
@@ -35,7 +35,7 @@ function Step({ number, title, children }: { number: number; title: string; chil
  */
 export function CheckoutView({ countries }: { countries: { code: string; name: string }[] }) {
   const router = useRouter();
-  const { m, tag, href, fill, money, server } = useI18n();
+  const { m, tag, href, fill, money: format, server, locale } = useI18n();
   const c = m.checkout;
   const { cart, ready } = useCart();
   const actions = useCartActions();
@@ -43,6 +43,9 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
     // The delivery country chosen in the selector, if we deliver there; it has nothing to do with the language.
     const chosen = typeof document === "undefined" ? null : (document.cookie.match(new RegExp(`(?:^|; )${SHIP_COOKIE}=([A-Z]{2})`))?.[1] ?? null);
     if (chosen && countries.some((option) => option.code === chosen)) return chosen;
+    // Otherwise the country this page's address names (en-us: the United States), when we deliver there.
+    const named = LOCALES[locale].country;
+    if (named && countries.some((option) => option.code === named)) return named;
     return countries.some((option) => option.code === "BE") ? "BE" : (countries[0]?.code ?? "BE");
   });
   const [chosenRate, setChosenRate] = useState<string | null>(null);
@@ -53,6 +56,9 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
   const [separateBilling, setSeparateBilling] = useState(false);
 
   const shipping = useQuery(ShippingOptionsQuery, { variables: { countryCode: country }, skip: !ready || cart.lines.length === 0, fetchPolicy: "network-only" });
+  // The delivery country decides the currency. Saying which one is chosen makes the cart, and every price on the page, follow it.
+  useEffect(() => rememberShipTo(country), [country]);
+  const money = (cents: number) => format(cents, cart.currency);
   const [placeOrder] = useMutation(Checkout);
   const [startPayment] = useMutation(StartPayment);
 
@@ -104,6 +110,8 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
           input: {
             email: field("email"),
             shippingRateId: rate.id,
+            // What the customer was shown. The server refuses the order if this address is charged in another currency.
+            currency: cart.currency,
             address: {
               firstName: field("firstName"),
               lastName: field("lastName"),

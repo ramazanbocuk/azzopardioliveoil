@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addOrderNote, getOrder, listCustomers, listOrders } from "../admin";
+import { addOrderNote, getOrder, listCustomers, listOrders, paidByCurrency } from "../admin";
 import { listSupportRequests, saveArticle } from "../assistantAdmin";
 import { inventoryOverview, salesReport } from "../backoffice";
 import { requireAdmin } from "../auth";
@@ -45,7 +45,8 @@ type Tool = AnyTool<StaffContext> & { tier: Tier };
 
 const object = (properties: Record<string, unknown>): ToolSpec["input_schema"] => ({ type: "object", properties, required: Object.keys(properties), additionalProperties: false });
 const nullable = (type: string, description: string) => ({ type: [type, "null"], description });
-const euros = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+/** An amount with its currency. Euro keeps its sign; any other currency is written out, so it cannot be misread as euro. */
+const amount = (cents: number, currency = "EUR") => (currency === "EUR" ? `€${(cents / 100).toFixed(2)}` : `${(cents / 100).toFixed(2)} ${currency}`);
 const day = (date: Date | null | undefined) => (date ? date.toISOString().slice(0, 10) : null);
 const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const link = (actions: StaffActions, label: string, href: string) => {
@@ -75,7 +76,7 @@ const findOrders: Tool = {
       result: {
         matching: found.count,
         shown: found.rows.length,
-        orders: found.rows.map((order) => ({ number: order.number, placed: day(order.placedAt), customer: `${order.shipFirstName} ${order.shipLastName}`, country: order.shipCountryCode, total: euros(order.totalCents), payment: order.paymentStatus, dispatch: order.fulfilmentStatus, cancelled: !!order.cancelledAt, units: order.items.reduce((sum, item) => sum + item.quantity, 0), page: link(actions, `Order ${order.number}`, `/admin/orders/${order.id}`) })),
+        orders: found.rows.map((order) => ({ number: order.number, placed: day(order.placedAt), customer: `${order.shipFirstName} ${order.shipLastName}`, country: order.shipCountryCode, total: amount(order.totalCents, order.currency), payment: order.paymentStatus, dispatch: order.fulfilmentStatus, cancelled: !!order.cancelledAt, units: order.items.reduce((sum, item) => sum + item.quantity, 0), page: link(actions, `Order ${order.number}`, `/admin/orders/${order.id}`) })),
         note: found.count > found.rows.length ? "More orders match than are shown. Narrow the search, or tell the person to open the orders screen." : undefined,
       },
     };
@@ -93,6 +94,7 @@ const getOrderTool: Tool = {
     const { orderNumber } = z.object({ orderNumber: z.string().min(3).max(30) }).parse(input);
     const order = await getOrder(ctx, orderNumber.trim().replace(/^#/, ""));
     const shipments = order.shipments.filter((shipment) => !shipment.cancelledAt);
+    const euros = (cents: number) => amount(cents, order.currency);
     const nameOf = new Map(order.items.map((item) => [item.id, `${item.productName} ${item.variantLabel}`]));
     const payment = order.payments.find((entry) => ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"].includes(entry.status)) ?? null;
     const refunded = payment ? payment.refunds.filter((refund) => refund.failedAt === null).reduce((sum, refund) => sum + refund.amountCents, 0) : 0;
@@ -185,14 +187,17 @@ const stockLevels: Tool = {
 
 const salesSummary: Tool = {
   tier: "read",
-  spec: { name: "sales_summary", description: "Sales for a period, counted by payment date: orders, gross, VAT, shipping charged, discounts, refunds, average order, best-selling sizes and countries. Null dates give the current month.", input_schema: object({ fromDate: nullable("string", "First day, YYYY-MM-DD."), toDate: nullable("string", "Last day, YYYY-MM-DD.") }) },
+  spec: { name: "sales_summary", description: "Sales for a period in ONE currency, counted by payment date: orders, gross, VAT, shipping charged, discounts, refunds, average order, best-selling sizes and countries. Null dates give the current month; null currency gives euro. Amounts in different currencies must never be added together: ask once per currency and report them separately.", input_schema: object({ fromDate: nullable("string", "First day, YYYY-MM-DD."), toDate: nullable("string", "Last day, YYYY-MM-DD."), currency: nullable("string", "EUR, USD or GBP. Null for euro.") }) },
   async run(input, { ctx, actions }) {
-    const data = z.object({ fromDate: dateInput, toDate: dateInput }).parse(input);
-    const report = await salesReport(ctx, { from: data.fromDate ?? undefined, to: data.toDate ?? undefined });
+    const data = z.object({ fromDate: dateInput, toDate: dateInput, currency: z.enum(["EUR", "USD", "GBP"]).nullable() }).parse(input);
+    const report = await salesReport(ctx, { from: data.fromDate ?? undefined, to: data.toDate ?? undefined, currency: data.currency ?? undefined });
+    const euros = (cents: number) => amount(cents, report.currency);
     link(actions, "Sales report", "/admin/reports");
     return {
       result: {
         period: { from: day(report.range.from), to: day(report.range.to) },
+        currency: report.currency,
+        otherCurrenciesWithSales: report.currencies.filter((code) => code !== report.currency),
         paidOrders: report.orders,
         gross: euros(report.grossCents),
         vat: euros(report.taxCents),
@@ -227,7 +232,7 @@ const findCustomers: Tool = {
   async run(input, { ctx, actions }) {
     const { query } = z.object({ query: z.string().min(2).max(120) }).parse(input);
     const rows = await listCustomers(ctx, query);
-    return { result: { found: rows.length, customers: rows.slice(0, 20).map((row) => ({ name: `${row.firstName} ${row.lastName}`, email: row.email, since: day(row.createdAt), orders: row._count.orders, paidInTotal: euros(row.orders.reduce((sum, order) => sum + order.totalCents, 0)), page: link(actions, `${row.firstName} ${row.lastName}`, `/admin/customers/${row.id}`) })) } };
+    return { result: { found: rows.length, customers: rows.slice(0, 20).map((row) => ({ name: `${row.firstName} ${row.lastName}`, email: row.email, since: day(row.createdAt), orders: row._count.orders, paidInTotal: paidByCurrency(row.orders) || "nothing", page: link(actions, `${row.firstName} ${row.lastName}`, `/admin/customers/${row.id}`) })) } };
   },
 };
 
@@ -343,14 +348,14 @@ const proposeRefund: Tool = {
   spec: {
     name: "propose_refund",
     description: "Asks the person to approve a refund through the payment provider. You cannot refund. Call get_order first and use its figures. Only for a person who has asked for a refund and named the amount, or said 'in full'.",
-    input_schema: object({ orderNumber: { type: "string" }, amountEuros: { type: "string", description: "The amount, such as 18.50." }, reason: nullable("string", "Why, in a few words, as the person gave it."), putUnitsBackInStock: { type: "boolean", description: "True only if the person said the goods are back or were never sent." } }),
+    input_schema: object({ orderNumber: { type: "string" }, amountEuros: { type: "string", description: "The amount, such as 18.50, in the currency the order was paid in (get_order shows it). Never convert between currencies." }, reason: nullable("string", "Why, in a few words, as the person gave it."), putUnitsBackInStock: { type: "boolean", description: "True only if the person said the goods are back or were never sent." } }),
   },
   async run(input, context) {
     mayPropose(context.ctx, "refund");
     const data = z.object({ orderNumber: z.string().min(3).max(30), amountEuros: amountInput, reason: z.string().max(300).nullable(), putUnitsBackInStock: z.boolean() }).parse(input);
-    const order = await context.ctx.db.order.findFirst({ where: { number: data.orderNumber.trim().replace(/^#/, "").toUpperCase() }, select: { id: true, number: true } });
+    const order = await context.ctx.db.order.findFirst({ where: { number: data.orderNumber.trim().replace(/^#/, "").toUpperCase() }, select: { id: true, number: true, currency: true } });
     if (!order) throw new AppError("NOT_FOUND", "Order not found.");
-    return propose(context, "refund", { orderId: order.id, orderNumber: order.number, amountCents: Math.round(Number(data.amountEuros.replace(",", ".")) * 100), reason: data.reason, restock: data.putUnitsBackInStock });
+    return propose(context, "refund", { orderId: order.id, orderNumber: order.number, currency: order.currency, amountCents: Math.round(Number(data.amountEuros.replace(",", ".")) * 100), reason: data.reason, restock: data.putUnitsBackInStock });
   },
 };
 
@@ -364,9 +369,9 @@ const proposeCancelUnits: Tool = {
   async run(input, context) {
     mayPropose(context.ctx, "cancel_units");
     const data = z.object({ orderNumber: z.string().min(3).max(30), sku: z.string().min(1).max(60), quantity: z.number().int().min(1).max(10_000) }).parse(input);
-    const item = await context.ctx.db.orderItem.findFirst({ where: { sku: { equals: data.sku.trim(), mode: "insensitive" }, order: { number: data.orderNumber.trim().replace(/^#/, "").toUpperCase() } }, select: { id: true, sku: true, orderId: true, order: { select: { number: true } } } });
+    const item = await context.ctx.db.orderItem.findFirst({ where: { sku: { equals: data.sku.trim(), mode: "insensitive" }, order: { number: data.orderNumber.trim().replace(/^#/, "").toUpperCase() } }, select: { id: true, sku: true, orderId: true, order: { select: { number: true, currency: true } } } });
     if (!item) throw new AppError("NOT_FOUND", "That order has no line with that SKU.");
-    return propose(context, "cancel_units", { orderId: item.orderId, orderNumber: item.order.number, orderItemId: item.id, sku: item.sku, quantity: data.quantity });
+    return propose(context, "cancel_units", { orderId: item.orderId, orderNumber: item.order.number, currency: item.order.currency, orderItemId: item.id, sku: item.sku, quantity: data.quantity });
   },
 };
 

@@ -5,6 +5,7 @@ import { loadCatalog } from "../catalogView";
 import { listOrdersForCustomer, shippingOptions } from "../checkout";
 import type { Ctx } from "../context";
 import { AppError } from "../errors";
+import { currencyOf, marketFor } from "../markets";
 import { openBackorder, outstanding } from "../stock";
 import type { ToolSpec } from "./provider";
 
@@ -40,14 +41,16 @@ const nullable = (type: string, description: string) => ({ type: [type, "null"],
 const refusal = (message: string): Outcome => ({ result: { error: message }, isError: true });
 
 const locale = (ctx: Ctx) => toLocale(ctx.locale);
-const money = (ctx: Ctx, cents: number) => formatMoney(tagOf(locale(ctx)), cents);
+const money = (ctx: Ctx, cents: number, currency: string) => formatMoney(tagOf(locale(ctx)), cents, currency);
+const NOT_SOLD = "not sold for delivery to the customer's country";
 const link = (ctx: Ctx, path: string) => localizePath(locale(ctx), path);
 
-function sizes(ctx: Ctx, product: Awaited<ReturnType<typeof loadCatalog>>["products"][number]) {
+/** Sizes with their price in the currency of the country the customer has things delivered to. A size with no price there is said to be not sold there, never priced by conversion. */
+function sizes(ctx: Ctx, product: Awaited<ReturnType<typeof loadCatalog>>["products"][number], currency: string) {
   return product.variants.map((variant) => ({
     sku: variant.sku,
     size: variant.label,
-    price: money(ctx, variant.priceCents),
+    price: variant.prices[currency] === undefined ? NOT_SOLD : money(ctx, variant.prices[currency], currency),
     availability: variant.inStock ? "in stock" : variant.backorder ? "not in stock; can be ordered now and is sent when it arrives" : "sold out",
   }));
 }
@@ -60,6 +63,7 @@ const searchProducts: Tool = {
   },
   async run(input, { ctx }) {
     const { query } = z.object({ query: z.string().max(200).nullable() }).parse(input);
+    const currency = await currencyOf(ctx);
     const { products, categories } = await loadCatalog(ctx.db, languageOf(locale(ctx)));
     const words = (query ?? "").toLowerCase().split(/\s+/).filter((word) => word.length > 1);
     const tag = tagOf(locale(ctx));
@@ -83,7 +87,7 @@ const searchProducts: Tool = {
           country: product.profile.country ? countryName(tag, product.profile.country) : NOT_RECORDED,
           region: product.profile.region ?? NOT_RECORDED,
           varieties: product.profile.varieties.length ? product.profile.varieties.map((entry) => entry.name) : NOT_RECORDED,
-          sizes: sizes(ctx, product),
+          sizes: sizes(ctx, product, currency),
           hasVerifiedLabResults: product.lab.length > 0,
           page: link(ctx, `/products/${product.slug}`),
         })),
@@ -101,6 +105,7 @@ const getProduct: Tool = {
   },
   async run(input, { ctx }) {
     const { slug } = z.object({ slug: z.string().max(140) }).parse(input);
+    const currency = await currencyOf(ctx);
     const { products } = await loadCatalog(ctx.db, languageOf(locale(ctx)));
     const product = products.find((entry) => entry.slug === slug.trim().toLowerCase());
     if (!product) return refusal("No product with that slug is sold. Use search_products to find what exists.");
@@ -146,7 +151,7 @@ const getProduct: Tool = {
         ingredients: facts.ingredients ?? NOT_RECORDED,
         storage: facts.storage ?? NOT_RECORDED,
         packaging: profile.packaging ?? NOT_RECORDED,
-        sizes: sizes(ctx, product),
+        sizes: sizes(ctx, product, currency),
         waitWhenOutOfStock: product.backorderNote ?? NOT_RECORDED,
         page: link(ctx, `/products/${product.slug}`),
         rule: `Where a field says "${NOT_RECORDED}", tell the customer the shop has not recorded it. Never supply it from general knowledge.`,
@@ -163,13 +168,14 @@ const showProducts: Tool = {
   },
   async run(input, { ctx, actions }) {
     const { slugs } = z.object({ slugs: z.array(z.string().max(140)).min(1).max(8) }).parse(input);
+    const currency = await currencyOf(ctx);
     const { products } = await loadCatalog(ctx.db, languageOf(locale(ctx)));
     const found = [...new Set(slugs)].flatMap((slug) => products.filter((product) => product.slug === slug)).slice(0, 4);
     if (found.length === 0) return refusal("None of those slugs is a product in the shop.");
     for (const product of found) {
       if (actions.products.some((entry) => entry.slug === product.slug)) continue;
-      const lowest = Math.min(...product.variants.map((variant) => variant.priceCents));
-      actions.products.push({ slug: product.slug, name: product.name, blurb: product.blurb, price: Number.isFinite(lowest) ? money(ctx, lowest) : "", url: link(ctx, `/products/${product.slug}`) });
+      const lowest = Math.min(...product.variants.flatMap((variant) => (variant.prices[currency] === undefined ? [] : [variant.prices[currency]])));
+      actions.products.push({ slug: product.slug, name: product.name, blurb: product.blurb, price: Number.isFinite(lowest) ? money(ctx, lowest, currency) : "", url: link(ctx, `/products/${product.slug}`) });
     }
     return { result: { shown: found.map((product) => product.name) } };
   },
@@ -188,7 +194,9 @@ const proposeAddToCart: Tool = {
     const variant = product?.variants.find((entry) => entry.sku === sku);
     if (!product || !variant) return refusal("That SKU is not sold. Use get_product to see the sizes that exist.");
     if (!variant.inStock && !variant.backorder) return refusal(`${product.name} ${variant.label} is sold out and cannot be ordered. Tell the customer, and suggest another size or product only if one is in stock.`);
-    actions.cart.push({ sku, quantity, name: `${product.name} ${variant.label}`, price: money(ctx, variant.priceCents) });
+    const currency = await currencyOf(ctx);
+    if (variant.prices[currency] === undefined) return refusal(`${product.name} ${variant.label} is not sold for delivery to the customer's country. Tell the customer; do not offer it.`);
+    actions.cart.push({ sku, quantity, name: `${product.name} ${variant.label}`, price: money(ctx, variant.prices[currency], currency) });
     return { result: { buttonShown: true, item: `${quantity} × ${product.name} ${variant.label}`, note: `A button has been shown. Nothing is in the cart until the customer presses it; say so.${variant.inStock ? "" : " This size is not in stock: it would be sent when it arrives."}` } };
   },
 };
@@ -203,13 +211,15 @@ const getShippingOptions: Tool = {
     const { countryCode } = z.object({ countryCode: z.string().length(2) }).parse(input);
     try {
       const options = await shippingOptions(ctx, countryCode);
+      // Rates are in the currency that country is sold to in, which may not be the one the customer has been browsing in.
+      const currency = (await marketFor(ctx.db, countryCode.toUpperCase())).currency;
       const name = countryName(tagOf(locale(ctx)), countryCode.toUpperCase());
       if (options.length === 0) return { result: { country: name, delivers: false, note: "The shop does not deliver to this country at the moment. Say so; do not suggest a workaround." } };
       return {
         result: {
           country: name,
           delivers: true,
-          methods: options.map((option) => ({ name: option.name, carrier: option.carrier ?? NOT_RECORDED, price: option.priceCents === 0 ? "free" : money(ctx, option.priceCents), deliveryTimeAsStatedByTheShop: option.estimate ?? NOT_RECORDED })),
+          methods: options.map((option) => ({ name: option.name, carrier: option.carrier ?? NOT_RECORDED, price: option.priceCents === 0 ? "free" : money(ctx, option.priceCents, currency), deliveryTimeAsStatedByTheShop: option.estimate ?? NOT_RECORDED })),
           note: "Prices are for the current cart and are confirmed at checkout. Delivery times are only what the shop has stated above; if none is stated, say the shop gives no estimate. Policies on returns are on the shipping and returns page.",
           page: link(ctx, "/shipping-returns"),
         },
@@ -268,7 +278,7 @@ const getMyOrders: Tool = {
             placed: day(order.placedAt),
             status: order.status,
             payment: order.paymentStatus,
-            total: money(ctx, order.totalCents),
+            total: money(ctx, order.totalCents, order.currency),
             shipments: order.shipments.map((shipment, index) => ({
               shipment: `${index + 1} of ${order.shipments.length + (toCome.length ? 1 : 0)}`,
               contains: shipment.items.map((line) => `${line.quantity} × ${line.orderItem.productName} ${line.orderItem.variantLabel}`),

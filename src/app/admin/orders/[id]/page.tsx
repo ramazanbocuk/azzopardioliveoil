@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge, Card, Check, Field, Flash, LinkButton, Page, Submit, Table, TextArea, cellLink, dateTime, euros, money } from "@/components/admin/ui";
+import { Badge, Card, Check, Field, Flash, LinkButton, Page, Submit, Table, TextArea, cellLink, dateTime, euros, money as format } from "@/components/admin/ui";
 import { getOrder } from "@/server/admin";
 import { AppError } from "@/server/errors";
 import { compareRates, openAttempts, type RateComparison } from "@/server/fulfilment";
@@ -44,6 +44,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
   if (!ctx.admin) return null;
   const [{ id }, flash] = await Promise.all([params, searchParams]);
   const order = await getOrder(ctx, id);
+  const money = (cents: number | null | undefined) => format(cents, order.currency);
   const refunded = order.payments.flatMap((p) => p.refunds).filter((r) => !r.failedAt).reduce((sum, r) => sum + r.amountCents, 0);
   const openDisputes = order.payments.flatMap((p) => p.disputes).filter((d) => !d.closedAt);
   const refundable = order.payments.filter((p) => p.status === "PAID" || p.status === "PARTIALLY_REFUNDED").reduce((sum, p) => sum + p.amountCents, 0) - refunded;
@@ -279,7 +280,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                     ))}
                   </p>
                 )}
-                {shipment.costCents !== null && <p className="text-small mt-2 text-stone-700">Carrier charge {money(shipment.costCents)}</p>}
+                {shipment.costCents !== null && <p className="text-small mt-2 text-stone-700">Carrier charge {format(shipment.costCents)}</p>}
                 {shipment.exceptionAt && (
                   <p role="alert" className="mt-3 border-l-2 border-terracotta-700 bg-terracotta-500/10 px-3 py-2 text-terracotta-700">
                     Delivery problem since {dateTime(shipment.exceptionAt)}: {shipment.exceptionNote}. The customer has not been told automatically.
@@ -394,7 +395,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                                   {quote.suggested && <span className="text-small block text-olive-700">Suggested: {rates.rule}</span>}
                                 </td>
                                 <td className="tabular-nums">
-                                  {quote.currency === "EUR" ? money(quote.priceCents) : `${(quote.priceCents / 100).toFixed(2)} ${quote.currency}`}
+                                  {format(quote.priceCents, quote.currency)}
                                 </td>
                                 <td className="whitespace-nowrap">{quote.estimatedDelivery ? dateTime(quote.estimatedDelivery) : "Not given"}</td>
                                 <td>

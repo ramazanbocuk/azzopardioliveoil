@@ -9,7 +9,8 @@ import { Bottle } from "./Bottle";
 /** One purchasable variant. The whole card is the link; the heart sits above it. */
 export function ProductCard({ item }: { item: CatalogItem }) {
   const { product, variant, category } = item;
-  const { m, fill, money } = useI18n();
+  const { m, fill, money, price } = useI18n();
+  const cents = price(variant);
   const label = `${product.name} ${variant.ml} ml`;
   return (
     <article className="group/card relative">
@@ -38,7 +39,7 @@ export function ProductCard({ item }: { item: CatalogItem }) {
           </h3>
           <p className="text-small mt-1 text-stone-700">{variant.ml} ml</p>
         </div>
-        <p className="text-lead shrink-0 pt-6 tabular-nums">{money(variant.priceCents)}</p>
+        <p className={cents === null ? "text-small max-w-[14ch] shrink-0 pt-6 text-right text-stone-700" : "text-lead shrink-0 pt-6 tabular-nums"}>{cents === null ? m.shop.notSoldHere : money(cents)}</p>
       </div>
 
       <FavouriteButton sku={variant.sku} label={label} className="absolute right-2 top-2 z-10" />

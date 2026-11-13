@@ -6,11 +6,12 @@ import { ProductView } from "@/components/shop/ProductView";
 import { ButtonLink } from "@/components/ui/Button";
 import { JsonLd, siteUrl } from "@/components/ui/JsonLd";
 import { Accordion, Breadcrumbs, FactList, Notice } from "@/components/ui/Page";
-import { tagOf, type Language } from "@/i18n/config";
+import { LOCALES, tagOf, type Language } from "@/i18n/config";
 import { countryName, fill } from "@/i18n/format";
 import { alternatesFor } from "@/i18n/seo";
 import { getI18n } from "@/i18n/server";
-import { getCatalogData, getFreeShippingThreshold } from "@/server/storefrontData";
+import { marketOf } from "@/i18n/currency";
+import { getCatalogData, getFreeShippingThreshold, getMarketRules } from "@/server/storefrontData";
 import { SplitHeading } from "@/motion/SplitHeading";
 
 export async function generateStaticParams() {
@@ -60,7 +61,9 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
     amount: `${new Intl.NumberFormat(tag, { minimumFractionDigits: result.decimals, maximumFractionDigits: result.decimals }).format(result.value)}${(i.units as Record<string, string>)[result.measure] ?? result.unit ? ` ${(i.units as Record<string, string>)[result.measure] ?? result.unit}` : ""}`,
   }));
   const base = siteUrl();
-  const prices = product.variants.map((v) => v.priceCents);
+  // Search engines are told the prices of the market this address belongs to (en-us: dollars), and nothing when none is set.
+  const currency = marketOf(await getMarketRules(), LOCALES[locale].country).currency;
+  const prices = product.variants.flatMap((v) => (v.prices[currency] === undefined ? [] : [v.prices[currency]]));
   // Only facts that exist are published: no ratings, awards or claims are invented for search engines either.
   const productData = {
     "@context": "https://schema.org",
@@ -76,7 +79,7 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
       ? {
           offers: {
             "@type": "AggregateOffer",
-            priceCurrency: "EUR",
+            priceCurrency: currency,
             lowPrice: (Math.min(...prices) / 100).toFixed(2),
             highPrice: (Math.max(...prices) / 100).toFixed(2),
             offerCount: prices.length,

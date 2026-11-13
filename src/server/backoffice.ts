@@ -1,7 +1,8 @@
+import { toCurrency } from "@/i18n/currency";
 import { allocateBackorders } from "./stock";
 import { z } from "zod";
 import type { Prisma, ReviewStatus } from "@/generated/prisma/client";
-import { audit, toCsv } from "./admin";
+import { audit, paidByCurrency, toCsv } from "./admin";
 import { requireAdmin } from "./auth";
 import type { Ctx } from "./context";
 import { AppError, parse } from "./errors";
@@ -37,6 +38,21 @@ export function period(input: { from?: unknown; to?: unknown }, now = new Date()
   if (to < from) [from, to] = [to, from];
   if (to.getTime() - from.getTime() > 1096 * DAY) from = new Date(to.getTime() - 1096 * DAY);
   return { from, to, end: new Date(to.getTime() + DAY), fromText: from.toISOString().slice(0, 10), toText: to.toISOString().slice(0, 10) };
+}
+
+/**
+ * What one customer has spent is given in euro. Orders in another currency are stated beside it in
+ * words ("48.00 USD"), never added in: there is no rate at which they could be.
+ */
+function byCurrency<T extends { totalCents: number; currency: string }>(orders: T[]) {
+  const base = orders.filter((order) => order.currency === "EUR");
+  return { base, spentCents: base.reduce((sum, order) => sum + order.totalCents, 0), otherSpend: paidByCurrency(orders.filter((order) => order.currency !== "EUR")) };
+}
+
+/** The currencies in which money has been received, euro first: what a report can be asked for. */
+async function currenciesInUse(ctx: Ctx): Promise<string[]> {
+  const rows = await ctx.db.order.groupBy({ by: ["currency"], where: { paidAt: { not: null } } });
+  return [...new Set(["EUR", ...rows.map((row) => row.currency).sort()])];
 }
 
 // ───────────────────────────── Inventory ─────────────────────────────
@@ -77,21 +93,23 @@ export async function exportInventoryCsv(ctx: Ctx) {
 
 const PAYMENT_STATES = ["UNPAID", "PROCESSING", "PAID", "PARTIALLY_REFUNDED", "REFUNDED", "FAILED"] as const;
 
-export async function listPayments(ctx: Ctx, input: { status?: string; from?: string; to?: string; page?: number }) {
+export async function listPayments(ctx: Ctx, input: { status?: string; from?: string; to?: string; page?: number; currency?: string }) {
   requireAdmin(ctx, "VIEW", "payments");
   const range = period(input);
+  // The list shows every payment; the totals are in one currency, because amounts in different currencies cannot be added.
+  const currency = toCurrency(input.currency);
   const status = PAYMENT_STATES.find((value) => value === input.status);
   const where: Prisma.PaymentWhereInput = { createdAt: { gte: range.from, lt: range.end }, ...(status ? { status } : {}) };
   const page = Math.max(1, Math.round(input.page ?? 1) || 1);
   const [rows, count, received, refunded, disputes] = await Promise.all([
     ctx.db.payment.findMany({ where, orderBy: { createdAt: "desc" }, take: 30, skip: (page - 1) * 30, include: { refunds: { where: { failedAt: null } }, order: { select: { id: true, number: true, email: true } } } }),
     ctx.db.payment.count({ where }),
-    ctx.db.payment.aggregate({ where: { createdAt: { gte: range.from, lt: range.end }, status: { in: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] } }, _sum: { amountCents: true }, _count: true }),
-    ctx.db.refund.aggregate({ where: { failedAt: null, createdAt: { gte: range.from, lt: range.end } }, _sum: { amountCents: true }, _count: true }),
+    ctx.db.payment.aggregate({ where: { currency, createdAt: { gte: range.from, lt: range.end }, status: { in: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] } }, _sum: { amountCents: true }, _count: true }),
+    ctx.db.refund.aggregate({ where: { failedAt: null, payment: { currency }, createdAt: { gte: range.from, lt: range.end } }, _sum: { amountCents: true }, _count: true }),
     ctx.db.dispute.findMany({ where: { OR: [{ closedAt: null }, { createdAt: { gte: range.from, lt: range.end } }] }, orderBy: { createdAt: "desc" }, take: 50, include: { payment: { select: { order: { select: { id: true, number: true, email: true } } } } } }),
   ]);
-  const lost = disputes.filter((dispute) => dispute.status === "lost" && dispute.closedAt && dispute.closedAt >= range.from && dispute.closedAt < range.end);
-  return { disputes, lostCents: lost.reduce((sum, dispute) => sum + dispute.amountCents, 0), lostCount: lost.length, rows, count, page, pages: Math.max(1, Math.ceil(count / 30)), range, receivedCents: received._sum.amountCents ?? 0, receivedCount: received._count, refundedCents: refunded._sum.amountCents ?? 0, refundedCount: refunded._count };
+  const lost = disputes.filter((dispute) => dispute.currency === currency && dispute.status === "lost" && dispute.closedAt && dispute.closedAt >= range.from && dispute.closedAt < range.end);
+  return { currency, currencies: await currenciesInUse(ctx), disputes, lostCents: lost.reduce((sum, dispute) => sum + dispute.amountCents, 0), lostCount: lost.length, rows, count, page, pages: Math.max(1, Math.ceil(count / 30)), range, receivedCents: received._sum.amountCents ?? 0, receivedCount: received._count, refundedCents: refunded._sum.amountCents ?? 0, refundedCount: refunded._count };
 }
 
 export async function listReturnsAndRefunds(ctx: Ctx) {
@@ -141,33 +159,35 @@ type Money = bigint | number | null;
 const num = (value: Money) => Number(value ?? 0);
 
 /** Sales by payment date. "Gross" is what customers paid, VAT included; refunds are shown separately, by refund date. */
-export async function salesReport(ctx: Ctx, input: { from?: string; to?: string }) {
+export async function salesReport(ctx: Ctx, input: { from?: string; to?: string; currency?: string }) {
   requireAdmin(ctx, "MANAGER", "reports");
   const range = period(input);
+  // One currency per report. Sales in dollars are a separate report, not part of the euro total.
+  const currency = toCurrency(input.currency);
   const { from, end } = range;
   const [totals, daily, countries, products, methods, refunds, customers] = await Promise.all([
     ctx.db.$queryRaw<{ orders: bigint; gross: Money; tax: Money; shipping: Money; discount: Money; untaxed: bigint }[]>`
       SELECT COUNT(*)::bigint AS orders, SUM("totalCents")::bigint AS gross, SUM(COALESCE("taxCents", 0))::bigint AS tax, SUM("shippingCents")::bigint AS shipping, SUM("discountCents")::bigint AS discount,
              COUNT(*) FILTER (WHERE "taxCents" IS NULL)::bigint AS untaxed
-      FROM "Order" WHERE "paidAt" >= ${from} AND "paidAt" < ${end}`,
+      FROM "Order" WHERE "paidAt" >= ${from} AND "paidAt" < ${end} AND "currency" = ${currency}`,
     ctx.db.$queryRaw<{ day: Date; orders: bigint; gross: Money }[]>`
       SELECT date_trunc('day', "paidAt") AS day, COUNT(*)::bigint AS orders, SUM("totalCents")::bigint AS gross
-      FROM "Order" WHERE "paidAt" >= ${from} AND "paidAt" < ${end} GROUP BY 1 ORDER BY 1`,
+      FROM "Order" WHERE "paidAt" >= ${from} AND "paidAt" < ${end} AND "currency" = ${currency} GROUP BY 1 ORDER BY 1`,
     ctx.db.$queryRaw<{ country: string; orders: bigint; gross: Money }[]>`
       SELECT "shipCountryCode" AS country, COUNT(*)::bigint AS orders, SUM("totalCents")::bigint AS gross
-      FROM "Order" WHERE "paidAt" >= ${from} AND "paidAt" < ${end} GROUP BY 1 ORDER BY 3 DESC`,
+      FROM "Order" WHERE "paidAt" >= ${from} AND "paidAt" < ${end} AND "currency" = ${currency} GROUP BY 1 ORDER BY 3 DESC`,
     ctx.db.$queryRaw<{ sku: string; name: string; units: bigint; gross: Money }[]>`
       SELECT i."sku", i."productName" || ' ' || i."variantLabel" AS name, SUM(i."quantity")::bigint AS units, SUM(i."lineTotalCents")::bigint AS gross
-      FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId" WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end} GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 25`,
+      FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId" WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end} AND o."currency" = ${currency} GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 25`,
     ctx.db.$queryRaw<{ method: string | null; payments: bigint; amount: Money }[]>`
       SELECT p."method", COUNT(*)::bigint AS payments, SUM(p."amountCents")::bigint AS amount
       FROM "Payment" p JOIN "Order" o ON o."id" = p."orderId"
-      WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end} AND p."status" IN ('PAID', 'PARTIALLY_REFUNDED', 'REFUNDED') GROUP BY 1 ORDER BY 3 DESC`,
-    ctx.db.refund.aggregate({ where: { failedAt: null, createdAt: { gte: from, lt: end } }, _sum: { amountCents: true }, _count: true }),
+      WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end} AND o."currency" = ${currency} AND p."status" IN ('PAID', 'PARTIALLY_REFUNDED', 'REFUNDED') GROUP BY 1 ORDER BY 3 DESC`,
+    ctx.db.refund.aggregate({ where: { failedAt: null, payment: { currency }, createdAt: { gte: from, lt: end } }, _sum: { amountCents: true }, _count: true }),
     ctx.db.$queryRaw<{ returning: bigint; first: bigint }[]>`
       SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM "Order" p WHERE p."email" = o."email" AND p."paidAt" < o."paidAt"))::bigint AS returning,
              COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM "Order" p WHERE p."email" = o."email" AND p."paidAt" < o."paidAt"))::bigint AS first
-      FROM "Order" o WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end}`,
+      FROM "Order" o WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end} AND o."currency" = ${currency}`,
   ]);
   const total = totals[0];
   const orders = num(total?.orders);
@@ -175,6 +195,8 @@ export async function salesReport(ctx: Ctx, input: { from?: string; to?: string 
   const units = products.reduce((sum, row) => sum + num(row.units), 0);
   return {
     range,
+    currency,
+    currencies: await currenciesInUse(ctx),
     orders,
     grossCents: gross,
     taxCents: num(total?.tax),
@@ -195,10 +217,10 @@ export async function salesReport(ctx: Ctx, input: { from?: string; to?: string 
   };
 }
 
-export async function exportSalesCsv(ctx: Ctx, input: { from?: string; to?: string }) {
+export async function exportSalesCsv(ctx: Ctx, input: { from?: string; to?: string; currency?: string }) {
   const report = await salesReport(ctx, input);
   await audit(ctx, "report.sales.export", "Order", null, { from: report.range.fromText, to: report.range.toText });
-  return toCsv([["Day", "Orders", "Gross (incl. VAT)"], ...report.daily.map((row) => [row.day, row.orders, row.grossCents / 100]), [], ["Product", "SKU", "Units", "Gross"], ...report.products.map((row) => [row.name, row.sku, row.units, row.grossCents / 100])]);
+  return toCsv([["Currency", report.currency], [], ["Day", "Orders", "Gross (incl. VAT)"], ...report.daily.map((row) => [row.day, row.orders, row.grossCents / 100]), [], ["Product", "SKU", "Units", "Gross"], ...report.products.map((row) => [row.name, row.sku, row.units, row.grossCents / 100])]);
 }
 
 // ───────────────────────────── VAT report ─────────────────────────────
@@ -209,18 +231,21 @@ export async function exportSalesCsv(ctx: Ctx, input: { from?: string; to?: stri
  * because how a refund adjusts VAT depends on the credit note, which this
  * shop does not issue yet.
  */
-export async function vatReport(ctx: Ctx, input: { from?: string; to?: string }) {
+export async function vatReport(ctx: Ctx, input: { from?: string; to?: string; currency?: string }) {
   requireAdmin(ctx, "MANAGER", "accounting");
   const range = period(input);
+  const currency = toCurrency(input.currency);
   const [rows, refunds] = await Promise.all([
     ctx.db.$queryRaw<{ country: string; rate: number | null; orders: bigint; gross: Money; tax: Money; shipping_tax: Money }[]>`
       SELECT "shipCountryCode" AS country, "taxRateBps" AS rate, COUNT(*)::bigint AS orders, SUM("totalCents")::bigint AS gross, SUM(COALESCE("taxCents", 0))::bigint AS tax, SUM(COALESCE("shippingTaxCents", 0))::bigint AS shipping_tax
-      FROM "Order" WHERE "paidAt" >= ${range.from} AND "paidAt" < ${range.end} GROUP BY 1, 2 ORDER BY 1, 2`,
-    ctx.db.refund.findMany({ where: { failedAt: null, createdAt: { gte: range.from, lt: range.end } }, orderBy: { createdAt: "asc" }, include: { payment: { select: { order: { select: { id: true, number: true, shipCountryCode: true, taxRateBps: true } } } } } }),
+      FROM "Order" WHERE "paidAt" >= ${range.from} AND "paidAt" < ${range.end} AND "currency" = ${currency} GROUP BY 1, 2 ORDER BY 1, 2`,
+    ctx.db.refund.findMany({ where: { failedAt: null, payment: { currency }, createdAt: { gte: range.from, lt: range.end } }, orderBy: { createdAt: "asc" }, include: { payment: { select: { order: { select: { id: true, number: true, shipCountryCode: true, taxRateBps: true } } } } } }),
   ]);
   const lines = rows.map((row) => ({ country: row.country, rateBps: row.rate, orders: num(row.orders), grossCents: num(row.gross), taxCents: num(row.tax), netCents: num(row.gross) - num(row.tax), shippingTaxCents: num(row.shipping_tax) }));
   return {
     range,
+    currency,
+    currencies: await currenciesInUse(ctx),
     lines,
     grossCents: lines.reduce((sum, line) => sum + line.grossCents, 0),
     taxCents: lines.reduce((sum, line) => sum + line.taxCents, 0),
@@ -231,11 +256,12 @@ export async function vatReport(ctx: Ctx, input: { from?: string; to?: string })
   };
 }
 
-export async function exportVatCsv(ctx: Ctx, input: { from?: string; to?: string }) {
+export async function exportVatCsv(ctx: Ctx, input: { from?: string; to?: string; currency?: string }) {
   const report = await vatReport(ctx, input);
   await audit(ctx, "report.vat.export", "Order", null, { from: report.range.fromText, to: report.range.toText });
   return toCsv([
     ["Period", report.range.fromText, report.range.toText],
+    ["Currency", report.currency],
     [],
     ["Country", "VAT rate %", "Orders", "Net", "VAT", "Gross", "Of which VAT on shipping"],
     ...report.lines.map((line) => [line.country, line.rateBps === null ? "no rate set" : line.rateBps / 100, line.orders, line.netCents / 100, line.taxCents / 100, line.grossCents / 100, line.shippingTaxCents / 100]),
@@ -372,8 +398,8 @@ const wholesaleInput = z.object({
 
 export async function listWholesale(ctx: Ctx) {
   requireAdmin(ctx, "VIEW", "wholesale");
-  const accounts = await ctx.db.customer.findMany({ where: { erasedAt: null, wholesaleStatus: { not: "NONE" } }, orderBy: [{ wholesaleStatus: "asc" }, { companyName: "asc" }], include: { orders: { where: { paidAt: { not: null } }, select: { totalCents: true } } } });
-  return accounts.map((account) => ({ ...account, paidOrders: account.orders.length, spentCents: account.orders.reduce((sum, order) => sum + order.totalCents, 0) }));
+  const accounts = await ctx.db.customer.findMany({ where: { erasedAt: null, wholesaleStatus: { not: "NONE" } }, orderBy: [{ wholesaleStatus: "asc" }, { companyName: "asc" }], include: { orders: { where: { paidAt: { not: null } }, select: { totalCents: true, currency: true } } } });
+  return accounts.map((account) => ({ ...account, paidOrders: account.orders.length, spentCents: byCurrency(account.orders).spentCents, otherSpend: byCurrency(account.orders).otherSpend }));
 }
 
 /** Sets a customer's trade terms. An approved account gets its discount on goods automatically at checkout. */
@@ -407,7 +433,7 @@ export async function marketingOverview(ctx: Ctx) {
   const [subscribers, discounts, usage, carts] = await Promise.all([
     ctx.db.newsletterSubscriber.groupBy({ by: ["status"], _count: true }),
     ctx.db.discount.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
-    ctx.db.order.groupBy({ by: ["discountCode"], where: { discountCode: { not: null }, paidAt: { not: null } }, _count: true, _sum: { totalCents: true, discountCents: true } }),
+    ctx.db.order.groupBy({ by: ["discountCode", "currency"], where: { discountCode: { not: null }, paidAt: { not: null } }, _count: true, _sum: { totalCents: true, discountCents: true } }),
     ctx.db.cart.findMany({ where: { items: { some: {} }, updatedAt: { lt: dayAgo } }, orderBy: { updatedAt: "desc" }, take: 50, include: { customer: { select: { email: true, firstName: true, marketingOptIn: true } }, items: { include: { variant: { select: { priceCents: true, label: true, product: { select: { name: true } } } } } } } }),
   ]);
   const count = (status: string) => subscribers.find((row) => row.status === status)?._count ?? 0;
@@ -416,10 +442,12 @@ export async function marketingOverview(ctx: Ctx) {
     pending: count("PENDING"),
     unsubscribed: count("UNSUBSCRIBED"),
     discounts: discounts.map((discount) => {
-      const used = usage.find((row) => row.discountCode === discount.code);
-      return { ...discount, paidOrders: used?._count ?? 0, revenueCents: used?._sum.totalCents ?? 0, givenCents: used?._sum.discountCents ?? 0 };
+      // Money figures are for orders in the code's own currency; orders in another are counted, not summed.
+      const rows = usage.filter((row) => row.discountCode === discount.code);
+      const used = rows.find((row) => row.currency === discount.currency);
+      return { ...discount, paidOrders: rows.reduce((sum, row) => sum + row._count, 0), ordersInOtherCurrencies: rows.filter((row) => row.currency !== discount.currency).reduce((sum, row) => sum + row._count, 0), revenueCents: used?._sum.totalCents ?? 0, givenCents: used?._sum.discountCents ?? 0 };
     }),
-    wholesaleOrders: usage.find((row) => row.discountCode === "WHOLESALE")?._count ?? 0,
+    wholesaleOrders: usage.filter((row) => row.discountCode === "WHOLESALE").reduce((sum, row) => sum + row._count, 0),
     abandoned: carts.map((cart) => ({ id: cart.id, updatedAt: cart.updatedAt, email: cart.customer?.email ?? null, mayEmail: cart.customer?.marketingOptIn ?? false, units: cart.items.reduce((sum, item) => sum + item.quantity, 0), valueCents: cart.items.reduce((sum, item) => sum + item.quantity * item.variant.priceCents, 0), summary: cart.items.map((item) => `${item.quantity} × ${item.variant.product.name} ${item.variant.label}`).join(", ") })),
   };
 }
@@ -552,12 +580,12 @@ export async function customerDirectory(ctx: Ctx, input: { q?: string; segment?:
     ...(segment === "consent" ? { marketingOptIn: true } : {}),
     ...(segment === "none" ? { orders: { none: paid } } : {}),
   };
-  const customers = await ctx.db.customer.findMany({ where, orderBy: { createdAt: "desc" }, take: 300, include: { orders: { where: paid, select: { totalCents: true, paidAt: true } } } });
+  const customers = await ctx.db.customer.findMany({ where, orderBy: { createdAt: "desc" }, take: 300, include: { orders: { where: paid, select: { totalCents: true, paidAt: true, currency: true } } } });
   const rows = customers
     .map((customer) => {
-      const spent = customer.orders.reduce((sum, order) => sum + order.totalCents, 0);
+      const { base, spentCents: spent, otherSpend } = byCurrency(customer.orders);
       const last = customer.orders.reduce<Date | null>((latest, order) => (order.paidAt && (!latest || order.paidAt > latest) ? order.paidAt : latest), null);
-      return { id: customer.id, name: `${customer.firstName} ${customer.lastName}`, email: customer.email, companyName: customer.companyName, tags: customer.tags, wholesale: customer.wholesaleStatus === "APPROVED", marketingOptIn: customer.marketingOptIn, createdAt: customer.createdAt, paidOrders: customer.orders.length, spentCents: spent, averageCents: customer.orders.length ? Math.round(spent / customer.orders.length) : 0, lastOrderAt: last };
+      return { id: customer.id, name: `${customer.firstName} ${customer.lastName}`, email: customer.email, companyName: customer.companyName, tags: customer.tags, wholesale: customer.wholesaleStatus === "APPROVED", marketingOptIn: customer.marketingOptIn, createdAt: customer.createdAt, paidOrders: customer.orders.length, spentCents: spent, otherSpend, averageCents: base.length ? Math.round(spent / base.length) : 0, lastOrderAt: last };
     })
     .filter((row) => segment !== "repeat" || row.paidOrders >= 2);
   const tags = [...new Set((await ctx.db.customer.findMany({ where: { erasedAt: null, NOT: { tags: { isEmpty: true } } }, select: { tags: true } })).flatMap((customer) => customer.tags))].sort();
@@ -570,13 +598,13 @@ export async function customerProfile(ctx: Ctx, id: string) {
   const customer = await ctx.db.customer.findUnique({ where: { id }, include: { addresses: true, notes: { orderBy: { createdAt: "desc" } }, orders: { orderBy: { placedAt: "desc" }, include: { payments: { include: { refunds: { where: { failedAt: null } } } }, returns: { select: { id: true } } } } } });
   if (!customer) throw new AppError("NOT_FOUND", "Customer not found.");
   const paid = customer.orders.filter((order) => order.paidAt);
-  const spent = paid.reduce((sum, order) => sum + order.totalCents, 0);
-  const refunded = customer.orders.flatMap((order) => order.payments.flatMap((payment) => payment.refunds)).reduce((sum, refund) => sum + refund.amountCents, 0);
+  const { base, spentCents: spent, otherSpend } = byCurrency(paid);
+  const refunded = customer.orders.filter((order) => order.currency === "EUR").flatMap((order) => order.payments.flatMap((payment) => payment.refunds)).reduce((sum, refund) => sum + refund.amountCents, 0);
   const staff = new Map((await ctx.db.adminUser.findMany({ where: { id: { in: customer.notes.map((note) => note.adminUserId).filter((value): value is string => !!value) } }, select: { id: true, name: true } })).map((user) => [user.id, user.name]));
   return {
     customer,
     notes: customer.notes.map((note) => ({ ...note, by: note.adminUserId ? (staff.get(note.adminUserId) ?? "Former staff") : "System" })),
-    metrics: { paidOrders: paid.length, spentCents: spent, lifetimeCents: spent - refunded, averageCents: paid.length ? Math.round(spent / paid.length) : 0, refundedCents: refunded, returns: customer.orders.reduce((sum, order) => sum + order.returns.length, 0), firstOrderAt: paid.at(-1)?.paidAt ?? null, lastOrderAt: paid[0]?.paidAt ?? null },
+    metrics: { paidOrders: paid.length, spentCents: spent, otherSpend, lifetimeCents: spent - refunded, averageCents: base.length ? Math.round(spent / base.length) : 0, refundedCents: refunded, returns: customer.orders.reduce((sum, order) => sum + order.returns.length, 0), firstOrderAt: paid.at(-1)?.paidAt ?? null, lastOrderAt: paid[0]?.paidAt ?? null },
   };
 }
 

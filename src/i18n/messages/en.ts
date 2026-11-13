@@ -102,6 +102,8 @@ export const en = {
     showAll: "Show every bottle",
     lot: "Lot {lot}",
     soldOut: "Sold out",
+    notSoldHere: "Not available for delivery to your country.",
+    notSoldInCart: "Not sold for delivery to your country. Remove it to check out.",
     illustration: "{name} (illustration)",
   },
   product: {

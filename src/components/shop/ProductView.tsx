@@ -19,8 +19,8 @@ function SizeFromUrl({ onSize }: { onSize: (ml: number) => void }) {
   return null;
 }
 
-export function ProductView({ product, category, freeShippingFrom }: { product: Product; category: Category; freeShippingFrom: number | null }) {
-  const { m, fill, money } = useI18n();
+export function ProductView({ product, category, freeShippingFrom }: { product: Product; category: Category; freeShippingFrom: Record<string, number> }) {
+  const { m, fill, money, price, currency } = useI18n();
   const t = m.product;
   const firstAvailable = product.variants.find((v) => v.inStock) ?? product.variants.find((v) => v.backorder) ?? product.variants[0];
   const [ml, setMl] = useState(firstAvailable.ml);
@@ -34,6 +34,8 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
     },
     [product.variants],
   );
+
+  const cents = price(variant);
 
   return (
     <div className="grid gap-x-8 gap-y-12 lg:grid-cols-12">
@@ -73,9 +75,10 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
           <p className="text-lead mt-5 text-ink/80">{product.blurb}</p>
 
           <p aria-live="polite" className="mt-8 font-serif text-[clamp(2.25rem,3.4vw,3rem)] leading-none tabular-nums">
-            {money(variant.priceCents)}
+            {cents === null ? m.shop.notSoldHere : money(cents)}
           </p>
-          <p className="text-small mt-2 text-stone-700">{variant.label} · {m.common.vatIncluded}</p>
+          {/* "VAT included" is true of the euro prices only; what tax applies elsewhere is not something this page may assert. */}
+          <p className="text-small mt-2 text-stone-700">{variant.label}{cents !== null && currency === "EUR" ? ` · ${m.common.vatIncluded}` : ""}</p>
 
           <div className="mt-8">
             <SizeSelector
@@ -88,7 +91,7 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <QuantityStepper value={qty} onChange={setQty} />
-            <AddToCart sku={variant.sku} qty={qty} disabled={!variant.inStock && !variant.backorder} className="flex-1" />
+            <AddToCart sku={variant.sku} qty={qty} disabled={cents === null || (!variant.inStock && !variant.backorder)} className="flex-1" />
             <FavouriteButton sku={variant.sku} label={label} className="size-13 border border-ink/30" />
           </div>
 
@@ -101,7 +104,7 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
 
           <ul className="text-small mt-6 space-y-1.5 text-ink/80">
             <li>{t.sentTracked}</li>
-            {freeShippingFrom !== null && <li>{fill(t.freeFrom, { amount: money(freeShippingFrom) })}</li>}
+            {freeShippingFrom[currency] !== undefined && <li>{fill(t.freeFrom, { amount: money(freeShippingFrom[currency]) })}</li>}
           </ul>
 
           <LotTicket

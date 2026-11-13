@@ -5,7 +5,8 @@ import { Bottle } from "@/components/ui/Bottle";
 import { ButtonLink } from "@/components/ui/Button";
 import { SizeSelector } from "@/components/ui/Field";
 import { LotTicket } from "@/components/ui/LotTicket";
-import { formatPrice, productHref, type Product } from "@/content/site";
+import { productHref, type Product } from "@/content/site";
+import { useI18n } from "@/i18n/client";
 import { Reveal } from "@/motion/Reveal";
 import { SplitHeading } from "@/motion/SplitHeading";
 import { DUR, EASE, MOTION_OK, gsap, useGSAP } from "@/motion/gsap";
@@ -17,6 +18,8 @@ export function Showcase({ product }: { product: Product }) {
   const price = useRef<HTMLParagraphElement>(null);
   const first = useRef(true);
 
+  const { m, money, price: priceOf } = useI18n();
+  const cents = priceOf(size);
   useGSAP(
     () => {
       if (first.current) {
@@ -61,7 +64,7 @@ export function Showcase({ product }: { product: Product }) {
 
             <div className="mt-10 overflow-hidden">
               <p ref={price} aria-live="polite" className="font-serif text-[clamp(2.25rem,3.4vw,3.25rem)] leading-none tabular-nums">
-                {formatPrice(size.priceCents)}
+                {cents === null ? m.shop.notSoldHere : money(cents)}
               </p>
             </div>
             <p className="text-small mt-2 text-stone-700">VAT included · shipping calculated at checkout</p>

@@ -52,6 +52,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             <Field label="Olive variety" name="cultivar" defaultValue={product?.cultivar ?? ""} />
             <TextArea label="Ingredients" name="ingredients" rows={2} defaultValue={product?.ingredients ?? ""} />
             <TextArea label="Storage" name="storage" rows={2} defaultValue={product?.storage ?? ""} />
+            <Field label="Not sent to these countries" name="excludedCountries" defaultValue={product?.excludedCountries.join(", ") ?? ""} hint="Two-letter codes, separated by commas. Empty means anywhere we deliver. Use it where a product may not be sold or imported." />
             <Field label="Customs (HS) code" name="hsCode" inputMode="numeric" defaultValue={product?.hsCode ?? ""} hint="6 to 10 digits. Needed on labels for parcels leaving the EU. Confirm the code with your customs adviser." />
             <Field label="Country of origin" name="originCountry" maxLength={2} defaultValue={product?.originCountry ?? ""} hint="Two-letter code, such as IT." />
             <Field label="Customs description" name="customsDescription" defaultValue={product?.customsDescription ?? ""} hint="Plain description of the goods for the customs declaration." />
@@ -75,12 +76,14 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             <div className="space-y-6">
               {[...product.variants, null].map((variant) => (
                 <div key={variant?.id ?? "new"} className="border-b border-ink/10 pb-6 last:border-0 last:pb-0">
-                  <form action={saveVariant.bind(null, product.id, variant?.id ?? null)} className="grid items-end gap-3 sm:grid-cols-3 xl:grid-cols-[1fr_1fr_0.7fr_0.8fr_0.8fr_0.8fr_0.7fr_auto_auto]">
+                  <form action={saveVariant.bind(null, product.id, variant?.id ?? null)} className="grid items-end gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
                     <Field label={variant ? "Label" : "New size"} name="label" required defaultValue={variant?.label} placeholder="250 ml" />
                     <Field label="SKU" name="sku" required defaultValue={variant?.sku} />
                     <Field label="Volume (ml)" name="volumeMl" inputMode="numeric" required defaultValue={variant?.volumeMl} />
                     <Field label="Price (€)" name="priceCents" inputMode="decimal" required defaultValue={euros(variant?.priceCents)} />
                     <Field label="Was (€)" name="compareAtCents" inputMode="decimal" defaultValue={euros(variant?.compareAtCents)} />
+                    <Field label="Price (USD)" name="priceUSD" inputMode="decimal" defaultValue={euros(variant?.prices.find((price) => price.currency === "USD")?.priceCents)} />
+                    <Field label="Price (GBP)" name="priceGBP" inputMode="decimal" defaultValue={euros(variant?.prices.find((price) => price.currency === "GBP")?.priceCents)} />
                     <Field label="Weight (g)" name="weightGrams" inputMode="numeric" required defaultValue={variant?.weightGrams} />
                     <Field label="Low at" name="lowStockThreshold" inputMode="numeric" defaultValue={variant?.lowStockThreshold ?? 6} />
                     <Field label="Barcode" name="barcode" inputMode="numeric" defaultValue={variant?.barcode ?? ""} />

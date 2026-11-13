@@ -26,7 +26,7 @@ export default async function CustomerPage({ params, searchParams }: PageProps<"
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Paid orders" value={String(metrics.paidOrders)} note={metrics.firstOrderAt ? `First ${date(metrics.firstOrderAt)}` : undefined} />
-        <Stat label="Total spent" value={money(metrics.spentCents)} note={metrics.lastOrderAt ? `Last order ${date(metrics.lastOrderAt)}` : undefined} />
+        <Stat label="Total spent" value={money(metrics.spentCents)} note={[metrics.otherSpend ? `In euro. Also ${metrics.otherSpend}, not included in these figures` : "", metrics.lastOrderAt ? `Last order ${date(metrics.lastOrderAt)}` : ""].filter(Boolean).join(". ") || undefined} />
         <Stat label="Average order" value={metrics.paidOrders ? money(metrics.averageCents) : "—"} />
         <Stat label="Refunded" value={money(metrics.refundedCents)} note={`${metrics.returns} return request${metrics.returns === 1 ? "" : "s"}`} />
         <Stat label="Lifetime value" value={money(metrics.lifetimeCents)} note="Spent less refunds, VAT included" />
@@ -69,7 +69,7 @@ export default async function CustomerPage({ params, searchParams }: PageProps<"
                 <td>
                   <Badge>{order.status}</Badge>
                 </td>
-                <td className="tabular-nums">{money(order.totalCents)}</td>
+                <td className="tabular-nums">{money(order.totalCents, order.currency)}</td>
               </tr>
             ))}
           </Table>

@@ -13,21 +13,32 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
   if (!ctx.admin) return null;
   const params = await searchParams;
   const value = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : "");
-  const result = await listPayments(ctx, { status: value("status"), from: value("from"), to: value("to"), page: Number(params.page) || 1 });
+  const result = await listPayments(ctx, { status: value("status"), from: value("from"), to: value("to"), page: Number(params.page) || 1, currency: value("currency") });
+  // The four totals are in one currency; each row below carries its own.
+  const total = (cents: number) => money(cents, result.currency);
   const query = (page: number) => new URLSearchParams({ ...(value("status") ? { status: value("status") } : {}), from: result.range.fromText, to: result.range.toText, page: String(page) }).toString();
 
   return (
     <Page title="Payments" eyebrow={`${result.range.fromText} to ${result.range.toText}`}>
       <Flash params={params} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Received" value={money(result.receivedCents)} note={`${result.receivedCount} payment${result.receivedCount === 1 ? "" : "s"} started in this period`} />
-        <Stat label="Refunded" value={money(result.refundedCents)} note={`${result.refundedCount} refund${result.refundedCount === 1 ? "" : "s"} issued in this period`} />
-        <Stat label="Lost to disputes" value={money(result.lostCents)} note={`${result.lostCount} dispute${result.lostCount === 1 ? "" : "s"} lost in this period`} />
-        <Stat label="Net of refunds and disputes" value={money(result.receivedCents - result.refundedCents - result.lostCents)} note="Before the payment provider's fees, which are not recorded here." />
+        <Stat label="Received" value={total(result.receivedCents)} note={`${result.receivedCount} payment${result.receivedCount === 1 ? "" : "s"} started in this period`} />
+        <Stat label="Refunded" value={total(result.refundedCents)} note={`${result.refundedCount} refund${result.refundedCount === 1 ? "" : "s"} issued in this period`} />
+        <Stat label="Lost to disputes" value={total(result.lostCents)} note={`${result.lostCount} dispute${result.lostCount === 1 ? "" : "s"} lost in this period`} />
+        <Stat label="Net of refunds and disputes" value={total(result.receivedCents - result.refundedCents - result.lostCents)} note="Before the payment provider's fees, which are not recorded here." />
       </div>
       <Card>
         <form className="flex flex-wrap items-end gap-4">
           <Field label="From" name="from" type="date" defaultValue={result.range.fromText} />
+          {result.currencies.length > 1 && (
+            <Select label="Totals in" name="currency" defaultValue={result.currency}>
+              {result.currencies.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </Select>
+          )}
           <Field label="To" name="to" type="date" defaultValue={result.range.toText} />
           <Select label="State" name="status" defaultValue={value("status")} className="w-56">
             <option value="">Any state</option>
@@ -56,8 +67,8 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
               <td>
                 <Badge tone={payment.status}>{STATES[payment.status]}</Badge>
               </td>
-              <td className="tabular-nums">{money(payment.amountCents)}</td>
-              <td className="tabular-nums">{payment.refunds.length ? money(payment.refunds.reduce((sum, refund) => sum + refund.amountCents, 0)) : "—"}</td>
+              <td className="tabular-nums">{money(payment.amountCents, payment.currency)}</td>
+              <td className="tabular-nums">{payment.refunds.length ? money(payment.refunds.reduce((sum, refund) => sum + refund.amountCents, 0), payment.currency) : "—"}</td>
               <td className="max-w-48 truncate font-mono text-[0.75rem] text-stone-700" title={payment.providerRef}>
                 {payment.providerRef}
               </td>
@@ -85,7 +96,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
                 </Link>
                 <span className="text-small block text-stone-700">{dispute.payment.order.email}</span>
               </td>
-              <td className="tabular-nums">{money(dispute.amountCents)}</td>
+              <td className="tabular-nums">{money(dispute.amountCents, dispute.currency)}</td>
               <td>{dispute.reason ? dispute.reason.replaceAll("_", " ") : "—"}</td>
               <td>{DISPUTE_LABEL[dispute.status] ?? dispute.status.replaceAll("_", " ")}</td>
               <td className="whitespace-nowrap">{dispute.closedAt || !dispute.evidenceDueAt ? "—" : dateTime(dispute.evidenceDueAt)}</td>

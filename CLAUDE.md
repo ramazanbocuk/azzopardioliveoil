@@ -10,6 +10,8 @@ The master brief is being built in phases. `docs/platform-audit.md` has the audi
 
 Phase 7 (customer assistant, knowledge base, support requests) is built but has never called the real model: `docs/assistant.md`. Phase 8 (staff assistant: read, draft, propose; approval queue) is built, with the same caveat; same document.
 
+Phase 9 (markets, fixed prices per currency, compulsory staff two-factor) is built: `docs/markets.md`.
+
 ## Commands
 
 - `npm run dev` — development server (needs `npm run db:start` first). After schema changes or odd caching: `npm run dev:clean`.
@@ -33,4 +35,7 @@ Phase 7 (customer assistant, knowledge base, support requests) is built but has 
 - A propose tool checks the role before it looks anything up, so a refusal reveals nothing.
 - Tools of one model turn run one after another, not in parallel (two calls in one turn once created two support requests).
 - Tests replace the model with `setModelProvider(script)`. They prove what the application does around the model, not how the model words an answer.
+- An amount is in one currency and is never converted. Use `priceIn(variant, currency)`, never `variant.priceCents`, for anything a customer pays; a null price means "not sold there". Never sum `totalCents` or `amountCents` across orders without filtering on one currency.
+- Format money with its currency: `money(cents, order.currency)` in the admin, `money(cents, cart.currency)` or `price(variant)` in the shop.
+- A service open to every role uses `requireStaff(ctx)`, not a bare `ctx.admin` check: it also enforces two-factor sign-in.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost, UPS) have never called a carrier. Non-English text has not had a native review.

@@ -10,12 +10,13 @@ import { useI18n } from "@/i18n/client";
 
 type Sort = "featured" | "price-asc" | "price-desc" | "size-asc";
 
-const sorters: Record<Sort, (a: CatalogItem, b: CatalogItem) => number> = {
+/** Sorting by price uses the visitor's currency; a size not sold in it goes last. */
+const sorters = (price: (variant: CatalogItem["variant"]) => number | null): Record<Sort, (a: CatalogItem, b: CatalogItem) => number> => ({
   featured: () => 0,
-  "price-asc": (a, b) => a.variant.priceCents - b.variant.priceCents,
-  "price-desc": (a, b) => b.variant.priceCents - a.variant.priceCents,
+  "price-asc": (a, b) => (price(a.variant) ?? Infinity) - (price(b.variant) ?? Infinity),
+  "price-desc": (a, b) => (price(b.variant) ?? -Infinity) - (price(a.variant) ?? -Infinity),
   "size-asc": (a, b) => a.variant.ml - b.variant.ml,
-};
+});
 
 /**
  * Search, filter and sort over the catalogue. Runs in the browser on the
@@ -23,7 +24,7 @@ const sorters: Record<Sort, (a: CatalogItem, b: CatalogItem) => number> = {
  * filtered GraphQL query instead.
  */
 export function ShopView({ items, autoFocusSearch = false }: { items: CatalogItem[]; autoFocusSearch?: boolean }) {
-  const { m, plural } = useI18n();
+  const { m, plural, price } = useI18n();
   const s = m.shop;
   const [query, setQuery] = useState("");
   const [sizes, setSizes] = useState<number[]>([]);
@@ -38,8 +39,8 @@ export function ShopView({ items, autoFocusSearch = false }: { items: CatalogIte
       .filter((item) => !needle || `${item.product.name} ${item.category.name} ${item.variant.ml} ml ${item.product.lot}`.toLowerCase().includes(needle))
       .filter((item) => sizes.length === 0 || sizes.includes(item.variant.ml))
       .filter((item) => !inStockOnly || item.variant.inStock)
-      .sort(sorters[sort]);
-  }, [items, query, sizes, inStockOnly, sort]);
+      .sort(sorters(price)[sort]);
+  }, [items, query, sizes, inStockOnly, sort, price]);
 
   const toggleSize = (ml: number) => setSizes((current) => (current.includes(ml) ? current.filter((s) => s !== ml) : [...current, ml]));
   const filtered = query !== "" || sizes.length > 0 || inStockOnly;

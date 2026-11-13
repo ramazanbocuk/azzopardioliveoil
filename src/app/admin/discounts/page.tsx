@@ -16,11 +16,16 @@ export default async function DiscountsPage({ searchParams }: PageProps<"/admin/
       <Field label="Code" name="code" required defaultValue={discount?.code} placeholder="WELCOME10" />
       <Select label="Type" name="kind" defaultValue={discount?.kind ?? "PERCENT"}>
         <option value="PERCENT">Percentage off</option>
-        <option value="FIXED">Amount off (€)</option>
+        <option value="FIXED">Amount off</option>
         <option value="FREE_SHIPPING">Free shipping</option>
       </Select>
       <Field label="Value" name="value" inputMode="decimal" defaultValue={discount ? (discount.kind === "FIXED" ? euros(discount.value) : discount.value) : ""} hint="Percent, or euros for an amount. Ignored for free shipping." />
-      <Field label="Minimum order (€)" name="minSubtotalCents" inputMode="decimal" defaultValue={euros(discount?.minSubtotalCents ?? 0)} />
+      <Select label="Currency of amounts" name="currency" defaultValue={discount?.currency ?? "EUR"}>
+        <option value="EUR">EUR</option>
+        <option value="USD">USD</option>
+        <option value="GBP">GBP</option>
+      </Select>
+      <Field label="Minimum order" name="minSubtotalCents" inputMode="decimal" defaultValue={euros(discount?.minSubtotalCents ?? 0)} />
       <Field label="Starts" name="startsAt" type="date" defaultValue={isoDay(discount?.startsAt)} />
       <Field label="Ends" name="endsAt" type="date" defaultValue={isoDay(discount?.endsAt)} />
       <Field label="Maximum uses" name="usageLimit" inputMode="numeric" defaultValue={discount?.usageLimit ?? ""} hint="Empty for unlimited." />

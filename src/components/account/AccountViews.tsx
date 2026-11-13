@@ -159,7 +159,7 @@ function Orders({ orders }: { orders: OrderFieldsFragment[] }) {
               <span className="text-h3 !text-[1.25rem]">{order.number}</span>
               <span className="text-small text-stone-700">{date(order.placedAt)}</span>
               <span className="text-label">{(m.order.status as Record<string, string>)[order.status] ?? order.status}</span>
-              <span className="tabular-nums">{money(order.totalCents)}</span>
+              <span className="tabular-nums">{money(order.totalCents, order.currency)}</span>
             </summary>
             <div className="grid gap-x-12 gap-y-8 pb-8 md:grid-cols-2">
               <OrderSummary order={order} />

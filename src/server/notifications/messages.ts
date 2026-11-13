@@ -9,7 +9,7 @@ import type { Email } from "./channels";
 
 type FullOrder = Order & { items: OrderItem[] };
 
-const money = (cents: number) => new Intl.NumberFormat("en-BE", { style: "currency", currency: "EUR" }).format(cents / 100);
+const money = (cents: number, currency = "EUR") => new Intl.NumberFormat("en-BE", { style: "currency", currency }).format(cents / 100);
 const escape = (text: string) => text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 const appUrl = () => (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
@@ -33,17 +33,17 @@ ${body}
  * shop in the same language. `stored` is what was saved with the order,
  * account or subscription ("de-de", or a bare "en" from before languages existed).
  */
-function speak(stored: string | null | undefined): { locale: Locale; t: EmailText; cash: (cents: number) => string; land: (code: string) => string; link: (path: string) => string } {
+function speak(stored: string | null | undefined, currency = "EUR"): { locale: Locale; t: EmailText; cash: (cents: number) => string; land: (code: string) => string; link: (path: string) => string } {
   const locale = toLocale(stored);
   const tag = tagOf(locale);
-  return { locale, t: EMAIL_TEXT[languageOf(locale)], cash: (cents) => formatMoney(tag, cents), land: (code) => countryName(tag, code), link: (path) => `${appUrl()}${localizePath(locale, path)}` };
+  return { locale, t: EMAIL_TEXT[languageOf(locale)], cash: (cents) => formatMoney(tag, cents, currency), land: (code) => countryName(tag, code), link: (path) => `${appUrl()}${localizePath(locale, path)}` };
 }
 
 /** Escapes a sentence for HTML and sets one value inside it in bold. */
 const bold = (sentence: string, value: string) => escape(sentence).replace(escape(value), `<strong>${escape(value)}</strong>`);
 
 function itemsTable(order: FullOrder): string {
-  const { t, cash } = speak(order.locale);
+  const { t, cash } = speak(order.locale, order.currency);
   const rows = order.items
     .map((item) => `<tr><td style="padding:8px 0;border-bottom:1px solid #d2cbbd">${escape(item.productName)} ${escape(item.variantLabel)} &times; ${item.quantity}${item.lotNumber ? `<br><span style="color:#6b6558;font-size:13px">${escape(fill(t.lot, { lot: item.lotNumber }))}</span>` : ""}</td><td align="right" style="padding:8px 0;border-bottom:1px solid #d2cbbd">${cash(item.lineTotalCents)}</td></tr>`)
     .join("");
@@ -61,7 +61,7 @@ const address = (order: Order, land: (code: string) => string = country) => [`${
  * order number, customer, products, total, destination, payment status.
  */
 export function ownerWhatsAppParameters(order: FullOrder): string[] {
-  return [`#${order.number}`, `${order.shipFirstName} ${order.shipLastName}`, order.items.map(itemLine).join("; "), money(order.totalCents), country(order.shipCountryCode), paymentLabel(order)];
+  return [`#${order.number}`, `${order.shipFirstName} ${order.shipLastName}`, order.items.map(itemLine).join("; "), money(order.totalCents, order.currency), country(order.shipCountryCode), paymentLabel(order)];
 }
 
 /** Plain-text version of the same alert, used for SMS and as the email's text part. */
@@ -72,7 +72,7 @@ export function ownerText(order: FullOrder): string {
     `Customer: ${order.shipFirstName} ${order.shipLastName}`,
     "Products:",
     ...order.items.map((item) => `- ${itemLine(item)}`),
-    `Total: ${money(order.totalCents)}`,
+    `Total: ${money(order.totalCents, order.currency)}`,
     `Shipping: ${country(order.shipCountryCode)}`,
     `Payment: ${paymentLabel(order)}`,
     `View order: ${appUrl()}/admin/orders/${order.id}`,
@@ -82,7 +82,7 @@ export function ownerText(order: FullOrder): string {
 export function ownerEmail(order: FullOrder, to: string): Email {
   return {
     to,
-    subject: `New order ${order.number} — ${money(order.totalCents)}`,
+    subject: `New order ${order.number} — ${money(order.totalCents, order.currency)}`,
     text: ownerText(order),
     replyTo: order.email,
     html: layout(
@@ -95,7 +95,7 @@ export function ownerEmail(order: FullOrder, to: string): Email {
 }
 
 export function customerConfirmationEmail(order: FullOrder): Email {
-  const { t, cash, land, link } = speak(order.locale);
+  const { t, cash, land, link } = speak(order.locale, order.currency);
   const c = t.confirmation;
   const number = order.number ?? "";
   const title = fill(c.title, { name: order.shipFirstName });
@@ -123,7 +123,7 @@ export type ShipmentContents = { lines: { name: string; quantity: number; lotNum
  * parcels produces two of these, each in the customer's language.
  */
 export function customerShippedEmail(order: FullOrder, shipment: Shipment | null, contents?: ShipmentContents): Email {
-  const { t } = speak(order.locale);
+  const { t } = speak(order.locale, order.currency);
   const sh = t.shipped;
   const number = order.number ?? "";
   const carrier = shipment?.carrier ?? sh.ourCarrier;
@@ -221,7 +221,7 @@ export function staffAlertEmail(to: string, alert: { subject: string; heading: s
 }
 
 export function customerRefundEmail(order: Order, amountCents: number, full: boolean): Email {
-  const { t, cash } = speak(order.locale);
+  const { t, cash } = speak(order.locale, order.currency);
   const r = t.refund;
   const number = order.number ?? "";
   const intro = full ? fill(r.full, { number }) : fill(r.partial, { amount: cash(amountCents), number });

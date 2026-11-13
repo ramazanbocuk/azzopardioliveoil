@@ -1,3 +1,4 @@
+import { toCurrency } from "@/i18n/currency";
 import { z } from "zod";
 import type { AdminRole, FulfilmentStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "./auth";
@@ -51,26 +52,32 @@ export function eurosToCents(input: unknown): number {
 // ───────────────────────────── Dashboard ─────────────────────────────
 
 
-export async function dashboard(ctx: Ctx) {
+/**
+ * Money on the dashboard is in ONE currency (euro unless another is asked for). Amounts in different
+ * currencies are never added together; the others are listed beside it, each with its own total.
+ */
+export async function dashboard(ctx: Ctx, wanted?: string) {
   requireAdmin(ctx, "VIEW", "orders");
+  const currency = toCurrency(wanted);
   const { db } = ctx;
   const now = new Date();
   const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   // Revenue counts orders whose money we hold, wherever they are in fulfilment.
   const paid = { paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT } } satisfies Prisma.OrderWhereInput;
+  const paidIn = { ...paid, currency } satisfies Prisma.OrderWhereInput;
 
   const [total, month, today, recent, customers, newCustomers, bestSellers, daily, lowStock, abandoned, awaiting, cartsWithItems] = await Promise.all([
-    db.order.aggregate({ where: paid, _sum: { totalCents: true }, _count: true }),
-    db.order.aggregate({ where: { ...paid, paidAt: { gte: startOfMonth } }, _sum: { totalCents: true } }),
+    db.order.aggregate({ where: paidIn, _sum: { totalCents: true }, _count: true }),
+    db.order.aggregate({ where: { ...paidIn, paidAt: { gte: startOfMonth } }, _sum: { totalCents: true } }),
     db.order.count({ where: { placedAt: { gte: startOfDay } } }),
     db.order.findMany({ orderBy: { placedAt: "desc" }, take: 8 }),
     db.customer.count({ where: { erasedAt: null } }),
     db.customer.count({ where: { erasedAt: null, createdAt: { gte: startOfMonth } } }),
-    db.orderItem.groupBy({ by: ["sku", "productName", "variantLabel"], where: { order: paid }, _sum: { quantity: true, lineTotalCents: true }, orderBy: { _sum: { quantity: "desc" } }, take: 5 }),
+    db.orderItem.groupBy({ by: ["sku", "productName", "variantLabel"], where: { order: paidIn }, _sum: { quantity: true, lineTotalCents: true }, orderBy: { _sum: { quantity: "desc" } }, take: 5 }),
     db.$queryRaw<{ day: Date; revenue: bigint; orders: bigint }[]>`
       SELECT date_trunc('day', "paidAt") AS day, SUM("totalCents")::bigint AS revenue, COUNT(*)::bigint AS orders
-      FROM "Order" WHERE "paidAt" >= now() - interval '30 days' AND "paymentStatus" IN ('PAID','PARTIALLY_REFUNDED')
+      FROM "Order" WHERE "paidAt" >= now() - interval '30 days' AND "paymentStatus" IN ('PAID','PARTIALLY_REFUNDED') AND "currency" = ${currency}
       GROUP BY 1 ORDER BY 1`,
     db.$queryRaw<{ sku: string; label: string; name: string; available: number }[]>`
       SELECT v."sku", v."label", p."name", (v."stock" - v."reserved")::int AS available
@@ -89,8 +96,12 @@ export async function dashboard(ctx: Ctx) {
     db.shipment.count({ where: { cancelledAt: null, OR: [{ exceptionAt: { not: null }, status: { not: "DELIVERED" } }, { status: { in: ["FAILED", "RETURNED"] } }] } }),
   ]);
 
+  const perCurrency = await db.order.groupBy({ by: ["currency"], where: paid, _sum: { totalCents: true }, _count: true });
   const revenue = total._sum.totalCents ?? 0;
   return {
+    currency,
+    /** Paid orders in every other currency, each with its own total. Never added to the figures above. */
+    otherCurrencies: perCurrency.filter((row) => row.currency !== currency).map((row) => ({ currency: row.currency, paidOrders: row._count, revenueCents: row._sum.totalCents ?? 0 })),
     revenueCents: revenue,
     paidOrders: total._count,
     monthRevenueCents: month._sum.totalCents ?? 0,
@@ -480,7 +491,7 @@ export async function listProducts(ctx: Ctx) {
 
 export async function getProduct(ctx: Ctx, id: string) {
   requireAdmin(ctx, "VIEW", "catalog");
-  const product = await ctx.db.product.findFirst({ where: { id, deletedAt: null }, include: { variants: { orderBy: { position: "asc" } }, batches: { orderBy: { createdAt: "desc" } } } });
+  const product = await ctx.db.product.findFirst({ where: { id, deletedAt: null }, include: { variants: { orderBy: { position: "asc" }, include: { prices: true } }, batches: { orderBy: { createdAt: "desc" } } } });
   if (!product) throw new AppError("NOT_FOUND", "Product not found.");
   return product;
 }
@@ -590,7 +601,7 @@ export async function listCustomers(ctx: Ctx, q?: string) {
     where: { erasedAt: null, ...(term ? { OR: [{ email: { contains: term, mode: "insensitive" } }, { lastName: { contains: term, mode: "insensitive" } }, { firstName: { contains: term, mode: "insensitive" } }] } : {}) },
     orderBy: { createdAt: "desc" },
     take: 100,
-    include: { _count: { select: { orders: true } }, orders: { where: { paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT } }, select: { totalCents: true } } },
+    include: { _count: { select: { orders: true } }, orders: { where: { paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT } }, select: { totalCents: true, currency: true } } },
   });
 }
 
@@ -627,8 +638,8 @@ export async function exportCustomersCsv(ctx: Ctx) {
   const customers = await listCustomers(ctx);
   await audit(ctx, "customer.export", "Customer", null, { count: customers.length });
   return toCsv([
-    ["Email", "First name", "Last name", "Phone", "Newsletter", "Orders", "Paid total (EUR)", "Joined"],
-    ...customers.map((c) => [c.email, c.firstName, c.lastName, c.phone, c.marketingOptIn ? "yes" : "no", c._count.orders, (c.orders.reduce((sum, o) => sum + o.totalCents, 0) / 100).toFixed(2), c.createdAt.toISOString().slice(0, 10)]),
+    ["Email", "First name", "Last name", "Phone", "Newsletter", "Orders", "Paid total", "Joined"],
+    ...customers.map((c) => [c.email, c.firstName, c.lastName, c.phone, c.marketingOptIn ? "yes" : "no", c._count.orders, paidByCurrency(c.orders), c.createdAt.toISOString().slice(0, 10)]),
   ]);
 }
 
@@ -681,6 +692,7 @@ const discountInput = z.object({
   kind: z.enum(["PERCENT", "FIXED", "FREE_SHIPPING"]),
   value: z.coerce.number().int().min(0).max(10_000_000).default(0),
   minSubtotalCents: cents.default(0),
+  currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"),
   startsAt: optionalDate,
   endsAt: optionalDate,
   usageLimit: z.coerce.number().int().min(1).nullish().or(z.literal("")).transform((value) => (value ? Number(value) : null)),
@@ -697,7 +709,7 @@ export async function saveDiscount(ctx: Ctx, id: string | null, input: unknown) 
   await audit(ctx, id ? "discount.update" : "discount.create", "Discount", discount.id, { code: data.code });
 }
 
-const zoneInput = z.object({ name: z.string().trim().min(1).max(120), countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1, "Add at least one country code.").max(60), isActive: z.boolean().default(true) });
+const zoneInput = z.object({ currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"), name: z.string().trim().min(1).max(120), countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1, "Add at least one country code.").max(60), isActive: z.boolean().default(true) });
 const rateInput = z.object({
   name: z.string().trim().min(1).max(120),
   carrier: optionalText(60),
@@ -841,4 +853,11 @@ export async function updateStaff(ctx: Ctx, id: string, change: { role?: AdminRo
   await ctx.db.adminUser.update({ where: { id }, data: change });
   if (change.isActive === false) await ctx.db.adminSession.deleteMany({ where: { adminUserId: id } });
   await audit(ctx, "staff.update", "AdminUser", id, change);
+}
+
+/** "36.00 EUR; 48.00 USD": what was paid, per currency. Different currencies are never added together. */
+export function paidByCurrency(orders: { totalCents: number; currency: string }[]): string {
+  const totals = new Map<string, number>();
+  for (const order of orders) totals.set(order.currency, (totals.get(order.currency) ?? 0) + order.totalCents);
+  return [...totals].sort(([a], [b]) => a.localeCompare(b)).map(([currency, cents]) => `${(cents / 100).toFixed(2)} ${currency}`).join("; ");
 }

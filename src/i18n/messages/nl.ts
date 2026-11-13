@@ -97,6 +97,8 @@ export const nl: Messages = {
     showAll: "Alle flessen tonen",
     lot: "Lot {lot}",
     soldOut: "Uitverkocht",
+    notSoldHere: "Niet beschikbaar voor levering in uw land.",
+    notSoldInCart: "Wordt niet verkocht voor levering in uw land. Verwijder dit artikel om af te rekenen.",
     illustration: "{name} (illustratie)",
   },
   product: {

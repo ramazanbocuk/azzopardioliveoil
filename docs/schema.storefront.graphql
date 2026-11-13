@@ -30,6 +30,10 @@ input BillingInput {
 
 """Totals are computed by the server from current prices."""
 type Cart {
+  """
+  The currency of every amount in the cart: that of the delivery country the visitor chose.
+  """
+  currency: String!
   discountCents: Int!
   discountCode: String
   freeShippingDiscount: Boolean!
@@ -52,6 +56,11 @@ type CartLine {
   product: Product!
   quantity: Int!
   sku: String!
+
+  """
+  False when this size has no price in the cart's currency: it cannot be delivered to the chosen country and counts for nothing in the totals.
+  """
+  sold: Boolean!
   unitPriceCents: Int!
   variant: Variant!
 }
@@ -68,6 +77,11 @@ input CheckoutInput {
 
   """Omit to bill to the delivery address."""
   billing: BillingInput
+
+  """
+  The currency the customer was shown. The order is refused if the delivery address is charged in another.
+  """
+  currency: String
   customerNote: String
   email: String!
   locale: String
@@ -425,7 +439,9 @@ type Variant {
   label: String!
   lowStock: Boolean!
 
-  """Price in euro cents, VAT included."""
+  """
+  Price in euro cents, VAT included. Prices in other currencies are set separately and are never converted from this.
+  """
   priceCents: Int!
   sku: String!
   volumeMl: Int!
