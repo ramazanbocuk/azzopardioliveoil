@@ -1,3 +1,4 @@
+import { publicLabResults, type PublicLabResult } from "@/server/provenance";
 import { toLocale } from "@/i18n/config";
 import { textOf } from "@/server/translations";
 import SchemaBuilder from "@pothos/core";
@@ -27,7 +28,8 @@ const iso = (date: Date) => date.toISOString();
 const day = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : null);
 
 type FullOrder = Order & { items: OrderItem[]; events: OrderEvent[]; shipments?: Shipment[]; accessToken?: string };
-type FullLot = Batch & { product: Product; documents: BatchDocument[] };
+type LotDocument = Omit<BatchDocument, "data">;
+type FullLot = Batch & { product: Product; documents: LotDocument[] };
 type CartLine = CartSummary["lines"][number];
 type ShippingOption = { id: string; name: string; carrier: string | null; estimate: string | null; priceCents: number };
 type ProductPage = { nodes: Product[]; hasNextPage: boolean; endCursor: string | null; totalCount: number };
@@ -66,6 +68,7 @@ const LotType = builder.objectRef<Batch>("Lot").implement({
   description: "One bottling. Fields are null until an administrator records them.",
   fields: (t) => ({
     lotNumber: t.exposeString("lotNumber"),
+    harvestYear: t.exposeInt("harvestYear", { nullable: true }),
     harvestDate: t.string({ nullable: true, resolve: (b) => day(b.harvestDate) }),
     grove: t.exposeString("grove", { nullable: true }),
     mill: t.exposeString("mill", { nullable: true }),
@@ -75,9 +78,24 @@ const LotType = builder.objectRef<Batch>("Lot").implement({
   }),
 });
 
-const LotDocumentType = builder.objectRef<BatchDocument>("LotDocument").implement({
+const LotDocumentType = builder.objectRef<LotDocument>("LotDocument").implement({
   description: "A verified document backing a claim about a lot.",
   fields: (t) => ({ kind: t.exposeString("kind"), title: t.exposeString("title"), url: t.exposeString("url") }),
+});
+
+const LabResultType = builder.objectRef<PublicLabResult>("LabResult").implement({
+  description: "One value a laboratory measured in a lot. Only results staff have verified against the laboratory's report are ever returned.",
+  fields: (t) => ({
+    measure: t.exposeString("measure", { description: "Key of the measure, e.g. polyphenols, free_acidity, peroxide; or other." }),
+    label: t.exposeString("label"),
+    value: t.exposeFloat("value"),
+    unit: t.exposeString("unit"),
+    decimals: t.exposeInt("decimals"),
+    method: t.exposeString("method", { nullable: true }),
+    laboratory: t.exposeString("laboratory", { nullable: true }),
+    testedAt: t.string({ nullable: true, resolve: (result) => day(result.testedAt) }),
+    certificateUrl: t.exposeString("certificateUrl", { nullable: true }),
+  }),
 });
 
 const LotRecordType = builder.objectRef<FullLot>("LotRecord").implement({
@@ -86,6 +104,7 @@ const LotRecordType = builder.objectRef<FullLot>("LotRecord").implement({
     productName: t.string({ resolve: (record) => record.product.name }),
     productSlug: t.string({ resolve: (record) => record.product.slug }),
     documents: t.field({ type: [LotDocumentType], resolve: (record) => record.documents }),
+    labResults: t.field({ type: [LabResultType], description: "Verified laboratory results for this lot. Empty when none has been verified.", resolve: async (record, _args, ctx) => (await publicLabResults(ctx.db, [record.id])).get(record.id) ?? [] }),
   }),
 });
 

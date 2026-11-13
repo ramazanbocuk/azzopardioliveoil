@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { bottleScale, journal, type CatalogItem, type Category, type JournalEntry, type Product } from "@/content/site";
 import { tagOf, toLocale } from "@/i18n/config";
 import { getPrisma } from "./db";
+import { publicLabResults } from "./provenance";
 import { publishedLanguages, publishedTranslations } from "./translations";
 
 /**
@@ -31,6 +32,9 @@ export async function getCatalogData(language = "en"): Promise<{ categories: Cat
       orderBy: [{ position: "asc" }, { id: "asc" }],
       include: {
         category: true,
+        region: true,
+        producer: { include: { region: true } },
+        varieties: { include: { variety: { select: { name: true } } }, orderBy: [{ percent: "desc" }, { varietyId: "asc" }] },
         variants: { where: { isActive: true }, orderBy: { position: "asc" } },
         batches: { where: { isPublished: true }, orderBy: { bottledAt: "desc" }, take: 1 },
       },
@@ -40,6 +44,9 @@ export async function getCatalogData(language = "en"): Promise<{ categories: Cat
     publishedLanguages(db, "product"),
     publishedLanguages(db, "category"),
   ]);
+
+  // Laboratory values of each product's current lot: verified ones only, and only for published lots.
+  const lab = await publicLabResults(db, productRows.flatMap((p) => (p.batches[0] ? [p.batches[0].id] : [])));
 
   const categories: Category[] = categoryRows.map((c) => {
     const text = categoryText.get(c.id);
@@ -58,6 +65,23 @@ export async function getCatalogData(language = "en"): Promise<{ categories: Cat
       languages: productLanguages.get(p.id) ?? ["en"],
       translated: language === "en" || !!text,
       lot: lot?.lotNumber ?? null,
+      profile: {
+        country: p.originCountry,
+        region: p.region?.name ?? null,
+        producer: p.producer?.isPublic ? { name: p.producer.name, place: [p.producer.town, p.producer.region?.name].filter(Boolean).join(", ") || null } : null,
+        varieties: p.varieties.map((entry) => ({ name: entry.variety.name, percent: entry.percent })),
+        composition: p.composition,
+        harvestYear: lot?.harvestYear ?? null,
+        harvesting: text?.harvestMethod ?? p.harvestMethod,
+        extraction: text?.extractionMethod ?? p.extractionMethod,
+        aroma: text?.aroma ?? p.aroma,
+        taste: text?.taste ?? p.taste,
+        bitterness: p.bitterness,
+        pungency: p.pungency,
+        pairings: text?.pairings ?? p.pairings,
+        packaging: text?.packaging ?? p.packaging,
+      },
+      lab: (lot ? (lab.get(lot.id) ?? []) : []).map(({ testedAt, ...result }) => ({ ...result, tested: day(testedAt) })),
       variants: p.variants.map((v) => ({ sku: v.sku, ml: v.volumeMl, label: v.label, priceCents: v.priceCents, scale: bottleScale(v.volumeMl), inStock: v.stock - v.reserved > 0 })),
       facts: {
         origin: text?.origin ?? p.origin,

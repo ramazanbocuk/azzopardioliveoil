@@ -6,7 +6,7 @@ Read `AGENTS.md` first: this Next.js version differs from older ones, and its ow
 
 A bespoke ecommerce platform for Azzopardi (premium olive oil): one Next.js 16 application, PostgreSQL through Prisma, a GraphQL API for the storefront, server actions over a service layer for the admin panel, Stripe Checkout, Resend email.
 
-The master brief is being built in phases. `docs/platform-audit.md` has the audit, the architecture decisions and the phase plan. Phase 3 (languages) is built: `docs/internationalisation.md`.
+The master brief is being built in phases. `docs/platform-audit.md` has the audit, the architecture decisions and the phase plan. Phase 3 (languages) is built: `docs/internationalisation.md`. Phase 4 (producers, varieties, lab results per batch) is built: `docs/product-intelligence.md`.
 
 ## Commands
 
@@ -23,4 +23,6 @@ The master brief is being built in phases. `docs/platform-audit.md` has the audi
 - Money and status changes happen in services under `src/server/`, never in pages. An order is paid only by a verified provider webhook; shipped only with a shipment.
 - Every admin service starts with `requireAdmin(ctx, level, area)`.
 - Never state a certification, lab value, health claim or delivery date that is not in the database. Empty means "—".
+- A laboratory value reaches customers only through `publicLabResults` (verified, published batch). Do not read `LabResult` directly in storefront code.
+- An optional number in a zod schema is `z.union([...]).optional()`, not a union containing `z.undefined()`: the latter makes the key required.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost) have never called a carrier. Non-English text has not had a native review.

@@ -12,7 +12,7 @@ import { LotQuery, SubscribeNewsletter } from "@/lib/operations";
 
 /** Looks a lot number up in the published lot records. Shown on a dark ground. */
 export function TraceForm() {
-  const { m, fill, date: format, server } = useI18n();
+  const { m, tag, fill, date: format, server } = useI18n();
   const date = (value: string | null | undefined) => (value ? format(value, { dateStyle: "long", timeZone: "UTC" }) : "—");
   const [lookup, { data, loading, called, error }] = useLazyQuery(LotQuery, { fetchPolicy: "network-only" });
   const record = data?.lot ?? null;
@@ -44,6 +44,7 @@ export function TraceForm() {
             <dl className="text-ticket mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
               {(
                 [
+                  [m.intel.harvestYear, record.lot.harvestYear ? String(record.lot.harvestYear) : "—"],
                   [m.product.harvest, date(record.lot.harvestDate)],
                   [m.trace.grove, record.lot.grove ?? "—"],
                   [m.product.mill, record.lot.mill ?? "—"],
@@ -57,6 +58,22 @@ export function TraceForm() {
                 </div>
               ))}
             </dl>
+            {record.labResults.length > 0 && (
+              <dl className="text-ticket mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 border-t border-ivory/25 pt-3">
+                {record.labResults.map((result, index) => {
+                  const unit = (m.intel.units as Record<string, string>)[result.measure] ?? result.unit;
+                  return (
+                    <div key={`${result.measure}-${index}`} className="contents">
+                      <dt className="text-ivory/70">{(m.intel.measures as Record<string, string>)[result.measure] ?? result.label}</dt>
+                      <dd className="text-right">
+                        {new Intl.NumberFormat(tag, { minimumFractionDigits: result.decimals, maximumFractionDigits: result.decimals }).format(result.value)}
+                        {unit ? ` ${unit}` : ""}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            )}
             {record.documents.length > 0 && (
               <ul className="text-small mt-4 space-y-1 border-t border-ivory/25 pt-3">
                 {record.documents.map((document) => (

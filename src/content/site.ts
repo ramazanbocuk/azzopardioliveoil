@@ -33,6 +33,27 @@ export type Product = {
   variants: Variant[];
   /** Most recent published lot, if any. */
   lot: string | null;
+  /** Where it comes from, what it is made of and how it tastes. Every field is administrator-entered; null or empty means "not yet recorded". */
+  profile: {
+    /** ISO country code; the page shows the country's name in the reader's language. */
+    country: string | null;
+    region: string | null;
+    /** Only producers the business has marked as public are named. */
+    producer: { name: string; place: string | null } | null;
+    varieties: { name: string; percent: number | null }[];
+    composition: "SINGLE_VARIETY" | "BLEND" | null;
+    harvestYear: number | null;
+    harvesting: string | null;
+    extraction: string | null;
+    aroma: string | null;
+    taste: string | null;
+    bitterness: number | null;
+    pungency: number | null;
+    pairings: string | null;
+    packaging: string | null;
+  };
+  /** Laboratory values of the current lot. Only verified results of a published lot are ever here. */
+  lab: { measure: string; label: string; value: number; unit: string; decimals: number; method: string | null; laboratory: string | null; tested: string | null; certificateUrl: string | null }[];
   /** Administrator-entered facts. `null` means "not yet recorded". */
   facts: {
     origin: string | null;
@@ -73,6 +94,8 @@ export const sampleItem: CatalogItem = {
     translated: true,
     variants: [],
     lot: SAMPLE_LOT,
+    profile: { country: null, region: null, producer: null, varieties: [], composition: null, harvestYear: null, harvesting: null, extraction: null, aroma: null, taste: null, bitterness: null, pungency: null, pairings: null, packaging: null },
+    lab: [],
     facts: { origin: null, harvest: null, cultivar: null, mill: null, bottled: null, bestBefore: null, ingredients: null, nutrition: [], storage: null },
   },
 };

@@ -36,6 +36,12 @@ export const FIELDS: Record<Entity, FieldSpec[]> = {
     { key: "cultivar", label: "Olive variety", max: 200, regulated: true },
     { key: "ingredients", label: "Ingredients", max: 500, regulated: true },
     { key: "storage", label: "Storage", max: 500, regulated: true },
+    { key: "harvestMethod", label: "Harvesting method", max: 300 },
+    { key: "extractionMethod", label: "Extraction method", max: 300, regulated: true },
+    { key: "aroma", label: "Aroma", long: true, max: 600 },
+    { key: "taste", label: "Taste", long: true, max: 600 },
+    { key: "pairings", label: "Food pairings", long: true, max: 600 },
+    { key: "packaging", label: "Packaging", max: 300 },
   ],
   category: [
     { key: "name", label: "Name", max: 120, required: true },

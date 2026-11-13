@@ -297,7 +297,7 @@ export async function traceLot(ctx: Ctx, rawLot: string) {
   const lotNumber = rawLot.trim().toUpperCase();
   if (!lotNumber) return null;
   const [batch, lines, unrecorded] = await Promise.all([
-    ctx.db.batch.findUnique({ where: { lotNumber }, include: { product: { select: { id: true, name: true } }, supplier: true, documents: true } }),
+    ctx.db.batch.findUnique({ where: { lotNumber }, include: { product: { select: { id: true, name: true } }, supplier: true, documents: { omit: { data: true } } } }),
     ctx.db.orderItem.findMany({ where: { lotNumber }, orderBy: { order: { placedAt: "asc" } }, include: { order: { select: { id: true, number: true, email: true, shipFirstName: true, shipLastName: true, shipCity: true, shipCountryCode: true, shipPhone: true, status: true, paidAt: true, shipments: { where: { cancelledAt: null }, select: { carrier: true, trackingNumber: true, shippedAt: true } } } } } }),
     ctx.db.orderItem.count({ where: { lotNumber: null, shippedQuantity: { gt: 0 } } }),
   ]);

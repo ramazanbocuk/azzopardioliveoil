@@ -59,11 +59,28 @@ model Product {
   hsCode             String?
   customsDescription String?
   originCountry      String?   @db.Char(2)
+  // Provenance and tasting profile. Administrator-entered; null = not yet recorded, and shown to customers as a dash.
+  // The country of origin is `originCountry` above: one fact, used for customs and for the product page alike.
+  producerId         String?
+  regionId           String?
+  composition        OilComposition?
+  extractionMethod   String?
+  harvestMethod      String?
+  aroma              String?
+  taste              String?
+  /// 0 (none) to 5 (intense), as judged by the house. Not a laboratory value.
+  bitterness         Int?
+  pungency           Int?
+  pairings           String?
+  packaging          String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
 
   category     Category             @relation(fields: [categoryId], references: [id])
+  producer     Producer?            @relation(fields: [producerId], references: [id], onDelete: SetNull)
+  region       Region?              @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  varieties    ProductVariety[]
   variants     Variant[]
   images       ProductImage[]
   batches      Batch[]
@@ -138,14 +155,20 @@ model Batch {
   notes       String?
   /// Who supplied this lot (grower, mill or bottler). Internal: never shown to customers.
   supplierId  String?
+  /// The harvest campaign, e.g. 2026 for olives picked in autumn 2026. Each batch has its own.
+  harvestYear Int?
+  /// Who made this batch, when it differs from the product's usual producer.
+  producerId  String?
   /// Only published batches are visible to customers.
   isPublished Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  product   Product         @relation(fields: [productId], references: [id])
-  supplier  Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  documents BatchDocument[]
+  product    Product         @relation(fields: [productId], references: [id])
+  supplier   Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  producer   Producer?       @relation(fields: [producerId], references: [id], onDelete: SetNull)
+  documents  BatchDocument[]
+  labResults LabResult[]
 
   @@index([productId, isPublished])
 }
@@ -164,12 +187,18 @@ model BatchDocument {
   kind         BatchDocumentKind
   title        String
   url          String
+  /// An uploaded PDF is kept in the database and served from /media/certificate/{id} once verified and its batch is published.
+  data         Bytes?
+  mime         String?
+  bytes        Int?
+  uploadedById String?
   verifiedAt   DateTime?
   verifiedById String?
   createdAt    DateTime          @default(now())
 
-  batch      Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  verifiedBy AdminUser? @relation(fields: [verifiedById], references: [id])
+  batch      Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  verifiedBy AdminUser?  @relation(fields: [verifiedById], references: [id])
+  labResults LabResult[]
 
   @@index([batchId])
 }
@@ -1017,4 +1046,91 @@ model TranslationRevision {
   translation   Translation @relation(fields: [translationId], references: [id], onDelete: Cascade)
 
   @@index([translationId, createdAt])
+}
+
+enum OilComposition {
+  SINGLE_VARIETY
+  BLEND
+}
+
+/// A growing region within a country, e.g. Crete in GR. Countries themselves are ISO codes and need no table.
+model Region {
+  id          String     @id @default(cuid())
+  countryCode String     @db.Char(2)
+  name        String
+  createdAt   DateTime   @default(now())
+  products    Product[]
+  producers   Producer[]
+
+  @@unique([countryCode, name])
+}
+
+/// Who makes an oil: an estate, a mill or a cooperative. Shown to customers by name once marked public.
+/// A Supplier is who the business buys from and is never shown; the two may or may not be the same company.
+model Producer {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  countryCode String?   @db.Char(2)
+  regionId    String?
+  town        String?
+  description String    @default("")
+  website     String?
+  /// Only public producers are named on the shop.
+  isPublic    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  region      Region?   @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  products    Product[]
+  batches     Batch[]
+}
+
+model OliveVariety {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String           @unique
+  description String           @default("")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  products    ProductVariety[]
+}
+
+/// Which varieties an oil is made from. `percent` is optional and, when given for a blend, the shares add up to 100.
+model ProductVariety {
+  productId String
+  varietyId String
+  percent   Int?
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variety   OliveVariety @relation(fields: [varietyId], references: [id], onDelete: Cascade)
+
+  @@id([productId, varietyId])
+  @@index([varietyId])
+}
+
+/// One measured value for one batch, as reported by a laboratory.
+/// Customers see a result only when it is verified and its batch is published.
+/// A result is never edited: a wrong one is deleted and entered again, so the record of who verified what stays true.
+model LabResult {
+  id           String         @id @default(cuid())
+  batchId      String
+  /// A key from the list of measures in src/server/provenance.ts, or "other".
+  measure      String
+  /// Name of the measure when it is "other".
+  label        String?
+  value        Decimal        @db.Decimal(12, 4)
+  unit         String
+  method       String?
+  laboratory   String?
+  testedAt     DateTime?      @db.Date
+  /// The certificate this value was read from.
+  documentId   String?
+  note         String?
+  createdById  String?
+  verifiedAt   DateTime?
+  verifiedById String?
+  createdAt    DateTime       @default(now())
+  batch        Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  document     BatchDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
 }

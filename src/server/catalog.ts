@@ -67,6 +67,7 @@ export async function lookupLot(db: Db, ip: string, lotNumber: string) {
   if (!/^[A-Z0-9-]{3,32}$/.test(lot)) throw new AppError("BAD_INPUT", "That does not look like a lot number.", "lotNumber");
   return db.batch.findFirst({
     where: { lotNumber: lot, isPublished: true },
-    include: { product: true, documents: { where: { verifiedAt: { not: null } }, orderBy: { createdAt: "asc" } } },
+    // The file itself is served from /media/certificate; it is never loaded just to list its title.
+    include: { product: true, documents: { where: { verifiedAt: { not: null } }, orderBy: { createdAt: "asc" }, omit: { data: true } } },
   });
 }
