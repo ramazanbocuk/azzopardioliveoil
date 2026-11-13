@@ -49,6 +49,10 @@ In Stripe, add an endpoint `https://<your-domain>/api/webhooks/stripe` for these
 
 Without the refund and dispute events the shop still takes payments, but a refund made in the Stripe Dashboard, a refund the bank bounces, or a dispute will not appear in the admin panel. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
 
+## 4b. Visitor country
+
+The language suggestion uses the visitor's country from the `x-vercel-ip-country` header (Vercel sets it) or `cf-ipcountry` (Cloudflare). On another host, have the edge set one of them and strip any copy sent by the client. Without it, only the browser language is used and Belgian visitors are not shown the language prompt.
+
 ## 5. Domain and HTTPS
 
 Point the domain at the host, then set `APP_URL` to it and redeploy. The site sends HSTS with `preload`; only submit the domain to the browser preload list once you are certain every subdomain will always use HTTPS.

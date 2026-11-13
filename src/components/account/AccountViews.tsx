@@ -11,12 +11,15 @@ import { ProductCard } from "@/components/ui/ProductCard";
 import type { CatalogItem } from "@/content/site";
 import type { OrderFieldsFragment } from "@/gql/graphql";
 import { errorMessage } from "@/lib/apollo";
+import { useI18n } from "@/i18n/client";
 import { CartQuery, Login, Logout, MeQuery, Register, RequestReturn, SendContactMessage } from "@/lib/operations";
 import { useFavourites, useHydrated } from "@/lib/store";
 
 /** Sign in or create an account. Passwords go only to the API over the same origin, and are stored as Argon2id hashes. */
 function AuthPanel() {
   const client = useApolloClient();
+  const { m, server } = useI18n();
+  const a = m.account;
   const [mode, setMode] = useState<"signin" | "register">("signin");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,7 +38,7 @@ function AuthPanel() {
       // The session cookie is set; the signed-in view and the cart now belong to the account.
       await client.refetchQueries({ include: [MeQuery, CartQuery] });
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(server(errorMessage(cause)));
     } finally {
       setBusy(false);
     }
@@ -60,31 +63,31 @@ function AuthPanel() {
 
   return (
     <div>
-      <div role="tablist" aria-label="Account" className="flex gap-8 border-b border-ink/20">
-        {tab("signin", "Sign in")}
-        {tab("register", "Create account")}
+      <div role="tablist" aria-label={a.eyebrow} className="flex gap-8 border-b border-ink/20">
+        {tab("signin", a.signIn)}
+        {tab("register", a.create)}
       </div>
 
       <form id="auth-panel" role="tabpanel" aria-labelledby={`tab-${mode}`} onSubmit={submit} className="mt-8 space-y-6">
         {mode === "register" && (
           <div className="grid gap-6 sm:grid-cols-2">
-            <TextField label="First name" name="firstName" required autoComplete="given-name" />
-            <TextField label="Last name" name="lastName" required autoComplete="family-name" />
+            <TextField label={m.checkout.firstName} name="firstName" required autoComplete="given-name" />
+            <TextField label={m.checkout.lastName} name="lastName" required autoComplete="family-name" />
           </div>
         )}
-        <TextField label="Email address" name="email" type="email" required autoComplete="email" />
+        <TextField label={m.checkout.email} name="email" type="email" required autoComplete="email" />
         <TextField
-          label="Password"
+          label={a.password}
           name="password"
           type="password"
           required
           minLength={mode === "register" ? 12 : undefined}
           autoComplete={mode === "register" ? "new-password" : "current-password"}
-          hint={mode === "register" ? "At least 12 characters." : undefined}
+          hint={mode === "register" ? a.passwordHint : undefined}
         />
-        {mode === "register" && <Checkbox label="I have read the privacy policy" name="privacy" required />}
+        {mode === "register" && <Checkbox label={a.privacyRead} name="privacy" required />}
         <Button type="submit" arrow disabled={busy}>
-          {mode === "register" ? "Create account" : "Sign in"}
+          {mode === "register" ? a.create : a.signIn}
         </Button>
         <p role="alert" className="text-small min-h-6 text-terracotta-700">
           {error}
@@ -96,6 +99,8 @@ function AuthPanel() {
 }
 
 function ReturnForm({ number }: { number: string }) {
+  const { m, server } = useI18n();
+  const a = m.account;
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [requestReturn, { loading }] = useMutation(RequestReturn, { refetchQueries: [MeQuery] });
@@ -104,10 +109,10 @@ function ReturnForm({ number }: { number: string }) {
     event.preventDefault();
     try {
       await requestReturn({ variables: { number, reason: String(new FormData(event.currentTarget).get("reason") ?? "") } });
-      setMessage("Return requested. We will be in touch by email.");
+      setMessage(a.returnRequested);
       setOpen(false);
     } catch (cause) {
-      setMessage(errorMessage(cause));
+      setMessage(server(errorMessage(cause)));
     }
   };
 
@@ -115,14 +120,14 @@ function ReturnForm({ number }: { number: string }) {
     <div className="mt-6">
       {!open && (
         <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-          Request a return
+          {a.requestReturn}
         </Button>
       )}
       {open && (
         <form onSubmit={submit} className="flex flex-wrap items-end gap-4">
-          <TextField label="Reason for return" name="reason" required minLength={10} maxLength={1000} className="min-w-64 flex-1" />
+          <TextField label={a.returnReason} name="reason" required minLength={10} maxLength={1000} className="min-w-64 flex-1" />
           <Button type="submit" size="sm" disabled={loading}>
-            Send request
+            {a.sendRequest}
           </Button>
         </form>
       )}
@@ -134,12 +139,13 @@ function ReturnForm({ number }: { number: string }) {
 }
 
 function Orders({ orders }: { orders: OrderFieldsFragment[] }) {
+  const { m, date, money } = useI18n();
   if (orders.length === 0) {
     return (
       <div className="border border-dashed border-ink/30 px-6 py-16 text-center">
-        <p className="text-h3">No orders yet.</p>
+        <p className="text-h3">{m.account.noOrders}</p>
         <ButtonLink href="/shop" variant="secondary" arrow className="mt-6">
-          Shop the oil
+          {m.common.shopCta}
         </ButtonLink>
       </div>
     );
@@ -151,9 +157,9 @@ function Orders({ orders }: { orders: OrderFieldsFragment[] }) {
           <details className="group/order">
             <summary className="flex min-h-16 cursor-pointer list-none flex-wrap items-center justify-between gap-x-8 gap-y-1 py-4 [&::-webkit-details-marker]:hidden">
               <span className="text-h3 !text-[1.25rem]">{order.number}</span>
-              <span className="text-small text-stone-700">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(order.placedAt))}</span>
-              <span className="text-label">{order.status.replaceAll("_", " ").toLowerCase()}</span>
-              <span className="tabular-nums">{new Intl.NumberFormat("en-BE", { style: "currency", currency: "EUR" }).format(order.totalCents / 100)}</span>
+              <span className="text-small text-stone-700">{date(order.placedAt)}</span>
+              <span className="text-label">{(m.order.status as Record<string, string>)[order.status] ?? order.status}</span>
+              <span className="tabular-nums">{money(order.totalCents)}</span>
             </summary>
             <div className="grid gap-x-12 gap-y-8 pb-8 md:grid-cols-2">
               <OrderSummary order={order} />
@@ -169,16 +175,18 @@ function Orders({ orders }: { orders: OrderFieldsFragment[] }) {
   );
 }
 
-const features = ["Every past order, with its lot numbers", "Parcel tracking without re-entering your order number", "Return requests for delivered orders"];
 
 /** The account page: sign-in forms for visitors, orders and sign-out for customers. */
 export function AccountView() {
   const hydrated = useHydrated();
   const client = useApolloClient();
+  const { m } = useI18n();
+  const a = m.account;
+  const features = [a.feature1, a.feature2, a.feature3];
   const { data, loading } = useQuery(MeQuery, { skip: !hydrated, fetchPolicy: "cache-and-network" });
   const [logout] = useMutation(Logout);
 
-  if (!hydrated || (loading && !data)) return <p className="text-lead py-20 text-stone-700">Loading your account…</p>;
+  if (!hydrated || (loading && !data)) return <p className="text-lead py-20 text-stone-700">{a.loading}</p>;
 
   const me = data?.me;
   if (!me) {
@@ -188,7 +196,7 @@ export function AccountView() {
           <AuthPanel />
         </div>
         <div className="lg:col-span-5 lg:col-start-8">
-          <h2 className="text-h3">With an account</h2>
+          <h2 className="text-h3">{a.withAccount}</h2>
           <ul className="mt-5 border-t border-ink/20">
             {features.map((feature) => (
               <li key={feature} className="border-b border-ink/20 py-4">
@@ -196,7 +204,7 @@ export function AccountView() {
               </li>
             ))}
           </ul>
-          <p className="text-small mt-5 text-stone-700">You can always check out as a guest.</p>
+          <p className="text-small mt-5 text-stone-700">{a.guest}</p>
         </div>
       </div>
     );
@@ -217,10 +225,10 @@ export function AccountView() {
           <p className="mt-2 text-stone-700">{me.email}</p>
         </div>
         <Button variant="secondary" onClick={signOut}>
-          Sign out
+          {a.signOut}
         </Button>
       </div>
-      <h2 className="text-h2 mt-12">Your orders</h2>
+      <h2 className="text-h2 mt-12">{a.yourOrders}</h2>
       <div className="mt-8">
         <Orders orders={me.orders} />
       </div>
@@ -232,17 +240,18 @@ export function AccountView() {
 export function FavouritesList({ items }: { items: CatalogItem[] }) {
   const hydrated = useHydrated();
   const saved = useFavourites();
+  const { m } = useI18n();
   const matches = items.filter((item) => saved.includes(item.variant.sku));
 
-  if (!hydrated) return <p className="text-stone-700">Loading favourites…</p>;
+  if (!hydrated) return <p className="text-stone-700">{m.account.loadingFavourites}</p>;
 
   if (matches.length === 0) {
     return (
       <div className="border border-dashed border-ink/30 px-6 py-16 text-center">
-        <p className="text-h3">No favourites yet.</p>
-        <p className="mt-3 text-ink/80">Tap the heart on any bottle to keep it here.</p>
+        <p className="text-h3">{m.account.noFavourites}</p>
+        <p className="mt-3 text-ink/80">{m.account.favouritesHint}</p>
         <ButtonLink href="/shop" variant="secondary" arrow className="mt-6">
-          Shop the oil
+          {m.common.shopCta}
         </ButtonLink>
       </div>
     );
@@ -260,6 +269,8 @@ export function FavouritesList({ items }: { items: CatalogItem[] }) {
 }
 
 export function ContactForm() {
+  const { m, server } = useI18n();
+  const c = m.contact;
   const [message, setMessage] = useState("");
   const [send, { loading }] = useMutation(SendContactMessage);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -270,21 +281,21 @@ export function ContactForm() {
     try {
       await send({ variables: { name: field("name"), email: field("email"), reference: field("reference") || null, message: field("message") } });
       form.reset();
-      setMessage("Thank you. Your message has been received and we will reply by email.");
+      setMessage(c.sent);
     } catch (cause) {
-      setMessage(errorMessage(cause));
+      setMessage(server(errorMessage(cause)));
     }
   };
   return (
     <form onSubmit={submit} className="space-y-6">
       <div className="grid gap-6 sm:grid-cols-2">
-        <TextField label="Name" name="name" required autoComplete="name" />
-        <TextField label="Email address" name="email" type="email" required autoComplete="email" />
+        <TextField label={c.name} name="name" required autoComplete="name" />
+        <TextField label={m.checkout.email} name="email" type="email" required autoComplete="email" />
       </div>
-      <TextField label="Order or lot number (optional)" name="reference" autoComplete="off" />
+      <TextField label={c.reference} name="reference" autoComplete="off" />
       <div>
         <label htmlFor="contact-message" className="text-label block opacity-80">
-          Message
+          {c.message}
         </label>
         <textarea
           id="contact-message"
@@ -295,7 +306,7 @@ export function ContactForm() {
         />
       </div>
       <Button type="submit" arrow disabled={loading}>
-        Send message
+        {c.send}
       </Button>
       <p role="status" className="text-small min-h-6 text-terracotta-700">
         {message}

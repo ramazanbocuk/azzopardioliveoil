@@ -57,9 +57,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: securityHeaders },
       // These pages carry a private token in the address; never pass it on in a Referer header.
-      { source: "/order-confirmation", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
-      { source: "/account/reset", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
-      { source: "/newsletter", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+      { source: "/:locale/order-confirmation", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+      { source: "/:locale/account/reset", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+      { source: "/:locale/newsletter", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
       // Staff screens and APIs must never be cached by a shared proxy or indexed.
       { source: "/admin/:path*", headers: [{ key: "Cache-Control", value: "private, no-store" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }] },
       { source: "/api/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] },

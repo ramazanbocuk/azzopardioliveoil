@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/components/ui/Link";
 import { ButtonLink } from "@/components/ui/Button";
 import { GroveScene } from "@/components/ui/GroveScene";
 import { ArrowIcon } from "@/components/ui/icons";

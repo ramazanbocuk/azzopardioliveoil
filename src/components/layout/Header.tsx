@@ -1,22 +1,33 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/ui/Link";
 import clsx from "clsx";
 import { useEffect, useRef, useState } from "react";
-import { navigation } from "@/content/site";
+import { useI18n } from "@/i18n/client";
 import { AccountIcon, BagIcon, SearchIcon } from "@/components/ui/icons";
 import { useCart } from "@/lib/store";
+import { LocaleSelector } from "./LocaleSelector";
 import { Wordmark } from "./Wordmark";
+
+const NAV = [
+  { href: "/shop", key: "shop" },
+  { href: "/our-story", key: "story" },
+  { href: "/olive-groves", key: "groves" },
+  { href: "/harvest-production", key: "harvest" },
+  { href: "/quality-traceability", key: "traceability" },
+  { href: "/journal", key: "journal" },
+] as const;
 
 const iconButton = "grid size-11 place-items-center transition-opacity duration-300 hover:opacity-60";
 
-export function Header() {
+export function Header({ countries }: { countries: string[] }) {
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
   const lastY = useRef(0);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const count = useCart().cart.itemCount;
+  const { m, plural } = useI18n();
 
   // Solid after the first screen-edge; tucks away scrolling down, returns scrolling up.
   useEffect(() => {
@@ -69,12 +80,12 @@ export function Header() {
         )}
       >
         <div className="container-page grid h-(--header-h) grid-cols-[1fr_auto_1fr] items-center">
-          <nav aria-label="Primary" className="hidden xl:block">
+          <nav aria-label={m.nav.primary} className="hidden xl:block">
             <ul className="flex items-center gap-7 whitespace-nowrap">
-              {navigation.map((item) => (
+              {NAV.map((item) => (
                 <li key={item.href}>
                   <Link href={item.href} className="text-label link-underline inline-flex min-h-11 items-center">
-                    {item.label}
+                    {m.nav[item.key]}
                   </Link>
                 </li>
               ))}
@@ -93,22 +104,23 @@ export function Header() {
               <span className={clsx("absolute inset-x-0 top-0 h-px bg-current transition-transform duration-500 ease-out-expo", open && "translate-y-[5px] rotate-45")} />
               <span className={clsx("absolute inset-x-0 bottom-0 h-px bg-current transition-transform duration-500 ease-out-expo", open && "-translate-y-[4px] -rotate-45")} />
             </span>
-            <span className="max-sm:sr-only">{open ? "Close" : "Menu"}</span>
+            <span className="max-sm:sr-only">{open ? m.common.close : m.common.menu}</span>
           </button>
 
           <Link href="/" className="justify-self-center" onClick={() => setOpen(false)}>
             <Wordmark />
-            <span className="sr-only">, home</span>
+            <span className="sr-only">, {m.common.home}</span>
           </Link>
 
           <div className="flex items-center justify-self-end">
-            <Link href="/search" aria-label="Search" className={clsx(iconButton, "hidden sm:grid")}>
+            <LocaleSelector placement="header" countries={countries} />
+            <Link href="/search" aria-label={m.nav.search} className={clsx(iconButton, "hidden sm:grid")}>
               <SearchIcon />
             </Link>
-            <Link href="/account" aria-label="Account" className={clsx(iconButton, "hidden sm:grid")}>
+            <Link href="/account" aria-label={m.nav.account} className={clsx(iconButton, "hidden sm:grid")}>
               <AccountIcon />
             </Link>
-            <Link href="/cart" aria-label={`Cart, ${count} ${count === 1 ? "item" : "items"}`} className={clsx(iconButton, "relative -mr-2.5")}>
+            <Link href="/cart" aria-label={plural(count, m.nav.cart)} className={clsx(iconButton, "relative -mr-2.5")}>
               <BagIcon />
               <span aria-hidden="true" className="text-ticket absolute right-1 top-1.5 !text-[0.5625rem]">
                 {count}
@@ -126,9 +138,9 @@ export function Header() {
           open ? "visible opacity-100" : "invisible opacity-0",
         )}
       >
-        <nav aria-label="Mobile" className="container-page flex flex-1 flex-col justify-center pt-(--header-h)">
+        <nav aria-label={m.nav.mobile} className="container-page flex flex-1 flex-col justify-center pt-(--header-h)">
           <ul>
-            {navigation.map((item, index) => (
+            {NAV.map((item, index) => (
               <li key={item.href} className="overflow-hidden border-b border-ivory/15">
                 <Link
                   href={item.href}
@@ -139,7 +151,7 @@ export function Header() {
                     open ? "translate-y-0" : "translate-y-full",
                   )}
                 >
-                  {item.label}
+                  {m.nav[item.key]}
                 </Link>
               </li>
             ))}
@@ -147,13 +159,13 @@ export function Header() {
         </nav>
         <div className="container-page text-label flex justify-between pb-8 text-ivory/80">
           <Link href="/account" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center">
-            Account
+            {m.nav.account}
           </Link>
           <Link href="/search" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center">
-            Search
+            {m.nav.search}
           </Link>
           <Link href="/contact" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center">
-            Contact
+            {m.nav.contact}
           </Link>
         </div>
       </div>

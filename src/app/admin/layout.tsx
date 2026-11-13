@@ -4,7 +4,9 @@ import { Suspense, type ReactNode } from "react";
 import { PasswordField } from "@/components/admin/PasswordField";
 import { SignInError } from "@/components/admin/SignInError";
 import { Field, Submit } from "@/components/admin/ui";
+import { switzer, zodiak } from "@/lib/fonts";
 import { adminCtx } from "@/server/adminSession";
+import "../globals.css";
 import { signIn, signOut } from "./actions";
 
 export const metadata: Metadata = {
@@ -30,6 +32,7 @@ const NAV = [
   { href: "/admin/suppliers", label: "Suppliers" },
   { href: "/admin/traceability", label: "Food traceability" },
   { href: "/admin/content", label: "Website content" },
+  { href: "/admin/translations", label: "Translations" },
   { href: "/admin/notifications", label: "Notifications" },
   { href: "/admin/staff", label: "Staff & permissions" },
   { href: "/admin/security", label: "Security" },
@@ -103,10 +106,15 @@ async function Gate({ children }: { children: ReactNode }) {
   );
 }
 
+/** Root layout of the admin panel. The storefront has its own, under a locale; the two share nothing but the stylesheet. */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<div className="min-h-svh bg-[#f3f1ea]" />}>
-      <Gate>{children}</Gate>
-    </Suspense>
+    <html lang="en" className={`${zodiak.variable} ${switzer.variable} antialiased`}>
+      <body className="flex min-h-svh flex-col">
+        <Suspense fallback={<div className="min-h-svh bg-[#f3f1ea]" />}>
+          <Gate>{children}</Gate>
+        </Suspense>
+      </body>
+    </html>
   );
 }

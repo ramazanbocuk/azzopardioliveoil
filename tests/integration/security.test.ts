@@ -139,8 +139,8 @@ describe("housekeeping and headers", () => {
     expect(all["Content-Security-Policy"]).toContain("object-src 'none'");
     expect(all["Content-Security-Policy"]).not.toMatch(/https?:\/\//); // no third-party origins at all
     expect(all).toMatchObject({ "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "strict-origin-when-cross-origin" });
-    expect(of("/order-confirmation")["Referrer-Policy"]).toBe("no-referrer");
-    expect(of("/account/reset")["Referrer-Policy"]).toBe("no-referrer");
+    expect(of("/:locale/order-confirmation")["Referrer-Policy"]).toBe("no-referrer");
+    expect(of("/:locale/account/reset")["Referrer-Policy"]).toBe("no-referrer");
     expect(of("/admin/:path*")["Cache-Control"]).toBe("private, no-store");
     expect(nextConfig.poweredByHeader).toBe(false);
   });

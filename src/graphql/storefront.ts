@@ -1,6 +1,8 @@
+import { toLocale } from "@/i18n/config";
+import { textOf } from "@/server/translations";
 import SchemaBuilder from "@pothos/core";
 import type { Batch, BatchDocument, Category, Customer, Order, OrderEvent, OrderItem, Product, Review, Shipment, Variant } from "@/generated/prisma/client";
-import { deleteOwnAccount, login, logout, register, requestPasswordReset, requireCustomer, resetPassword } from "@/server/auth";
+import { chooseLanguage, deleteOwnAccount, login, logout, register, requestPasswordReset, requireCustomer, resetPassword } from "@/server/auth";
 import { exportCustomerData } from "@/server/privacy";
 import { addItem, applyDiscount, findCart, removeDiscount, removeItem, setQuantity, summarise, type CartSummary } from "@/server/cart";
 import { getProduct, listCategories, listProducts, lookupLot } from "@/server/catalog";
@@ -36,8 +38,8 @@ const CategoryType = builder.objectRef<Category>("Category").implement({
   fields: (t) => ({
     id: t.exposeID("id"),
     slug: t.exposeString("slug"),
-    name: t.exposeString("name"),
-    intro: t.exposeString("intro"),
+    name: t.string({ resolve: async (category, _args, ctx) => (await textOf(ctx, "category", category.id)).name ?? category.name }),
+    intro: t.string({ resolve: async (category, _args, ctx) => (await textOf(ctx, "category", category.id)).intro ?? category.intro }),
   }),
 });
 
@@ -102,13 +104,14 @@ const ProductType = builder.objectRef<Product & { variants?: Variant[] }>("Produ
   fields: (t) => ({
     id: t.exposeID("id"),
     slug: t.exposeString("slug"),
-    name: t.exposeString("name"),
-    blurb: t.exposeString("blurb"),
-    description: t.exposeString("description"),
-    origin: t.exposeString("origin", { nullable: true }),
-    cultivar: t.exposeString("cultivar", { nullable: true }),
-    ingredients: t.exposeString("ingredients", { nullable: true }),
-    storage: t.exposeString("storage", { nullable: true }),
+    // Text fields answer in the language of the page that asked, when a translation is published; otherwise in English.
+    name: t.string({ resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).name ?? product.name }),
+    blurb: t.string({ resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).blurb ?? product.blurb }),
+    description: t.string({ resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).description ?? product.description }),
+    origin: t.string({ nullable: true, resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).origin ?? product.origin }),
+    cultivar: t.string({ nullable: true, resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).cultivar ?? product.cultivar }),
+    ingredients: t.string({ nullable: true, resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).ingredients ?? product.ingredients }),
+    storage: t.string({ nullable: true, resolve: async (product, _args, ctx) => (await textOf(ctx, "product", product.id)).storage ?? product.storage }),
     seoTitle: t.exposeString("seoTitle", { nullable: true }),
     seoDescription: t.exposeString("seoDescription", { nullable: true }),
     nutrition: t.field({
@@ -376,6 +379,7 @@ builder.queryType({
 
 builder.mutationType({
   fields: (t) => ({
+    setLanguage: t.string({ description: "Remembers the visitor's chosen language on this device and, when signed in, on their account.", args: { locale: t.arg.string({ required: true }) }, resolve: (_root, args, ctx) => chooseLanguage(ctx, args.locale) }),
     register: t.field({ type: CustomerType, args: { input: t.arg({ type: RegisterInput, required: true }) }, resolve: (_root, args, ctx) => register(ctx, args.input) }),
     login: t.field({
       type: CustomerType,
@@ -479,7 +483,7 @@ builder.mutationType({
         const email = args.email.trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new AppError("BAD_INPUT", "Enter a valid email address.", "email");
         // Same answer whether or not the address is already known.
-        const subscriber = await ctx.db.newsletterSubscriber.upsert({ where: { email }, update: {}, create: { email, tokenHash: hashToken(newToken()), locale: args.locale?.slice(0, 10) ?? "en" } });
+        const subscriber = await ctx.db.newsletterSubscriber.upsert({ where: { email }, update: {}, create: { email, tokenHash: hashToken(newToken()), locale: toLocale(args.locale ?? ctx.locale) } });
         if (subscriber.status === "PENDING") {
           // One confirmation email per address per day, however often the form is submitted.
           const day = new Date().toISOString().slice(0, 10);

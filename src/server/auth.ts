@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AdminUser, Customer } from "@/generated/prisma/client";
-import { COOKIE, TTL, clearCookie, setCookie, type Ctx } from "./context";
+import { COOKIE, TTL, clearCookie, setCookie, type Ctx, rememberLocale } from "./context";
+import { LOCALE_COOKIE, isLocale } from "@/i18n/config";
 import { burnPasswordCheck, hashPassword, hashToken, newToken, verifyPassword } from "./crypto";
 import { AppError, parse } from "./errors";
 import { resetPurpose, verifyLink } from "./notifications/messages";
@@ -40,7 +41,7 @@ export async function register(ctx: Ctx, input: unknown): Promise<Customer> {
     throw new AppError("EMAIL_TAKEN", "An account with this email address already exists.", "email");
   }
   const customer = await ctx.db.customer.create({
-    data: { email: data.email, passwordHash: await hashPassword(data.password), firstName: data.firstName, lastName: data.lastName, marketingOptIn: data.marketingOptIn },
+    data: { email: data.email, passwordHash: await hashPassword(data.password), firstName: data.firstName, lastName: data.lastName, marketingOptIn: data.marketingOptIn, locale: ctx.locale ?? "en" },
   });
   await startCustomerSession(ctx, customer);
   return customer;
@@ -60,7 +61,17 @@ export async function login(ctx: Ctx, input: unknown): Promise<Customer> {
   if (!(await verifyPassword(customer.passwordHash, data.password))) throw new AppError("INVALID_CREDENTIALS", INVALID);
 
   await startCustomerSession(ctx, customer);
+  // A returning customer who has not chosen a language on this device gets the one saved on their account.
+  if (!ctx.cookies[LOCALE_COOKIE] && isLocale(customer.locale)) rememberLocale(ctx, customer.locale);
   return customer;
+}
+
+/** Records an explicit language choice: on this device, and on the account when signed in. */
+export async function chooseLanguage(ctx: Ctx, value: string): Promise<string> {
+  if (!isLocale(value)) throw new AppError("BAD_INPUT", "That language is not available.");
+  rememberLocale(ctx, value);
+  if (ctx.customer) await ctx.db.customer.update({ where: { id: ctx.customer.id }, data: { locale: value } });
+  return value;
 }
 
 export async function logout(ctx: Ctx): Promise<void> {

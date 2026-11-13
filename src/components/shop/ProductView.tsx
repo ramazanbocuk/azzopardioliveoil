@@ -7,7 +7,8 @@ import { Bottle } from "@/components/ui/Bottle";
 import { QuantityStepper, SizeSelector } from "@/components/ui/Field";
 import { LotTicket } from "@/components/ui/LotTicket";
 import { Plate } from "@/components/ui/Plate";
-import { formatPrice, type Category, type Product } from "@/content/site";
+import type { Category, Product } from "@/content/site";
+import { useI18n } from "@/i18n/client";
 
 /** Applies `?size=750` from the URL once the page is interactive. */
 function SizeFromUrl({ onSize }: { onSize: (ml: number) => void }) {
@@ -19,6 +20,8 @@ function SizeFromUrl({ onSize }: { onSize: (ml: number) => void }) {
 }
 
 export function ProductView({ product, category, freeShippingFrom }: { product: Product; category: Category; freeShippingFrom: number | null }) {
+  const { m, fill, money } = useI18n();
+  const t = m.product;
   const firstAvailable = product.variants.find((v) => v.inStock) ?? product.variants[0];
   const [ml, setMl] = useState(firstAvailable.ml);
   const [qty, setQty] = useState(1);
@@ -45,12 +48,12 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
             <Bottle
               ml={variant.ml}
               lot={product.lot}
-              title={`${label} (illustration)`}
+              title={fill(m.shop.illustration, { name: label })}
               className="w-auto transition-[height] duration-[1100ms] ease-out-expo"
               style={{ height: `${variant.scale * 100}%` }}
             />
           </div>
-          <span className="text-ticket absolute left-4 top-4 text-stone-700">Illustration — photograph to come</span>
+          <span className="text-ticket absolute left-4 top-4 text-stone-700">{t.illustrationNote}</span>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4 sm:mt-8 sm:gap-8">
           <div className="relative aspect-[4/5]">
@@ -70,13 +73,13 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
           <p className="text-lead mt-5 text-ink/80">{product.blurb}</p>
 
           <p aria-live="polite" className="mt-8 font-serif text-[clamp(2.25rem,3.4vw,3rem)] leading-none tabular-nums">
-            {formatPrice(variant.priceCents)}
+            {money(variant.priceCents)}
           </p>
-          <p className="text-small mt-2 text-stone-700">{variant.label} · VAT included</p>
+          <p className="text-small mt-2 text-stone-700">{variant.label} · {m.common.vatIncluded}</p>
 
           <div className="mt-8">
             <SizeSelector
-              legend="Size"
+              legend={t.size}
               value={String(ml)}
               onChange={(value) => setMl(Number(value))}
               options={product.variants.map((v) => ({ value: String(v.ml), label: `${v.ml} ml`, disabled: !v.inStock }))}
@@ -90,17 +93,17 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
           </div>
 
           <ul className="text-small mt-6 space-y-1.5 text-ink/80">
-            <li>Sent from Belgium, tracked.</li>
-            {freeShippingFrom !== null && <li>Free standard shipping from {formatPrice(freeShippingFrom)}.</li>}
+            <li>{t.sentTracked}</li>
+            {freeShippingFrom !== null && <li>{fill(t.freeFrom, { amount: money(freeShippingFrom) })}</li>}
           </ul>
 
           <LotTicket
             className="mt-8 w-full"
             lot={product.lot ?? "—"}
             rows={[
-              { label: "Harvest", value: product.facts.harvest ?? "—" },
-              { label: "Origin", value: product.facts.origin ?? "—" },
-              { label: "Size", value: `${variant.ml} ml` },
+              { label: t.harvest, value: product.facts.harvest ?? "—" },
+              { label: t.origin, value: product.facts.origin ?? "—" },
+              { label: t.size, value: `${variant.ml} ml` },
             ]}
           />
         </div>

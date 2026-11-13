@@ -26,6 +26,10 @@ export type Product = {
   categorySlug: string;
   blurb: string;
   description: string[];
+  /** Languages this product's own text is published in. English is always one of them. */
+  languages: string[];
+  /** False when the page is in another language but this text is still the English source. */
+  translated: boolean;
   variants: Variant[];
   /** Most recent published lot, if any. */
   lot: string | null;
@@ -43,7 +47,7 @@ export type Product = {
   };
 };
 
-export type Category = { slug: string; name: string; intro: string };
+export type Category = { slug: string; name: string; intro: string; languages: string[] };
 
 /** One purchasable variant with its product and category: the unit of the shop grid. */
 export type CatalogItem = { product: Product; variant: Variant; category: Category };
@@ -57,7 +61,7 @@ export function bottleScale(ml: number): number {
 
 /** Illustrative item for the design-system page only. The shop reads the database. */
 export const sampleItem: CatalogItem = {
-  category: { slug: "extra-virgin-olive-oil", name: "Extra Virgin Olive Oil", intro: "" },
+  category: { slug: "extra-virgin-olive-oil", name: "Extra Virgin Olive Oil", intro: "", languages: ["en"] },
   variant: { sku: "sample-750", ml: 750, label: "750 ml", priceCents: 2600, scale: bottleScale(750), inStock: true },
   product: {
     slug: "extra-virgin-olive-oil",
@@ -65,6 +69,8 @@ export const sampleItem: CatalogItem = {
     categorySlug: "extra-virgin-olive-oil",
     blurb: "",
     description: [],
+    languages: ["en"],
+    translated: true,
     variants: [],
     lot: SAMPLE_LOT,
     facts: { origin: null, harvest: null, cultivar: null, mill: null, bottled: null, bestBefore: null, ingredients: null, nutrition: [], storage: null },
@@ -101,6 +107,8 @@ export type JournalEntry = {
   label: string;
   standfirst: string;
   body: string[];
+  /** Languages the article is published in. Built-in sample entries are English only. */
+  languages?: string[];
   recipe?: { serves: string; time: string; ingredients: string[]; method: string[] };
 };
 

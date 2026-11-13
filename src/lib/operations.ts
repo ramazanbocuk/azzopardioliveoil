@@ -239,6 +239,12 @@ export const SubscribeNewsletter = graphql(`
   }
 `);
 
+export const SetLanguage = graphql(`
+  mutation SetLanguage($locale: String!) {
+    setLanguage(locale: $locale)
+  }
+`);
+
 export const RequestPasswordReset = graphql(`
   mutation RequestPasswordReset($email: String!) {
     requestPasswordReset(email: $email)

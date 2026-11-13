@@ -1,16 +1,19 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/ui/Link";
 import { useState } from "react";
 import { Bottle } from "@/components/ui/Bottle";
 import { ButtonLink } from "@/components/ui/Button";
 import { QuantityStepper } from "@/components/ui/Field";
-import { bottleScale, formatPrice, productHref } from "@/content/site";
+import { bottleScale, productHref } from "@/content/site";
+import { useI18n } from "@/i18n/client";
 import { errorMessage } from "@/lib/apollo";
 import { useCart, useCartActions } from "@/lib/store";
 
 export function CartView() {
   const { cart, ready } = useCart();
+  const { m, fill, plural, money, server } = useI18n();
+  const c = m.cart;
   const actions = useCartActions();
   const [error, setError] = useState("");
 
@@ -19,19 +22,19 @@ export function CartView() {
     try {
       await action();
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(server(errorMessage(cause)));
     }
   };
 
-  if (!ready) return <p className="text-lead py-20 text-stone-700">Loading your cart…</p>;
+  if (!ready) return <p className="text-lead py-20 text-stone-700">{c.loading}</p>;
 
   if (cart.lines.length === 0) {
     return (
       <div className="border border-dashed border-ink/30 px-6 py-24 text-center">
-        <p className="text-h2">Your cart is empty.</p>
-        <p className="mt-4 text-ink/80">Bottles you add will wait here.</p>
+        <p className="text-h2">{c.empty}</p>
+        <p className="mt-4 text-ink/80">{c.emptyHint}</p>
         <ButtonLink href="/shop" arrow className="mt-8">
-          Shop the oil
+          {m.common.shopCta}
         </ButtonLink>
       </div>
     );
@@ -64,16 +67,16 @@ export function CartView() {
                         </Link>
                       </h2>
                       <p className="text-small mt-1 text-stone-700">
-                        {line.variant.label} · {formatPrice(line.unitPriceCents)} each
+                        {line.variant.label} · {fill(c.each, { price: money(line.unitPriceCents) })}
                       </p>
-                      {!line.enoughStock && <p className="text-small mt-2 text-terracotta-700">Not enough stock for this quantity. Please reduce it.</p>}
+                      {!line.enoughStock && <p className="text-small mt-2 text-terracotta-700">{c.notEnough}</p>}
                     </div>
-                    <p className="text-lead shrink-0 tabular-nums">{formatPrice(line.lineTotalCents)}</p>
+                    <p className="text-lead shrink-0 tabular-nums">{money(line.lineTotalCents)}</p>
                   </div>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-4 pt-5">
-                    <QuantityStepper label={`Quantity for ${name}`} value={line.quantity} onChange={(quantity) => run(() => actions.setQuantity(line.sku, quantity))} />
-                    <button type="button" onClick={() => run(() => actions.remove(line.sku))} aria-label={`Remove ${name}`} className="text-label link-underline inline-flex min-h-11 items-center text-stone-700 hover:text-ink">
-                      Remove
+                    <QuantityStepper label={fill(c.quantityFor, { name })} value={line.quantity} onChange={(quantity) => run(() => actions.setQuantity(line.sku, quantity))} />
+                    <button type="button" onClick={() => run(() => actions.remove(line.sku))} aria-label={fill(c.removeName, { name })} className="text-label link-underline inline-flex min-h-11 items-center text-stone-700 hover:text-ink">
+                      {m.common.remove}
                     </button>
                   </div>
                 </div>
@@ -86,38 +89,36 @@ export function CartView() {
       <aside aria-labelledby="summary-title" className="lg:col-span-4 lg:col-start-9">
         <div className="bg-paper p-7 lg:sticky lg:top-[calc(var(--header-h)+2rem)]">
           <h2 id="summary-title" className="text-h3">
-            Summary
+            {c.summary}
           </h2>
           <dl className="mt-6 space-y-3">
             <div className="flex justify-between gap-6">
-              <dt>
-                Subtotal ({cart.itemCount} {cart.itemCount === 1 ? "bottle" : "bottles"})
-              </dt>
-              <dd className="tabular-nums">{formatPrice(cart.subtotalCents)}</dd>
+              <dt>{plural(cart.itemCount, c.subtotal)}</dt>
+              <dd className="tabular-nums">{money(cart.subtotalCents)}</dd>
             </div>
             {cart.discountCents > 0 && (
               <div className="flex justify-between gap-6">
-                <dt>Discount ({cart.discountCode})</dt>
-                <dd className="tabular-nums">−{formatPrice(cart.discountCents)}</dd>
+                <dt>{fill(c.discount, { code: cart.discountCode ?? "" })}</dt>
+                <dd className="tabular-nums">−{money(cart.discountCents)}</dd>
               </div>
             )}
             <div className="flex justify-between gap-6 text-ink/80">
-              <dt>Shipping</dt>
-              <dd>Calculated at checkout</dd>
+              <dt>{c.shipping}</dt>
+              <dd>{c.atCheckout}</dd>
             </div>
           </dl>
 
           {blocked ? (
-            <p className="text-small mt-8 text-terracotta-700">Adjust the quantities above to continue.</p>
+            <p className="text-small mt-8 text-terracotta-700">{c.adjust}</p>
           ) : (
             <ButtonLink href="/checkout" arrow className="mt-8 w-full">
-              Checkout
+              {c.checkout}
             </ButtonLink>
           )}
           <ButtonLink href="/shop" variant="text" className="mt-3">
-            Continue shopping
+            {c.continue}
           </ButtonLink>
-          <p className="text-small mt-5 text-stone-700">Prices include VAT.</p>
+          <p className="text-small mt-5 text-stone-700">{c.pricesVat}</p>
         </div>
       </aside>
     </div>

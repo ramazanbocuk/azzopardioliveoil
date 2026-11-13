@@ -55,6 +55,7 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 ## Money and reports
 
 - **Payments**: every payment and refund for a period, and the list of disputes. A refund made directly in Stripe appears on the order by itself, marked "at the payment provider", and the customer gets the refund email. Stock is never put back automatically. If a bank bounces a refund, it is marked failed, the order goes back to paid, and the shop is emailed.
+- **Translations**: products, categories and journal articles in German, Dutch, French, Italian and Spanish. Save a draft, then a manager publishes it; until then customers see English with a note. The overview shows what is missing or out of date. See `docs/internationalisation.md`.
 - **Disputes** (chargebacks): when a cardholder contests a payment, the order shows a warning, the shop is emailed with the deadline, and the dispute is listed under Payments. Answer it in the Stripe Dashboard; it cannot be answered here. Do not ship a disputed order.
 - **Analytics & reports**: sales by day, product, country, payment method; first-time and returning; export.
 - **Accounting & VAT**: VAT by destination and rate; export for the accountant. Working figures, not a VAT return.
