@@ -75,7 +75,7 @@ export const es: Messages = {
   },
   shop: {
     metaTitle: "Todos los productos",
-    metaDescription: "Todas las botellas de Azzopardi, por tamaño y por lote.",
+    metaDescription: "Aceite de oliva virgen extra rico en polifenoles, de productores con nombre de todo el Mediterráneo. Cada botella lleva su número de lote.",
     eyebrow: "Tienda",
     title: "Todas las botellas",
     lead: "Cada una embotellada por lote. Busque por nombre, tamaño o número de lote.",
@@ -134,7 +134,7 @@ export const es: Messages = {
     shippingText: "Los pedidos se envían con seguimiento. Las tarifas, los destinos y las condiciones de devolución están en la {link}.",
     shippingLink: "página de envíos y devoluciones",
     dashTitle: "Por qué algunos campos muestran un guion",
-    dashText: "El origen, la cosecha, los ingredientes, la información nutricional y la conservación los registra el administrador por lote. Nunca se rellenan automáticamente: un guion significa que la información aún no se ha introducido.",
+    dashText: "El origen, la cosecha, los ingredientes, la información nutricional y la conservación los registramos nosotros, lote a lote. Nada se rellena automáticamente: un guion significa que aún no hemos introducido la información.",
     reviews: "Opiniones",
     noReviews: "Aún no hay opiniones.",
     reviewsText: "Los clientes pueden dejar una opinión cuando su pedido ha sido entregado. Aparece aquí tras su verificación.",
@@ -424,7 +424,7 @@ export const es: Messages = {
   },
   contact: {
     metaTitle: "Contacto",
-    metaDescription: "Póngase en contacto con Azzopardi.",
+    metaDescription: "Escriba a Azzopardi, una empresa familiar de aceite de oliva, sobre un pedido, un número de lote o el propio aceite.",
     eyebrow: "Contacto",
     title: "Escríbanos.",
     lead: "Preguntas sobre un pedido, un lote o el propio aceite. Respondemos en persona.",

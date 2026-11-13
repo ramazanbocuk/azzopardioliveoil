@@ -23,7 +23,8 @@ export default async function HomePage() {
 
   return (
     <>
-      <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", name: "Azzopardi Olive Oil", url: siteUrl() }} />
+      <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", name: "Azzopardi Olive Oil", url: siteUrl(), logo: `${siteUrl()}/brand/logo.png` }} />
+      <JsonLd data={{ "@context": "https://schema.org", "@type": "WebSite", name: "Azzopardi Olive Oil", url: siteUrl() }} />
       <Hero scene={<GroveScene id="hero" tone="dawn" seed={1} className="h-full w-full" />} />
       <Intro />
       {featured && <Showcase product={featured} />}

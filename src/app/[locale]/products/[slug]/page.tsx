@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/products
   const product = (await getCatalogData(language)).products.find((p) => p.slug === slug);
   if (!product) return {};
   const path = `/products/${product.slug}`;
-  return { title: product.name, description: product.blurb, alternates: alternatesFor(locale, path, product.languages as Language[]), openGraph: { title: product.name, description: product.blurb, url: href(path) } };
+  return { title: product.name, description: product.blurb, alternates: alternatesFor(locale, path, product.languages as Language[]), openGraph: { title: product.name, description: product.blurb, url: href(path), images: [{ url: "/brand/share.png", width: 1200, height: 630, alt: "Azzopardi Olive Oil" }] } };
 }
 
 /**

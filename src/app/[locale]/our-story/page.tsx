@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/Page";
 
 // The text of this page exists in English only for now, so it is not announced as translated.
 export const generateMetadata = localizedMetadata("/our-story", {
-  title: "Our story",
+  title: "Our story: a family olive oil business",
   description: "Azzopardi is a family business: a husband and wife who choose high-polyphenol olive oils lot by lot from producers around the Mediterranean, and name each one.",
 }, ENGLISH_ONLY);
 

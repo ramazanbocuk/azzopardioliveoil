@@ -17,11 +17,11 @@ export function Intro() {
     <section id="house" data-tone="#dddad1" aria-labelledby="intro-title" className="scroll-mt-(--header-h) py-section">
       <div className="container-page grid gap-x-8 gap-y-10 lg:grid-cols-12">
         <Reveal className="lg:col-span-3">
-          <p className="text-label text-stone-700">The house</p>
+          <p className="text-label text-stone-700">Who we are</p>
         </Reveal>
         <div className="lg:col-span-9">
           <SplitHeading id="intro-title" className="text-h1 max-w-[19ch]">
-            High-polyphenol extra virgin olive oils from producers around the Mediterranean, chosen lot by lot by a family business.
+            We are a husband and wife who choose high-polyphenol extra virgin olive oils from around the Mediterranean, one lot at a time.
           </SplitHeading>
           <Reveal delay={0.15} className="mt-10 grid gap-8 sm:grid-cols-2 lg:max-w-[52rem]">
             <p className="text-lead text-ink/80">We look for oils high in polyphenols, and we would rather show you the laboratory’s figure than ask you to take our word. So each bottle carries a number.</p>
@@ -58,7 +58,7 @@ export function Heritage() {
             </SplitHeading>
             <Reveal delay={0.1} className="mt-8 max-w-[44ch] space-y-5 text-ink/80">
               <p>The olive grows right around the Mediterranean, and no one shore has the best of it. Each country has its own varieties, its own ground and its own way of working.</p>
-              <p>We are a husband and wife, and we do not grow or press the oil ourselves. Our part is to choose. We look for oils high in polyphenols, taste each lot, ask for its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it.</p>
+              <p>We are a husband and wife, and we do not grow or press the oil ourselves. Our part is to choose. We taste each lot, read its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it.</p>
               <ButtonLink href="/our-story" variant="secondary" arrow className="!mt-9">
                 Read the story
               </ButtonLink>
@@ -318,10 +318,10 @@ export function Newsletter() {
       <div className="container-page relative z-10 grid gap-x-8 gap-y-12 py-section-sm lg:grid-cols-12 lg:items-end">
         <div className="lg:col-span-6">
           <SplitHeading id="newsletter-title" className="text-h1 max-w-[12ch]">
-            Letters from the house
+            Letters from the two of us
           </SplitHeading>
           <Reveal delay={0.1}>
-            <p className="text-lead mt-6 max-w-[38ch] text-ivory/90">A few times a year: when a harvest comes in, when a new lot arrives, and something to cook.</p>
+            <p className="text-lead mt-6 max-w-[38ch] text-ivory/90">We write a few times a year: when a harvest comes in, when a new lot arrives, and when we have cooked something worth passing on.</p>
           </Reveal>
         </div>
         <Reveal className="lg:col-span-5 lg:col-start-8">
