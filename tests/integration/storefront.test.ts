@@ -54,10 +54,11 @@ describe("catalogue", () => {
       data: { lotNumber: "AZ-0002", productId: product.id, isPublished: true, grove: "Test grove", documents: { create: [{ kind: "ANALYSIS", title: "Unverified", url: "https://example.com/a" }, { kind: "ANALYSIS", title: "Verified", url: "https://example.com/b", verifiedAt: new Date() }] } },
     });
     const c = client();
-    const lot = `query ($n: String!) { lot(lotNumber: $n) { lot { grove harvestDate } documents { title } } }`;
+    const lot = `query ($n: String!) { lot(lotNumber: $n) { lot { lotNumber harvestDate } documents { title } } }`;
     expect((await c.gql<{ lot: null }>(lot, { n: "AZ-0001" })).data?.lot).toBeNull();
-    const published = await c.gql<{ lot: { lot: { grove: string; harvestDate: string | null }; documents: { title: string }[] } }>(lot, { n: "az-0002" });
-    expect(published.data?.lot.lot).toEqual({ grove: "Test grove", harvestDate: null });
+    const published = await c.gql<{ lot: { lot: { lotNumber: string; harvestDate: string | null }; documents: { title: string }[] } }>(lot, { n: "az-0002" });
+    expect(published.data?.lot.lot).toEqual({ lotNumber: "AZ-0002", harvestDate: null });
+    expect(JSON.stringify(published)).not.toContain("Test grove"); // the grove is recorded, and stays in the admin panel
     expect(published.data?.lot.documents.map((d) => d.title)).toEqual(["Verified"]);
   });
 });

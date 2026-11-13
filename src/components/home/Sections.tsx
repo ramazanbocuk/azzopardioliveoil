@@ -26,7 +26,7 @@ export function Intro() {
           <Reveal delay={0.15} className="mt-10 grid gap-8 sm:grid-cols-2 lg:max-w-[52rem]">
             <p className="text-lead text-ink/80">We look for oils high in polyphenols, and we would rather show you the laboratory’s figure than ask you to take our word. So each bottle carries a number.</p>
             <div>
-              <p className="text-ink/80">The number leads to a producer, a harvest and a mill. What we can show you, we publish. What we cannot show you, we do not say.</p>
+              <p className="text-ink/80">The number leads to a harvest, a bottling date and a laboratory report. What we can show you, we publish. What we cannot show you, we do not say.</p>
               <ButtonLink href="/our-story" variant="text" arrow className="mt-5">
                 Our story
               </ButtonLink>
@@ -44,7 +44,7 @@ export function Heritage() {
       <div className="container-page grid gap-x-8 gap-y-14 lg:grid-cols-12">
         <div className="lg:col-span-6">
           <div className="relative aspect-[4/5]">
-            <Plate parallax={10} tone="olive" label="a producer in the grove" />
+            <Plate parallax={10} tone="olive" label="an olive grove at harvest" />
           </div>
         </div>
 
@@ -58,7 +58,7 @@ export function Heritage() {
             </SplitHeading>
             <Reveal delay={0.1} className="mt-8 max-w-[44ch] space-y-5 text-ink/80">
               <p>The olive grows right around the Mediterranean, and no one shore has the best of it. Each country has its own varieties, its own ground and its own way of working.</p>
-              <p>We are a husband and wife. The oils here are made by producers we name, and our part is to choose: we taste each lot, read its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it. We also produce olive oil ourselves, and it will join them as our house blend.</p>
+              <p>We are a husband and wife. Our part is to choose: we follow the harvest season in each country, taste each lot, read its laboratory report, and offer only what we would put on our own table. We also produce olive oil ourselves, and it will join them as our house blend.</p>
               <ButtonLink href="/our-story" variant="secondary" arrow className="!mt-9">
                 Read the story
               </ButtonLink>
@@ -83,7 +83,7 @@ export function Groves() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
-              <p className="text-label text-stone-700">Producers &amp; harvest</p>
+              <p className="text-label text-stone-700">Origins &amp; harvest</p>
             </Reveal>
             <SplitHeading id="groves-title" className="text-h1 mt-4">
               In the grove
@@ -122,7 +122,7 @@ export function Groves() {
 
 const principles = [
   { title: "High in polyphenols, by measurement", body: "We look for oils high in polyphenols, and we ask a laboratory rather than take anyone’s word for it. Then the oil has to taste right." },
-  { title: "One lot, one number", body: "Each lot is kept apart under its own number, with its producer’s name. Lots are not blended to hide a weak one." },
+  { title: "One lot, one number", body: "Each lot is kept apart under its own number. Lots are not blended to hide a weak one." },
   { title: "Say only what we can show", body: "Certificates, analyses and awards appear on a bottle’s page only when the documents exist." },
 ];
 
@@ -186,7 +186,7 @@ export function Featured({ items }: { items: CatalogItem[] }) {
   );
 }
 
-const ticketRows = ["Producer", "Harvest", "Milled", "Bottled"];
+const ticketRows = ["Origin", "Harvest", "Milled", "Bottled"];
 
 export function Traceability() {
   return (
@@ -200,7 +200,7 @@ export function Traceability() {
             Every bottle answers for itself.
           </SplitHeading>
           <Reveal delay={0.1}>
-            <p className="text-lead mt-7 max-w-[40ch] text-ivory/85">Find the lot number on your label. Enter it, and see what has been recorded for that lot: producer, harvest, mill and any analysis on file.</p>
+            <p className="text-lead mt-7 max-w-[40ch] text-ivory/85">Find the lot number on your label. Enter it, and see what has been recorded for that lot: harvest, bottling and any analysis on file.</p>
             <div className="mt-10">
               <TraceForm />
             </div>

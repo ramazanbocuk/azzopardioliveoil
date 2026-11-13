@@ -75,7 +75,7 @@ export const es: Messages = {
   },
   shop: {
     metaTitle: "Todos los productos",
-    metaDescription: "Aceite de oliva virgen extra rico en polifenoles, de productores con nombre de todo el Mediterráneo. Cada botella lleva su número de lote.",
+    metaDescription: "Aceite de oliva virgen extra rico en polifenoles, de todo el Mediterráneo. Cada botella lleva su número de lote.",
     eyebrow: "Tienda",
     title: "Todas las botellas",
     lead: "Cada una embotellada por lote. Busque por nombre, tamaño o número de lote.",
@@ -122,7 +122,6 @@ export const es: Messages = {
     originHarvest: "Origen y cosecha",
     currentLot: "Lote actual",
     variety: "Variedad de aceituna",
-    mill: "Almazara",
     bottled: "Embotellado",
     bestBefore: "Consumir preferentemente antes de",
     ingredientsNutrition: "Ingredientes e información nutricional",
@@ -145,7 +144,6 @@ export const es: Messages = {
   intel: {
     country: "País de origen",
     region: "Región",
-    producer: "Productor",
     composition: "Tipo",
     single: "Monovarietal",
     blend: "Coupage",
@@ -461,7 +459,6 @@ export const es: Messages = {
     lotNumber: "Número de lote",
     trace: "Trazar",
     none: "Aún no hay ninguna ficha publicada para ese número de lote.",
-    grove: "Olivar",
     sample: "Etiqueta de muestra",
   },
   notFound: {

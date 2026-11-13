@@ -75,7 +75,7 @@ export const fr: Messages = {
   },
   shop: {
     metaTitle: "Tous les produits",
-    metaDescription: "Huile d’olive vierge extra riche en polyphénols, de producteurs nommés autour de la Méditerranée. Chaque bouteille porte son numéro de lot.",
+    metaDescription: "Huile d’olive vierge extra riche en polyphénols, du pourtour de la Méditerranée. Chaque bouteille porte son numéro de lot.",
     eyebrow: "Boutique",
     title: "Toutes les bouteilles",
     lead: "Chacune embouteillée par lot. Recherchez par nom, format ou numéro de lot.",
@@ -122,7 +122,6 @@ export const fr: Messages = {
     originHarvest: "Origine & récolte",
     currentLot: "Lot actuel",
     variety: "Variété d’olive",
-    mill: "Moulin",
     bottled: "Mise en bouteille",
     bestBefore: "À consommer de préférence avant",
     ingredientsNutrition: "Ingrédients & valeurs nutritionnelles",
@@ -145,7 +144,6 @@ export const fr: Messages = {
   intel: {
     country: "Pays d’origine",
     region: "Région",
-    producer: "Producteur",
     composition: "Type",
     single: "Monovariétale",
     blend: "Assemblage",
@@ -461,7 +459,6 @@ export const fr: Messages = {
     lotNumber: "Numéro de lot",
     trace: "Tracer",
     none: "Aucune fiche publiée pour ce numéro de lot pour l’instant.",
-    grove: "Oliveraie",
     sample: "Ticket d’exemple",
   },
   notFound: {

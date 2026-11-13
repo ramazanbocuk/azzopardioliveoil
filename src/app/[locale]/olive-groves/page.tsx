@@ -13,15 +13,15 @@ import { getCatalogData } from "@/server/storefrontData";
 // The text of this page exists in English only for now, so it is not announced as translated.
 export const generateMetadata = localizedMetadata("/olive-groves", {
   title: "Where the oils come from",
-  description: "The countries, regions and producers behind the high-polyphenol olive oils Azzopardi sells.",
+  description: "The countries and regions behind the high-polyphenol olive oils Azzopardi sells, and how we follow each harvest season.",
 }, ENGLISH_ONLY);
 
-type Origin = { country: string; oils: { slug: string; name: string; region: string | null; producer: string | null; place: string | null }[] };
+type Origin = { country: string; oils: { slug: string; name: string; region: string | null }[] };
 
 /**
  * What is on sale now, grouped by the country recorded for each oil. Only
  * what the catalogue holds is shown: an oil with no country recorded is
- * listed apart, and a producer appears only when the owner has made it public.
+ * listed apart. Who produced an oil is never shown: the owners keep that to themselves.
  */
 function originsOf(products: Awaited<ReturnType<typeof getCatalogData>>["products"], tag: string): { known: Origin[]; unrecorded: { slug: string; name: string }[] } {
   const byCountry = new Map<string, Origin>();
@@ -33,7 +33,7 @@ function originsOf(products: Awaited<ReturnType<typeof getCatalogData>>["product
       continue;
     }
     const origin = byCountry.get(code) ?? { country: countryName(tag, code), oils: [] };
-    origin.oils.push({ slug: product.slug, name: product.name, region: product.profile.region, producer: product.profile.producer?.name ?? null, place: product.profile.producer?.place ?? null });
+    origin.oils.push({ slug: product.slug, name: product.name, region: product.profile.region });
     byCountry.set(code, origin);
   }
   return { known: [...byCountry.values()].sort((a, b) => a.country.localeCompare(b.country)), unrecorded };
@@ -47,7 +47,7 @@ export default async function OriginsPage() {
   return (
     <>
       <PageHeader eyebrow="Where the oils come from" title="We follow the harvest season, country by country." tone="#dddad1" lead="We look for high-polyphenol olive oils wherever they are made, and follow the harvest season in each country we buy from: Morocco, Turkey, Italy, Greece and Spain. This page shows where each oil on sale today comes from, as it is recorded for that oil." />
-      <DraftBand>Draft copy. Each producer’s own page (who they are, where they farm, which olives they grow) will be written with the owner and the producer. The list below is not draft: it is read from the catalogue.</DraftBand>
+      <DraftBand>Draft copy. The list below is not draft: it is read from the catalogue.</DraftBand>
       <LeadPlate label="a grove at midday" tone="dawn">
         <GroveScene id="groves-lead" tone="noon" seed={7} className="absolute inset-0 h-full w-full" />
       </LeadPlate>
@@ -60,7 +60,7 @@ export default async function OriginsPage() {
             </Reveal>
             <SplitHeading className="text-h2 mt-5 max-w-[14ch]">Each oil, and where it is from.</SplitHeading>
             <Reveal delay={0.1}>
-              <p className="mt-6 max-w-[44ch] text-ink/80">Country, region and producer are shown as they have been recorded for each oil. A dash means that detail has not been recorded yet. We leave it empty rather than guess.</p>
+              <p className="mt-6 max-w-[44ch] text-ink/80">Country and region are shown as they have been recorded for each oil. A dash means that detail has not been recorded yet. We leave it empty rather than guess.</p>
             </Reveal>
           </div>
           <Reveal className="lg:col-span-6 lg:col-start-7">
@@ -76,7 +76,7 @@ export default async function OriginsPage() {
                           {oil.name}
                         </Link>
                         <p className="text-small mt-1 text-stone-700">
-                          Region: {oil.region ?? "—"} · Producer: {oil.producer ? `${oil.producer}${oil.place ? `, ${oil.place}` : ""}` : "—"}
+                          Region: {oil.region ?? "—"}
                         </p>
                       </li>
                     ))}
@@ -92,7 +92,7 @@ export default async function OriginsPage() {
                         <Link href={`/products/${oil.slug}`} className="link-underline font-medium">
                           {oil.name}
                         </Link>
-                        <p className="text-small mt-1 text-stone-700">Country: — · Region: — · Producer: —</p>
+                        <p className="text-small mt-1 text-stone-700">Country: — · Region: —</p>
                       </li>
                     ))}
                   </ul>
@@ -107,9 +107,9 @@ export default async function OriginsPage() {
         <div className="container-page grid gap-x-8 gap-y-10 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <Reveal>
-              <p className="text-label text-stone-700">The producer record</p>
+              <p className="text-label text-stone-700">The record</p>
             </Reveal>
-            <SplitHeading className="text-h2 mt-5 max-w-[14ch]">What we record about each producer.</SplitHeading>
+            <SplitHeading className="text-h2 mt-5 max-w-[14ch]">What we record about each oil.</SplitHeading>
             <Reveal delay={0.1}>
               <p className="mt-6 max-w-[44ch] text-ink/80">These are the facts a lot number leads back to. They appear on an oil’s page once they have been entered and confirmed.</p>
             </Reveal>
@@ -117,11 +117,10 @@ export default async function OriginsPage() {
           <Reveal className="lg:col-span-6 lg:col-start-7">
             <FactList
               rows={[
-                { label: "Producer and town", value: null },
                 { label: "Country and region", value: null },
                 { label: "Olive varieties", value: null },
                 { label: "Harvest year and method", value: null },
-                { label: "Mill and extraction", value: null },
+                { label: "Extraction", value: null },
                 { label: "Laboratory report for the lot", value: null },
               ]}
             />
@@ -158,8 +157,8 @@ export default async function OriginsPage() {
         </div>
       </section>
 
-      <Statement tone="#eae3d3">The producer makes the oil. We choose it, and we tell you who made it.</Statement>
-      <NextPage title="From the producer to your door." href="/harvest-production" label="Harvest & production" />
+      <Statement tone="#eae3d3">We follow the harvest from one country to the next, and choose what we would put on our own table.</Statement>
+      <NextPage title="From the harvest to your door." href="/harvest-production" label="Harvest & production" />
     </>
   );
 }

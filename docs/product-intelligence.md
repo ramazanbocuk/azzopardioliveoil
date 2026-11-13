@@ -25,11 +25,11 @@ A product can have many batches. Each batch has its own harvest year, documents 
 5. **Withdrawing takes effect at once.** Withdrawing a verification, removing a report, hiding the product or unpublishing the batch removes the value and the file from the shop. Removing a report un-verifies every value read from it.
 6. **Plausibility limits** reject a slipped decimal point (free acidity of 21 instead of 0.21). They are not quality limits.
 7. **Uploads are checked by content.** Only a real PDF is accepted, whatever the file is called.
-8. **A producer is named on the shop only when marked public.** Suppliers are never shown.
+8. **A producer is never shown on the shop** (owner's decision, 2026-11-13: who produces an oil is secret). Producers, and a lot's grove and mill, are records for the admin panel only. Suppliers are never shown either.
 
 ## What customers see
 
-- On the product page: country, region, producer, varieties, type, harvest year and methods under "Origin & harvest"; a "Tasting notes" section; a "Laboratory analysis" section with a table of verified values for the current lot (value, method, laboratory, date, link to the report), or a sentence saying none has been published.
+- On the product page: country, region, varieties, type, harvest year and methods under "Origin & harvest"; a "Tasting notes" section; a "Laboratory analysis" section with a table of verified values for the current lot (value, method, laboratory, date, link to the report), or a sentence saying none has been published.
 - Bitterness and pungency are labelled as the house's own tasting judgement, not laboratory values.
 - In the lot lookup: harvest year and the verified values of that lot.
 - All labels exist in the six languages. Free text (aroma, taste, pairings, methods, packaging) is translated per product in Admin → Translations.
@@ -39,7 +39,7 @@ A product can have many batches. Each batch has its own harvest year, documents 
 - **It makes no health claim.** It shows measured values and nothing else. Whether a claim may be made about a polyphenol content (in the EU, the UK or the USA) is for a food-law adviser. No such wording should be typed into a description without that advice.
 - It does not check that an uploaded report is genuine, or that a typed value matches it. A person does, and is recorded as having done so.
 - "Cold extraction" and similar label terms are regulated; the form warns, it does not enforce.
-- No producer or variety pages on the shop yet; names only.
+- No variety pages on the shop yet; names only. There will be no producer pages: producers are kept private.
 - No real data has been entered. Producers, varieties, batches and reports must come from the business.
 
 ## For developers

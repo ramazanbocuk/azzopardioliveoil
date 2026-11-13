@@ -196,8 +196,6 @@ export const LotQuery = graphql(`
         lotNumber
         harvestYear
         harvestDate
-        grove
-        mill
         milledAt
         bottledAt
         bestBefore

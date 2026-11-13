@@ -15,7 +15,7 @@ test("a product with no verified laboratory result says so and shows no figure",
   // Origin and tasting fields nobody has entered are dashes, not guesses.
   await page.getByText("Origin & harvest").click();
   const origin = page.locator("details", { hasText: "Origin & harvest" });
-  for (const label of ["Country of origin", "Region", "Producer", "Harvest year", "Extraction"]) {
+  for (const label of ["Country of origin", "Region", "Harvest year", "Extraction"]) {
     await expect(origin.locator("div", { has: page.getByText(label, { exact: true }) }).last().locator("dd")).toHaveText("—");
   }
 

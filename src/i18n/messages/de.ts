@@ -75,7 +75,7 @@ export const de: Messages = {
   },
   shop: {
     metaTitle: "Alle Produkte",
-    metaDescription: "Natives Olivenöl extra mit hohem Polyphenolgehalt von namentlich genannten Erzeugern rund ums Mittelmeer. Jede Flasche trägt ihre Chargennummer.",
+    metaDescription: "Natives Olivenöl extra mit hohem Polyphenolgehalt rund ums Mittelmeer. Jede Flasche trägt ihre Chargennummer.",
     eyebrow: "Shop",
     title: "Jede Flasche",
     lead: "Jede nach Charge abgefüllt. Suchen Sie nach Name, Größe oder Chargennummer.",
@@ -122,7 +122,6 @@ export const de: Messages = {
     originHarvest: "Herkunft & Ernte",
     currentLot: "Aktuelle Charge",
     variety: "Olivensorte",
-    mill: "Mühle",
     bottled: "Abgefüllt",
     bestBefore: "Mindestens haltbar bis",
     ingredientsNutrition: "Zutaten & Nährwerte",
@@ -145,7 +144,6 @@ export const de: Messages = {
   intel: {
     country: "Herkunftsland",
     region: "Region",
-    producer: "Erzeuger",
     composition: "Art",
     single: "Sortenrein",
     blend: "Cuvée",
@@ -461,7 +459,6 @@ export const de: Messages = {
     lotNumber: "Chargennummer",
     trace: "Verfolgen",
     none: "Zu dieser Chargennummer gibt es noch keinen veröffentlichten Eintrag.",
-    grove: "Hain",
     sample: "Musterschein",
   },
   notFound: {

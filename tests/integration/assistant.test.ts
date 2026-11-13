@@ -130,7 +130,8 @@ describe("laboratory values (acceptance test 3)", () => {
     expect(unverified.laboratoryResults).toEqual([]);
     expect(unverified.laboratoryNote).toMatch(/^NO verified laboratory result is published for the current lot\./);
     expect(unverified.laboratoryNote).toContain("Do NOT give a polyphenol");
-    expect(unverified.origin).toMatchObject({ country: "not recorded", producer: "not recorded" }); // gaps are named, not left for the model to fill
+    expect(unverified.origin).toMatchObject({ country: "not recorded", region: "not recorded" }); // gaps are named, not left for the model to fill
+    expect(unverified.origin).not.toHaveProperty("producer"); // who produces an oil is never given to the model
 
     // The standing instructions carry the same rule, whatever a tool returns.
     expect(CUSTOMER_INSTRUCTIONS).toContain("Never state or estimate a polyphenol content");

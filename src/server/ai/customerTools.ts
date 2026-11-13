@@ -100,7 +100,7 @@ const searchProducts: Tool = {
 const getProduct: Tool = {
   spec: {
     name: "get_product",
-    description: "Everything the shop has recorded about one product: origin, producer, olive varieties, harvest, tasting notes, storage, sizes with prices and live availability, and the laboratory results of the current lot. Call this before stating ANY fact about a product, and always before mentioning a polyphenol, acidity or other measured value.",
+    description: "Everything the shop has recorded about one product: origin (country and region), olive varieties, harvest, tasting notes, storage, sizes with prices and live availability, and the laboratory results of the current lot. Call this before stating ANY fact about a product, and always before mentioning a polyphenol, acidity or other measured value.",
     input_schema: object({ slug: { type: "string", description: "The product's slug, from search_products." } }),
   },
   async run(input, { ctx }) {
@@ -122,7 +122,6 @@ const getProduct: Tool = {
         origin: {
           country: profile.country ? countryName(tag, profile.country) : NOT_RECORDED,
           region: profile.region ?? NOT_RECORDED,
-          producer: profile.producer ? [profile.producer.name, profile.producer.place].filter(Boolean).join(", ") : NOT_RECORDED,
           oliveVarieties: profile.varieties.length ? profile.varieties.map((entry) => (entry.percent === null ? entry.name : `${entry.name} ${entry.percent}%`)) : (facts.cultivar ?? NOT_RECORDED),
           type: profile.composition === "SINGLE_VARIETY" ? "single variety" : profile.composition === "BLEND" ? "blend" : NOT_RECORDED,
           harvesting: profile.harvesting ?? NOT_RECORDED,

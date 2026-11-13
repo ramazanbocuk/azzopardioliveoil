@@ -28,7 +28,6 @@ export async function loadCatalog(db: Db, language = "en"): Promise<{ categories
       include: {
         category: true,
         region: true,
-        producer: { include: { region: true } },
         varieties: { include: { variety: { select: { name: true } } }, orderBy: [{ percent: "desc" }, { varietyId: "asc" }] },
         variants: { where: { isActive: true }, orderBy: { position: "asc" }, include: { prices: true } },
         batches: { where: { isPublished: true }, orderBy: { bottledAt: "desc" }, take: 1 },
@@ -65,7 +64,6 @@ export async function loadCatalog(db: Db, language = "en"): Promise<{ categories
       profile: {
         country: p.originCountry,
         region: p.region?.name ?? null,
-        producer: p.producer?.isPublic ? { name: p.producer.name, place: [p.producer.town, p.producer.region?.name].filter(Boolean).join(", ") || null } : null,
         varieties: p.varieties.map((entry) => ({ name: entry.variety.name, percent: entry.percent })),
         composition: p.composition,
         harvestYear: lot?.harvestYear ?? null,
@@ -87,7 +85,6 @@ export async function loadCatalog(db: Db, language = "en"): Promise<{ categories
         storage: text?.storage ?? p.storage,
         nutrition: Array.isArray(p.nutrition) ? (p.nutrition as { label: string; value: string | null }[]) : [],
         harvest: day(lot?.harvestDate ?? null),
-        mill: lot?.mill ?? null,
         bottled: day(lot?.bottledAt ?? null),
         bestBefore: day(lot?.bestBefore ?? null),
       },

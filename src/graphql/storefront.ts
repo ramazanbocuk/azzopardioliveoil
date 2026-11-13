@@ -69,13 +69,11 @@ const NutritionRow = builder.objectRef<{ label: string; value: string | null }>(
 });
 
 const LotType = builder.objectRef<Batch>("Lot").implement({
-  description: "One bottling. Fields are null until an administrator records them.",
+  description: "One bottling. Fields are null until an administrator records them. Who produced the oil, and at which grove or mill, is never part of it: the owners keep that to themselves.",
   fields: (t) => ({
     lotNumber: t.exposeString("lotNumber"),
     harvestYear: t.exposeInt("harvestYear", { nullable: true }),
     harvestDate: t.string({ nullable: true, resolve: (b) => day(b.harvestDate) }),
-    grove: t.exposeString("grove", { nullable: true }),
-    mill: t.exposeString("mill", { nullable: true }),
     milledAt: t.string({ nullable: true, resolve: (b) => day(b.milledAt) }),
     bottledAt: t.string({ nullable: true, resolve: (b) => day(b.bottledAt) }),
     bestBefore: t.string({ nullable: true, resolve: (b) => day(b.bestBefore) }),

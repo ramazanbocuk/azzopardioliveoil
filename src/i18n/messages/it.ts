@@ -75,7 +75,7 @@ export const it: Messages = {
   },
   shop: {
     metaTitle: "Tutti i prodotti",
-    metaDescription: "Olio extravergine di oliva ricco di polifenoli, da produttori indicati per nome intorno al Mediterraneo. Ogni bottiglia porta il suo numero di lotto.",
+    metaDescription: "Olio extravergine di oliva ricco di polifenoli, da tutto il Mediterraneo. Ogni bottiglia porta il suo numero di lotto.",
     eyebrow: "Negozio",
     title: "Ogni bottiglia",
     lead: "Ciascuna imbottigliata per lotto. Cerca per nome, formato o numero di lotto.",
@@ -122,7 +122,6 @@ export const it: Messages = {
     originHarvest: "Origine e raccolta",
     currentLot: "Lotto attuale",
     variety: "Varietà di oliva",
-    mill: "Frantoio",
     bottled: "Imbottigliato",
     bestBefore: "Da consumarsi preferibilmente entro",
     ingredientsNutrition: "Ingredienti e valori nutrizionali",
@@ -145,7 +144,6 @@ export const it: Messages = {
   intel: {
     country: "Paese di origine",
     region: "Regione",
-    producer: "Produttore",
     composition: "Tipo",
     single: "Monovarietale",
     blend: "Blend",
@@ -461,7 +459,6 @@ export const it: Messages = {
     lotNumber: "Numero di lotto",
     trace: "Traccia",
     none: "Non c’è ancora una scheda pubblicata per questo numero di lotto.",
-    grove: "Uliveto",
     sample: "Cartellino di esempio",
   },
   notFound: {

@@ -142,7 +142,6 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
                 {profile.producers.map((producer) => (
                   <option key={producer.id} value={producer.id}>
                     {producer.name}
-                    {producer.isPublic ? "" : " (not named on the shop)"}
                   </option>
                 ))}
               </Select>
