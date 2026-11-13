@@ -58,7 +58,7 @@ export function Heritage() {
             </SplitHeading>
             <Reveal delay={0.1} className="mt-8 max-w-[44ch] space-y-5 text-ink/80">
               <p>The olive grows right around the Mediterranean, and no one shore has the best of it. Each country has its own varieties, its own ground and its own way of working.</p>
-              <p>We are a husband and wife, and we do not grow or press the oil ourselves. Our part is to choose. We taste each lot, read its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it.</p>
+              <p>We are a husband and wife. The oils here are made by producers we name, and our part is to choose: we taste each lot, read its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it. We also produce olive oil ourselves, and it will join them as our house blend.</p>
               <ButtonLink href="/our-story" variant="secondary" arrow className="!mt-9">
                 Read the story
               </ButtonLink>

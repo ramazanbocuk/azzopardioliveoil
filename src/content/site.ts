@@ -201,7 +201,7 @@ export const faq: { group: string; items: { q: string; a: string }[] }[] = [
   {
     group: "The oil",
     items: [
-      { q: "Who is behind Azzopardi?", a: "A husband and wife. We choose every oil ourselves. We do not grow olives or own a mill: the oils come from producers we name on each bottle’s page." },
+      { q: "Who is behind Azzopardi?", a: "A husband and wife. We choose every oil ourselves, from producers we name on each bottle’s page. We also produce olive oil ourselves, which will be offered as our house blend." },
       { q: "Where do the oils come from?", a: "From producers around the Mediterranean. The country, region and producer recorded for each oil are shown on its page; a dash means it has not been recorded yet." },
       { q: "What does “extra virgin” mean?", a: "It is the highest grade of olive oil under EU rules. The oil is taken from the olives by mechanical means only, its free acidity is no more than 0.8%, and a trained tasting panel finds fruitiness and no defects." },
       { q: "What are polyphenols?", a: "Natural compounds found in olives. They are part of what makes an oil taste bitter and peppery. How much an oil contains depends on the olive variety, when the fruit was picked, and how the oil was made and stored. What may be said about them and health is regulated in the EU, so we publish the measured figure and leave it there." },

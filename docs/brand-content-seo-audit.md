@@ -28,7 +28,7 @@ What was changed on the site as part of this audit is listed in section 7. Every
 
 ## 2. Positioning
 
-**One sentence.** Azzopardi is a husband and wife who choose high-polyphenol extra virgin olive oils from named producers around the Mediterranean, and show you the laboratory report for the bottle in your hand.
+**One sentence.** Azzopardi is a husband and wife who choose high-polyphenol extra virgin olive oils from named producers around the Mediterranean, produce a house blend of their own, and show you the laboratory report for the bottle in your hand.
 
 **Why a customer should believe it.**
 
@@ -41,7 +41,7 @@ What was changed on the site as part of this audit is listed in section 7. Every
 
 **Who it is for.** People who cook, read labels, and have been disappointed by supermarket oil. They do not need to be told olive oil is healthy or luxurious. They want to know what is in the bottle and who stands behind it.
 
-**What it is not.** Not a grower (never "our grove", "we pick"). Not a wellness brand (no health promises). Not a luxury brand in the gold-and-adjectives sense: the luxury is the care and the evidence.
+**What it is not.** Not only a selector: the owners also produce olive oil, to be sold as a house blend (told on 2026-11-13, after this audit was first written). Until they have said where and how, the site says so in one sentence and does not describe a grove, a harvest or a mill of their own. Not a wellness brand (no health promises). Not a luxury brand in the gold-and-adjectives sense: the luxury is the care and the evidence.
 
 ---
 
@@ -115,7 +115,8 @@ Sound in structure, honest, and correctly marked as a draft. It cannot be finish
 | Changed | Page title "Our story" → "Our story: a family olive oil business" (what a searcher would type) |
 | Missing | Your first names. How you met olive oil. Why these five countries. What made you start. One small true story (a meal, a producer's kitchen, a bottle that changed your mind) |
 | Missing | A photograph of the two of you |
-| Recommended | Once written, open with the story and move "we do not own groves" lower. People first, method second |
+| Recommended | Once written, open with the story. People first, method second |
+| Changed | "We do not own groves or a mill." was untrue: the owners also produce olive oil. The page now says "We are not tied to one grove… We also produce olive oil ourselves, and it will be offered as our house blend." The same correction was made on the home page and in the FAQ |
 
 ### Where the oils come from, Harvest & production, Quality & traceability
 
@@ -279,8 +280,8 @@ Nothing below has been written or guessed. Each item is a gap on the site today.
 6. You work with producers in Morocco, Turkey, Italy, Greece and Spain — all five, at launch?
 7. You taste every lot before taking it.
 8. You ask for a laboratory report for every lot.
-9. Lots are never blended with one another.
-10. You own no groves and no mill.
+9. Lots are never blended to hide a weak one. A house blend is a blend by design: how should the rule read once it is on sale?
+10. Your own production. You have told us you also produce olive oil and that it will be a house blend. Where is it produced, and by whom? From your own trees or from fruit or oil you buy? Which olives, and from which countries? When will it be on sale, and under what name? The site now says only that you produce oil and that a house blend is coming.
 11. What polyphenol level do you require before you call an oil "high-polyphenol"? Without a stated threshold the phrase is hard to defend.
 
 **About the oils**

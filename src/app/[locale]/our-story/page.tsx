@@ -22,7 +22,7 @@ export default function OurStoryPage() {
         title="Not one grove. The right oil, wherever it is made."
         paragraphs={[
           "We work with producers in Morocco, Turkey, Italy, Greece and Spain. The olive is at home in all of them, and each makes oil the others cannot.",
-          "We do not own groves or a mill. That leaves us free to say no to a lot, and to go on looking until we find one we would put on our own table.",
+          "We are not tied to one grove. That leaves us free to say no to a lot, and to go on looking until we find one we would put on our own table. We also produce olive oil ourselves, and it will be offered as our house blend.",
         ]}
         plate={{ label: "olive trees, five countries", tone: "stone" }}
         cta={{ href: "/olive-groves", label: "Where the oils come from" }}
