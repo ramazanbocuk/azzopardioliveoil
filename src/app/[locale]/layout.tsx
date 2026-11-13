@@ -42,7 +42,8 @@ export default async function StoreRootLayout({ children }: LayoutProps<"/[local
       <head>
         <script dangerouslySetInnerHTML={{ __html: motionGate }} />
       </head>
-      <body className="flex min-h-svh flex-col">
+      {/* Browser extensions add their own classes to <body> before the page starts. That is not a fault of the page, so the difference is not reported; only this element's own attributes are exempt, not its contents. */}
+      <body className="flex min-h-svh flex-col" suppressHydrationWarning>
         <I18nProvider locale={locale} messages={m} markets={markets}>
           <StoreChrome>{children}</StoreChrome>
         </I18nProvider>
