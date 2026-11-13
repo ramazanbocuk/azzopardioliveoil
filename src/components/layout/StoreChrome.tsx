@@ -39,8 +39,9 @@ async function Announcement() {
 async function Assistant() {
   // Asked on every request: the budget can run out, or the owner can switch it off, at any moment.
   await connection();
-  const state = await customerAssistantState(getPrisma());
-  return state.available ? <AssistantWidget /> : null;
+  // The chat is an extra. If its state cannot be read, the shop goes on without it.
+  const available = await customerAssistantState(getPrisma()).then((state) => state.available, (error: unknown) => (console.error("[assistant] state could not be read", error), false));
+  return available ? <AssistantWidget /> : null;
 }
 
 /** Everything that surrounds a storefront page. The admin panel has its own shell. */
