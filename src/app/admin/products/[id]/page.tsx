@@ -2,7 +2,8 @@ import { Card, Check, Field, Flash, LinkButton, Page, Select, Submit, TextArea, 
 import { getProduct } from "@/server/admin";
 import { PHOTOS_PER_PRODUCT, listProductPhotos } from "@/server/backoffice";
 import { adminCtx } from "@/server/adminSession";
-import { adjustStock, deletePhoto, deleteProduct, saveProduct, saveVariant, uploadPhoto } from "../../actions";
+import { getProductProfile } from "@/server/provenance";
+import { adjustStock, deletePhoto, deleteProduct, saveProduct, saveProductProfile, saveVariant, uploadPhoto } from "../../actions";
 
 export const metadata = { title: "Product" };
 
@@ -12,6 +13,8 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   const [{ id }, flash, categories] = await Promise.all([params, searchParams, ctx.db.category.findMany({ orderBy: { position: "asc" } })]);
   const product = id === "new" ? null : await getProduct(ctx, id);
   const photos = product ? await listProductPhotos(ctx, product.id) : [];
+  const profile = product ? await getProductProfile(ctx, product.id) : null;
+  const chosen = new Map(profile?.product.varieties.map((entry) => [entry.varietyId, entry.percent]) ?? []);
 
   return (
     <Page title={product?.name ?? "New product"} eyebrow="Product" actions={<LinkButton href="/admin/products">All products</LinkButton>}>
@@ -109,6 +112,87 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             </form>
           </Card>
         </>
+      )}
+      {profile && (
+        <Card
+          title="Origin, varieties and tasting"
+          description="Shown on the product page as entered. Leave empty what you cannot document: the shop shows a dash. Choosing a variety or a region fills in nothing else. Laboratory values are not entered here: they belong to a harvest batch, under Harvest batches."
+        >
+          <form action={saveProductProfile.bind(null, profile.product.id)} className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Field label="Country of origin" name="originCountry" maxLength={2} defaultValue={profile.product.originCountry ?? ""} placeholder="GR" hint="Two-letter code. Also used on customs documents. Taken from the region when one is chosen." />
+              <Select label="Region" name="regionId" defaultValue={profile.product.regionId ?? ""}>
+                <option value="">Not recorded</option>
+                {profile.regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.countryCode} · {region.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Producer" name="producerId" defaultValue={profile.product.producerId ?? ""}>
+                <option value="">Not recorded</option>
+                {profile.producers.map((producer) => (
+                  <option key={producer.id} value={producer.id}>
+                    {producer.name}
+                    {producer.isPublic ? "" : " (not named on the shop)"}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Single variety or blend" name="composition" defaultValue={profile.product.composition ?? ""}>
+                <option value="">Not recorded</option>
+                <option value="SINGLE_VARIETY">Single variety</option>
+                <option value="BLEND">Blend</option>
+              </Select>
+            </div>
+
+            <fieldset>
+              <legend className="text-small font-medium">Olive varieties</legend>
+              {profile.varieties.length === 0 ? (
+                <p className="text-small mt-2 text-stone-700">No variety has been set up yet. Add them under Olive varieties.</p>
+              ) : (
+                <ul className="mt-2 grid gap-x-8 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {profile.varieties.map((variety) => (
+                    <li key={variety.id} className="flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" name="variety" value={variety.id} defaultChecked={chosen.has(variety.id)} className="size-4 accent-olive-700" />
+                        {variety.name}
+                      </label>
+                      <input name={`percent:${variety.id}`} defaultValue={chosen.get(variety.id) ?? ""} inputMode="numeric" maxLength={3} aria-label={`Share of ${variety.name} in percent`} placeholder="%" className="h-9 w-16 border border-ink/25 bg-white px-2 text-right" />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-small mt-2 text-stone-700">Shares are optional. If given, give one for every ticked variety, adding up to 100.</p>
+            </fieldset>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Harvesting method" name="harvestMethod" defaultValue={profile.product.harvestMethod ?? ""} placeholder="Hand-picked into nets" />
+              <Field label="Extraction method" name="extractionMethod" defaultValue={profile.product.extractionMethod ?? ""} placeholder="Cold extraction, two-phase" hint="“Cold extraction” and “first cold pressing” are regulated label terms: use them only if the producer documents them." />
+              <TextArea label="Aroma" name="aroma" rows={2} defaultValue={profile.product.aroma ?? ""} />
+              <TextArea label="Taste" name="taste" rows={2} defaultValue={profile.product.taste ?? ""} />
+              <Select label="Bitterness" name="bitterness" defaultValue={profile.product.bitterness ?? ""}>
+                <option value="">Not recorded</option>
+                {[0, 1, 2, 3, 4, 5].map((level) => (
+                  <option key={level} value={level}>
+                    {level} of 5
+                  </option>
+                ))}
+              </Select>
+              <Select label="Pungency" name="pungency" defaultValue={profile.product.pungency ?? ""}>
+                <option value="">Not recorded</option>
+                {[0, 1, 2, 3, 4, 5].map((level) => (
+                  <option key={level} value={level}>
+                    {level} of 5
+                  </option>
+                ))}
+              </Select>
+              <TextArea label="Food pairings" name="pairings" rows={2} defaultValue={profile.product.pairings ?? ""} />
+              <Field label="Packaging" name="packaging" defaultValue={profile.product.packaging ?? ""} placeholder="Dark glass bottle, screw cap" />
+            </div>
+            <p className="text-small text-stone-700">Bitterness and pungency are the house’s own tasting judgement on a 0 to 5 scale, and are labelled as such on the shop. They are not laboratory values.</p>
+            <Submit>Save origin and tasting</Submit>
+          </form>
+        </Card>
       )}
       {product && (
         <Card title="Photos" description={`JPEG, PNG or WebP, up to 4 MB each, at most ${PHOTOS_PER_PRODUCT}. Photos are stored and kept ready for the shop; the product page still shows the illustrated bottle until the photo layout is designed.`}>

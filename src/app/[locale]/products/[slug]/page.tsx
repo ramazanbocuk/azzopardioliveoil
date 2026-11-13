@@ -7,6 +7,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { JsonLd, siteUrl } from "@/components/ui/JsonLd";
 import { Accordion, Breadcrumbs, FactList, Notice } from "@/components/ui/Page";
 import { tagOf, type Language } from "@/i18n/config";
+import { countryName, fill } from "@/i18n/format";
 import { alternatesFor } from "@/i18n/seo";
 import { getI18n } from "@/i18n/server";
 import { getCatalogData, getFreeShippingThreshold } from "@/server/storefrontData";
@@ -47,7 +48,17 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
   const category = product && categories.find((c) => c.slug === product.categorySlug);
   if (!product || !category) notFound();
 
-  const { facts } = product;
+  const { facts, profile } = product;
+  const tag = tagOf(locale);
+  const i = m.intel;
+  const scale = (value: number | null) => (value === null ? null : fill(i.scale, { value }));
+  // Structured varieties when they are recorded; otherwise whatever was typed on the label field.
+  const varieties = profile.varieties.length ? profile.varieties.map((entry) => (entry.percent === null ? entry.name : fill(i.share, { name: entry.name, percent: entry.percent }))).join(", ") : facts.cultivar;
+  const measured = product.lab.map((result) => ({
+    ...result,
+    name: (i.measures as Record<string, string>)[result.measure] ?? result.label,
+    amount: `${new Intl.NumberFormat(tag, { minimumFractionDigits: result.decimals, maximumFractionDigits: result.decimals }).format(result.value)}${(i.units as Record<string, string>)[result.measure] ?? result.unit ? ` ${(i.units as Record<string, string>)[result.measure] ?? result.unit}` : ""}`,
+  }));
   const base = siteUrl();
   const prices = product.variants.map((v) => v.priceCents);
   // Only facts that exist are published: no ratings, awards or claims are invented for search engines either.
@@ -124,14 +135,38 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
                   <FactList
                     rows={[
                       { label: t.currentLot, value: product.lot },
+                      { label: i.country, value: profile.country ? countryName(tag, profile.country) : null },
+                      { label: i.region, value: profile.region },
                       { label: t.origin, value: facts.origin },
+                      { label: i.producer, value: profile.producer ? [profile.producer.name, profile.producer.place].filter(Boolean).join(" — ") : null },
+                      { label: t.variety, value: varieties },
+                      { label: i.composition, value: profile.composition === "SINGLE_VARIETY" ? i.single : profile.composition === "BLEND" ? i.blend : null },
+                      { label: i.harvestYear, value: profile.harvestYear ? String(profile.harvestYear) : null },
                       { label: t.harvest, value: facts.harvest },
-                      { label: t.variety, value: facts.cultivar },
+                      { label: i.harvesting, value: profile.harvesting },
+                      { label: i.extraction, value: profile.extraction },
                       { label: t.mill, value: facts.mill },
                       { label: t.bottled, value: facts.bottled },
                       { label: t.bestBefore, value: facts.bestBefore },
                     ]}
                   />
+                ),
+              },
+              {
+                title: i.tasting,
+                content: (
+                  <div className="space-y-4">
+                    <FactList
+                      rows={[
+                        { label: i.aroma, value: profile.aroma },
+                        { label: i.taste, value: profile.taste },
+                        { label: i.bitterness, value: scale(profile.bitterness) },
+                        { label: i.pungency, value: scale(profile.pungency) },
+                        { label: i.pairings, value: profile.pairings },
+                      ]}
+                    />
+                    <p className="text-small text-stone-700">{i.scaleNote}</p>
+                  </div>
                 ),
               },
               {
@@ -148,7 +183,7 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
               },
               {
                 title: t.storage,
-                content: <FactList rows={[{ label: t.howToStore, value: facts.storage }]} />,
+                content: <FactList rows={[{ label: t.howToStore, value: facts.storage }, { label: i.packaging, value: profile.packaging }]} />,
               },
               {
                 title: t.shippingReturns,
@@ -167,6 +202,57 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
           <Notice title={t.dashTitle} className="mt-8">
             {t.dashText}
           </Notice>
+        </div>
+      </section>
+
+      <section aria-labelledby="lab-title" className="border-t border-ink/15">
+        <div className="container-page grid gap-x-8 gap-y-8 py-section-sm lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <p className="text-label text-stone-700">{i.labEyebrow}</p>
+            <h2 id="lab-title" className="text-h2 mt-4 max-w-[12ch]">
+              {i.labTitle}
+            </h2>
+          </div>
+          <div className="lg:col-span-7 lg:col-start-6">
+            {measured.length === 0 || !product.lot ? (
+              <p className="max-w-[56ch] text-ink/80">{i.labNone}</p>
+            ) : (
+              <>
+                <p className="max-w-[60ch] text-ink/80">{fill(i.labIntro, { lot: product.lot })}</p>
+                <div className="mt-6 overflow-x-auto">
+                  <table className="w-full min-w-[34rem] border-collapse text-left">
+                    <thead>
+                      <tr className="text-label border-b border-ink/30 text-stone-700">
+                        <th scope="col" className="py-3 pr-4 font-normal">{i.measure}</th>
+                        <th scope="col" className="py-3 pr-4 font-normal">{i.result}</th>
+                        <th scope="col" className="py-3 pr-4 font-normal">{i.method}</th>
+                        <th scope="col" className="py-3 pr-4 font-normal">{i.laboratory}</th>
+                        <th scope="col" className="py-3 font-normal">{i.tested}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {measured.map((result, index) => (
+                        <tr key={`${result.measure}-${index}`} className="border-b border-ink/10 align-top">
+                          <th scope="row" className="py-3 pr-4 font-normal">
+                            {result.name}
+                            {result.certificateUrl && (
+                              <a href={result.certificateUrl} target="_blank" rel="noreferrer" className="text-small block underline underline-offset-4">
+                                {i.certificate}
+                              </a>
+                            )}
+                          </th>
+                          <td className="whitespace-nowrap py-3 pr-4 tabular-nums">{result.amount}</td>
+                          <td className="py-3 pr-4">{result.method ?? "—"}</td>
+                          <td className="py-3 pr-4">{result.laboratory ?? "—"}</td>
+                          <td className="whitespace-nowrap py-3">{result.tested ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </section>
 

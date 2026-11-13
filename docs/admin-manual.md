@@ -55,6 +55,9 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 ## Money and reports
 
 - **Payments**: every payment and refund for a period, and the list of disputes. A refund made directly in Stripe appears on the order by itself, marked "at the payment provider", and the customer gets the refund email. Stock is never put back automatically. If a bank bounces a refund, it is marked failed, the order goes back to paid, and the shop is emailed.
+- **Producers, Countries & regions, Olive varieties**: the reference lists. A producer is named on the shop only when marked public.
+- **Harvest batches**: one per bottling, with its harvest year. Open "Documents and laboratory results" to upload the laboratory's report (PDF) and enter the values. Staff enter; a manager verifies the report and then each value. Only verified values of a published batch are shown to customers.
+- **Laboratory results**: the list of what is still missing per batch and per product.
 - **Translations**: products, categories and journal articles in German, Dutch, French, Italian and Spanish. Save a draft, then a manager publishes it; until then customers see English with a note. The overview shows what is missing or out of date. See `docs/internationalisation.md`.
 - **Disputes** (chargebacks): when a cardholder contests a payment, the order shows a warning, the shop is emailed with the deadline, and the dispute is listed under Payments. Answer it in the Stripe Dashboard; it cannot be answered here. Do not ship a disputed order.
 - **Analytics & reports**: sales by day, product, country, payment method; first-time and returning; export.

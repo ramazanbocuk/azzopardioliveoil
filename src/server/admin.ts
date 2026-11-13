@@ -523,6 +523,11 @@ const batchInput = z.object({
   bestBefore: optionalDate,
   notes: optionalText(2000),
   supplierId: z.string().nullish().transform((value) => value || null),
+  producerId: z.string().nullish().transform((value) => value || null),
+  harvestYear: z
+    .union([z.literal(""), z.null(), z.coerce.number().int().min(2000, "Enter the harvest year as four digits.").max(2100, "Enter the harvest year as four digits.")])
+    .optional()
+    .transform((value) => (typeof value === "number" ? value : null)),
   isPublished: z.boolean().default(false),
 });
 

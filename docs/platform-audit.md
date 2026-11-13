@@ -4,7 +4,7 @@ Date: 2026-11-13. Audited at commit `b943d1b` on `main`.
 
 This answers Phase 1 (audit) and outlines Phase 2 (architecture) of the master brief. The owner approved it on 2026-11-13.
 
-**Progress:** Phase 3, internationalisation, is built (2026-11-14); see `docs/internationalisation.md` for what it covers and what it does not. Phases 4 to 10 are not started. The tables below describe the state before Phase 3.
+**Progress:** Phase 3, internationalisation, is built (2026-11-14); see `docs/internationalisation.md` for what it covers and what it does not. Phase 4, product intelligence, is built (2026-11-14); see `docs/product-intelligence.md`. Phases 5 to 10 are not started. The tables below describe the state before Phase 3.
 
 ## 1. What exists today
 
@@ -95,7 +95,7 @@ Brand copy for the new positioning runs alongside Phase 3, since every page is b
 |---|---|
 | 1. German visitor | **Passes** since Phase 3 (browser test) |
 | 2. Belgian visitor | **Passes** since Phase 3 (browser test); the notification language is covered by an integration test |
-| 3. Customer AI and lab data | Fails: no assistant, no lab values |
+| 3. Customer AI and lab data | Half: verified lab values per batch exist since Phase 4, and the shop says so when there are none. No assistant yet |
 | 4. Admin AI, second shipments | Fails: no assistant. The underlying query exists |
 | 5. Partial fulfilment | Partly: two shipments with separate tracking work in the admin and are tested. Customer view and language-specific notifications are missing |
 | 6. Refund permission | Dashboard half passes (tested). AI half not applicable yet |

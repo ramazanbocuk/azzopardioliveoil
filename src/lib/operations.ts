@@ -169,6 +169,7 @@ export const LotQuery = graphql(`
       productSlug
       lot {
         lotNumber
+        harvestYear
         harvestDate
         grove
         mill
@@ -180,6 +181,15 @@ export const LotQuery = graphql(`
         kind
         title
         url
+      }
+      labResults {
+        measure
+        label
+        value
+        unit
+        decimals
+        laboratory
+        testedAt
       }
     }
   }

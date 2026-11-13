@@ -4,6 +4,7 @@ import { updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
+import * as provenance from "@/server/provenance";
 import * as translations from "@/server/translations";
 import * as fulfilment from "@/server/fulfilment";
 import * as twoFactor from "@/server/twoFactor";
@@ -410,4 +411,85 @@ export async function unpublishTranslationAction(entity: string, id: string, lan
     await translations.unpublishTranslation(ctx, entity, id, language);
     updateTag(entity === "journal" ? "journal" : "catalog");
   }, "Taken off the shop. Customers see English again.");
+}
+
+// ── Provenance, certificates and laboratory results ──
+
+export async function saveRegion(id: string | null, form: FormData) {
+  await run("/admin/regions", async (ctx) => {
+    await provenance.saveRegion(ctx, id, formData(form));
+    updateTag("catalog");
+  }, "Region saved.");
+}
+
+export async function deleteRegion(id: string) {
+  await run("/admin/regions", async (ctx) => {
+    await provenance.deleteRegion(ctx, id);
+  }, "Region removed.");
+}
+
+export async function saveProducer(id: string | null, form: FormData) {
+  await run("/admin/producers", async (ctx) => {
+    await provenance.saveProducer(ctx, id, formData(form, { booleans: ["isPublic"] }));
+    updateTag("catalog");
+  }, "Producer saved.");
+}
+
+export async function saveVariety(id: string | null, form: FormData) {
+  await run("/admin/varieties", async (ctx) => {
+    await provenance.saveVariety(ctx, id, formData(form));
+    updateTag("catalog");
+  }, "Variety saved.");
+}
+
+export async function saveProductProfile(productId: string, form: FormData) {
+  await run(`/admin/products/${productId}`, async (ctx) => {
+    // One row per variety on the form: a ticked box, and optionally its share.
+    const varieties = form.getAll("variety").map((id) => ({ varietyId: String(id), percent: String(form.get(`percent:${String(id)}`) ?? "") }));
+    const fields = Object.fromEntries(Object.entries(formData(form)).filter(([key]) => key !== "variety" && !key.startsWith("percent:")));
+    await provenance.saveProductProfile(ctx, productId, { ...fields, varieties });
+    updateTag("catalog");
+  }, "Origin and tasting profile saved.");
+}
+
+export async function uploadBatchDocument(batchId: string, form: FormData) {
+  await run(`/admin/lots/${batchId}`, async (ctx) => {
+    const file = form.get("file");
+    const data = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array();
+    await provenance.addBatchDocument(ctx, batchId, { data, title: String(form.get("title") ?? ""), kind: String(form.get("kind") ?? "") });
+  }, "Document uploaded. It is not shown to customers until it is verified.");
+}
+
+export async function verifyBatchDocument(batchId: string, documentId: string, verified: boolean) {
+  await run(`/admin/lots/${batchId}`, async (ctx) => {
+    await provenance.setDocumentVerified(ctx, documentId, verified);
+    updateTag("catalog");
+  }, verified ? "Document verified." : "Verification withdrawn.");
+}
+
+export async function removeBatchDocument(batchId: string, documentId: string) {
+  await run(`/admin/lots/${batchId}`, async (ctx) => {
+    await provenance.removeBatchDocument(ctx, documentId);
+    updateTag("catalog");
+  }, "Document removed. Results read from it are no longer verified.");
+}
+
+export async function addLabResult(batchId: string, form: FormData) {
+  await run(`/admin/lots/${batchId}`, async (ctx) => {
+    await provenance.addLabResult(ctx, batchId, formData(form));
+  }, "Result recorded. It is not shown to customers until it is verified.");
+}
+
+export async function verifyLabResult(batchId: string, resultId: string, verified: boolean) {
+  await run(`/admin/lots/${batchId}`, async (ctx) => {
+    await provenance.setLabResultVerified(ctx, resultId, verified);
+    updateTag("catalog");
+  }, verified ? "Result verified." : "Verification withdrawn.");
+}
+
+export async function removeLabResult(batchId: string, resultId: string) {
+  await run(`/admin/lots/${batchId}`, async (ctx) => {
+    await provenance.removeLabResult(ctx, resultId);
+    updateTag("catalog");
+  }, "Result removed.");
 }

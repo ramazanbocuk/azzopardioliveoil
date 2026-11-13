@@ -79,12 +79,32 @@ type Customer {
   orders: [Order!]!
 }
 
+"""
+One value a laboratory measured in a lot. Only results staff have verified against the laboratory's report are ever returned.
+"""
+type LabResult {
+  certificateUrl: String
+  decimals: Int!
+  label: String!
+  laboratory: String
+
+  """
+  Key of the measure, e.g. polyphenols, free_acidity, peroxide; or other.
+  """
+  measure: String!
+  method: String
+  testedAt: String
+  unit: String!
+  value: Float!
+}
+
 """One bottling. Fields are null until an administrator records them."""
 type Lot {
   bestBefore: String
   bottledAt: String
   grove: String
   harvestDate: String
+  harvestYear: Int
   lotNumber: String!
   mill: String
   milledAt: String
@@ -99,6 +119,11 @@ type LotDocument {
 
 type LotRecord {
   documents: [LotDocument!]!
+
+  """
+  Verified laboratory results for this lot. Empty when none has been verified.
+  """
+  labResults: [LabResult!]!
   lot: Lot!
   productName: String!
   productSlug: String!
