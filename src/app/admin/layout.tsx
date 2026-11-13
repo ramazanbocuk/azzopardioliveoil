@@ -4,6 +4,7 @@ import { Suspense, type ReactNode } from "react";
 import { PasswordField } from "@/components/admin/PasswordField";
 import { SignInError } from "@/components/admin/SignInError";
 import { Field, Submit } from "@/components/admin/ui";
+import { Emblem, Logo } from "@/components/brand/Logo";
 import { switzer, zodiak } from "@/lib/fonts";
 import { adminCtx } from "@/server/adminSession";
 import { mustEnrol } from "@/server/auth";
@@ -58,7 +59,7 @@ function SignIn() {
   return (
     <div className="grid min-h-svh place-items-center bg-[#f3f1ea] px-5 font-sans text-ink">
       <form action={signIn} className="w-full max-w-sm border border-ink/10 bg-white p-8">
-        <p className="font-serif text-[1.25rem] uppercase tracking-[0.2em]">Azzopardi</p>
+        <Logo className="h-24" />
         <h1 className="mt-6 font-serif text-[1.75rem]">Staff sign-in</h1>
         <Suspense>
           <SignInError />
@@ -85,7 +86,7 @@ function SetUpTwoFactor({ name, pending }: { name: string; pending: { secret: st
   return (
     <div className="grid min-h-svh place-items-center bg-[#f3f1ea] px-5 py-10 font-sans text-ink">
       <div className="w-full max-w-lg border border-ink/10 bg-white p-8">
-        <p className="font-serif text-[1.25rem] uppercase tracking-[0.2em]">Azzopardi</p>
+        <Logo className="h-24" />
         <h1 className="mt-6 font-serif text-[1.75rem]">Set up two-factor sign-in</h1>
         <p className="mt-4">
           {name}, every staff account needs a second step at sign-in: a 6-digit code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password, Authy). The admin panel opens once it is set up.
@@ -136,7 +137,8 @@ async function Gate({ children }: { children: ReactNode }) {
       {process.env.APP_ENV === "staging" && <p className="bg-gold-300 px-5 py-2 text-center text-[0.8125rem] font-medium text-ink print:hidden lg:col-span-2">Staging: a test copy of the shop. Payments use test money and email goes only to the addresses on the allow-list.</p>}
       <aside className="bg-olive-950 text-ivory print:hidden lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-5">
-          <Link href="/admin" className="font-serif text-[1.125rem] uppercase tracking-[0.2em]">
+          <Link href="/admin" className="inline-flex items-center gap-2.5 font-serif text-[1.125rem] uppercase tracking-[0.2em]">
+            <Emblem tone="gold" className="h-8" />
             Azzopardi
           </Link>
           <span className="text-[0.625rem] uppercase tracking-[0.2em] text-gold-300">Admin</span>

@@ -1,4 +1,5 @@
 import type { Order, OrderItem } from "@/generated/prisma/client";
+import { Logo } from "@/components/brand/Logo";
 import { date, money as format } from "./ui";
 import { PrintButton } from "./PrintButton";
 
@@ -36,7 +37,7 @@ export function OrderDocument({ kind, order, store, shipment }: { kind: "invoice
 
       <header className="flex justify-between gap-8 border-b border-ink/20 pb-6">
         <div>
-          <p className="font-serif text-[1.5rem] uppercase tracking-[0.2em]">Azzopardi</p>
+          <Logo className="h-24" />
           <p className="mt-3">{seller("legalName", "legal name")}</p>
           <p className="whitespace-pre-line text-stone-700">{seller("address", "registered address")}</p>
           {invoice && <p className="text-stone-700">VAT {seller("vatNumber", "VAT number")}</p>}
