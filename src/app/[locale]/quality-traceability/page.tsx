@@ -69,7 +69,6 @@ export default function QualityTraceabilityPage() {
               items={[
                 { title: "What exactly is a lot?", content: <p>One bottling of oil, kept apart from the others and given its own number.</p> },
                 { title: "Why does a record show dashes?", content: <p>The information has not been entered or verified yet. We leave the field empty rather than estimate.</p> },
-                { title: "Can I ask for a lot’s documents?", content: <p>Yes. Contact us with the lot number and we will send what is on file.</p> },
               ]}
             />
           </div>
