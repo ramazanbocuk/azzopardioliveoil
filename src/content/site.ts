@@ -44,8 +44,6 @@ export type Product = {
     /** ISO country code; the page shows the country's name in the reader's language. */
     country: string | null;
     region: string | null;
-    /** Only producers the business has marked as public are named. */
-    producer: { name: string; place: string | null } | null;
     varieties: { name: string; percent: number | null }[];
     composition: "SINGLE_VARIETY" | "BLEND" | null;
     harvestYear: number | null;
@@ -65,7 +63,6 @@ export type Product = {
     origin: string | null;
     harvest: string | null;
     cultivar: string | null;
-    mill: string | null;
     bottled: string | null;
     bestBefore: string | null;
     ingredients: string | null;
@@ -101,9 +98,9 @@ export const sampleItem: CatalogItem = {
     translated: true,
     variants: [],
     lot: SAMPLE_LOT,
-    profile: { country: null, region: null, producer: null, varieties: [], composition: null, harvestYear: null, harvesting: null, extraction: null, aroma: null, taste: null, bitterness: null, pungency: null, pairings: null, packaging: null },
+    profile: { country: null, region: null, varieties: [], composition: null, harvestYear: null, harvesting: null, extraction: null, aroma: null, taste: null, bitterness: null, pungency: null, pairings: null, packaging: null },
     lab: [],
-    facts: { origin: null, harvest: null, cultivar: null, mill: null, bottled: null, bestBefore: null, ingredients: null, nutrition: [], storage: null },
+    facts: { origin: null, harvest: null, cultivar: null, bottled: null, bestBefore: null, ingredients: null, nutrition: [], storage: null },
   },
 };
 
@@ -121,7 +118,7 @@ export const navigation = [
 ] as const;
 
 export const processSteps = [
-  { title: "Sourced", body: "Each oil comes from a named producer. We record who made it, where, and from which olives." },
+  { title: "Sourced", body: "We follow the harvest season in each country and choose from what it gives. We record where each oil is from and from which olives." },
   { title: "Tasted", body: "A lot is tasted before it is taken on. If it does not taste right, nothing else about it matters." },
   { title: "Measured", body: "We ask for a laboratory report on each lot, polyphenol content first. What it found appears on the bottle’s page once the report has been checked." },
   { title: "Numbered", body: "Each lot receives a number. That number follows the bottle to your door." },
@@ -181,14 +178,14 @@ export const journal: JournalEntry[] = [
   {
     slug: "what-the-trees-are-doing-in-february",
     kind: "Story",
-    kicker: "With the producers",
+    kicker: "In the grove",
     title: "What the trees are doing in February",
     tone: "olive",
     label: "pruned olive tree",
     standfirst: "The harvest is over. The work that decides the next one has begun.",
     body: [
       "In winter the grove looks idle. It is not. Pruning opens each tree to light and air, and what is cut now shapes what the tree will carry in autumn.",
-      "Draft article. The published version will follow the real calendar of a producer’s grove.",
+      "Draft article. The published version will follow the real calendar of an olive grove.",
     ],
   },
 ];
@@ -201,13 +198,13 @@ export const faq: { group: string; items: { q: string; a: string }[] }[] = [
   {
     group: "The oil",
     items: [
-      { q: "Who is behind Azzopardi?", a: "A husband and wife. We choose every oil ourselves, from producers we name on each bottle’s page. We also produce olive oil ourselves, which will be offered as our house blend." },
-      { q: "Where do the oils come from?", a: "From producers around the Mediterranean. The country, region and producer recorded for each oil are shown on its page; a dash means it has not been recorded yet." },
+      { q: "Who is behind Azzopardi?", a: "A husband and wife. We choose every oil ourselves. We also produce olive oil ourselves, which will be offered as our house blend." },
+      { q: "Where do the oils come from?", a: "From around the Mediterranean: Morocco, Turkey, Italy, Greece and Spain. The country and region recorded for each oil are shown on its page; a dash means it has not been recorded yet." },
       { q: "What does “extra virgin” mean?", a: "It is the highest grade of olive oil under EU rules. The oil is taken from the olives by mechanical means only, its free acidity is no more than 0.8%, and a trained tasting panel finds fruitiness and no defects." },
       { q: "What are polyphenols?", a: "Natural compounds found in olives. They are part of what makes an oil taste bitter and peppery. How much an oil contains depends on the olive variety, when the fruit was picked, and how the oil was made and stored. What may be said about them and health is regulated in the EU, so we publish the measured figure and leave it there." },
       { q: "How do I know an oil is high in polyphenols?", a: "By its laboratory report. The polyphenol content measured for a lot is shown on the oil’s page, with the laboratory’s name and the date of the test, once we have checked the report. If no figure is shown, none has been verified yet." },
       { q: "Why does the oil taste bitter or peppery?", a: "Bitterness, and a peppery catch at the back of the throat, are normal in a fresh extra virgin olive oil. Tasting panels count both as good qualities, not faults." },
-      { q: "What is a lot number?", a: "Each lot is given a number. It links your bottle to what has been recorded for that lot: producer, harvest, mill and any analysis on file." },
+      { q: "What is a lot number?", a: "Each lot is given a number. It links your bottle to what has been recorded for that lot: harvest, bottling and any analysis on file." },
       { q: "Where can I find the lot number?", a: "On the label of every bottle, and on your order confirmation." },
       { q: "How should I store the oil?", a: "Away from light and heat, with the cap closed: a cupboard is better than a windowsill or a shelf beside the cooker. The best-before date is printed on each bottle." },
     ],

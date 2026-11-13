@@ -9,7 +9,7 @@ import { SplitHeading } from "@/motion/SplitHeading";
 // The text of this page exists in English only for now, so it is not announced as translated.
 export const generateMetadata = localizedMetadata("/quality-traceability", {
   title: "Quality & traceability",
-  description: "Every bottle of Azzopardi olive oil carries a lot number. Enter it to see the producer, harvest, mill and any laboratory report on file for that lot.",
+  description: "Every bottle of Azzopardi olive oil carries a lot number. Enter it to see the harvest, the bottling date and any laboratory report on file for that lot.",
 }, ENGLISH_ONLY);
 
 export default function QualityTraceabilityPage() {
@@ -27,7 +27,7 @@ export default function QualityTraceabilityPage() {
         items={[
           { title: "Find the number", body: "It is on the label of your bottle and on your order confirmation." },
           { title: "Enter it", body: "Use the lot lookup on this page or scan the code on the bottle, once codes are printed." },
-          { title: "Read the record", body: "Producer, harvest, mill, bottling date and any documents on file for that lot." },
+          { title: "Read the record", body: "Harvest, bottling date, best-before date and any laboratory report on file for that lot." },
         ]}
       />
 

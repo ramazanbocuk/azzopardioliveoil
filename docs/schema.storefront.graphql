@@ -120,15 +120,15 @@ type LabResult {
   value: Float!
 }
 
-"""One bottling. Fields are null until an administrator records them."""
+"""
+One bottling. Fields are null until an administrator records them. Who produced the oil, and at which grove or mill, is never part of it: the owners keep that to themselves.
+"""
 type Lot {
   bestBefore: String
   bottledAt: String
-  grove: String
   harvestDate: String
   harvestYear: Int
   lotNumber: String!
-  mill: String
   milledAt: String
 }
 

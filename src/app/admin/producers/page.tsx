@@ -1,4 +1,4 @@
-import { Badge, Card, Check, Field, Flash, Page, Select, Submit, TextArea } from "@/components/admin/ui";
+import { Card, Field, Flash, Page, Select, Submit, TextArea } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
 import { listProducers, listRegions } from "@/server/provenance";
 import { saveProducer } from "../actions";
@@ -27,7 +27,7 @@ export default async function ProducersPage({ searchParams }: PageProps<"/admin/
       <Field label="Website" name="website" type="url" defaultValue={producer?.website ?? ""} placeholder="https://" />
       <TextArea label="About the producer" name="description" rows={3} defaultValue={producer?.description} className="sm:col-span-2" hint="Facts you can stand behind: who they are, what they grow, how they work. No awards or certifications unless the document is on file." />
       <div className="flex items-end justify-between gap-4 sm:col-span-2 xl:col-span-4">
-        <Check label="Name this producer on the shop" name="isPublic" defaultChecked={producer?.isPublic} />
+        <p className="text-small text-stone-700">For your records only. Never shown on the shop.</p>
         <Submit variant={producer ? "secondary" : "primary"}>{producer ? "Save" : "Add producer"}</Submit>
       </div>
     </form>
@@ -36,14 +36,11 @@ export default async function ProducersPage({ searchParams }: PageProps<"/admin/
   return (
     <Page title="Producers" eyebrow={`${producers.length} producer${producers.length === 1 ? "" : "s"}`}>
       <Flash params={params} />
-      <Card title="Add a producer" description="A producer is who makes an oil: an estate, a mill or a cooperative. It is named on the product page only when marked public, so check that the producer agrees to be named. Suppliers (who you buy from and pay) are kept separately and are never shown.">
+      <Card title="Add a producer" description="A producer is who makes an oil: an estate, a mill or a cooperative. Producers are for your own records: nothing about them is shown on the shop, in emails or by the assistant. Suppliers (who you buy from and pay) are kept separately and are never shown.">
         {form(null)}
       </Card>
       {producers.map((producer) => (
         <Card key={producer.id} title={producer.name} description={`${producer._count.products} product${producer._count.products === 1 ? "" : "s"}, ${producer._count.batches} lot${producer._count.batches === 1 ? "" : "s"}${producer.region ? ` · ${producer.region.name}` : ""}`}>
-          <div className="mb-4">
-            <Badge tone={producer.isPublic ? "PAID" : "CANCELLED"}>{producer.isPublic ? "Named on the shop" : "Not named on the shop"}</Badge>
-          </div>
           {form(producer)}
         </Card>
       ))}

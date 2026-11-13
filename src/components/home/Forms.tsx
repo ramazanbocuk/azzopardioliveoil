@@ -46,8 +46,6 @@ export function TraceForm() {
                 [
                   [m.intel.harvestYear, record.lot.harvestYear ? String(record.lot.harvestYear) : "—"],
                   [m.product.harvest, date(record.lot.harvestDate)],
-                  [m.trace.grove, record.lot.grove ?? "—"],
-                  [m.product.mill, record.lot.mill ?? "—"],
                   [m.product.bottled, date(record.lot.bottledAt)],
                   [m.product.bestBefore, date(record.lot.bestBefore)],
                 ] as const

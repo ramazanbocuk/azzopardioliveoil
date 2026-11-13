@@ -75,7 +75,7 @@ export const nl: Messages = {
   },
   shop: {
     metaTitle: "Alle producten",
-    metaDescription: "Extra vierge olijfolie met een hoog polyfenolgehalte van bij naam genoemde producenten rond de Middellandse Zee. Elke fles draagt haar lotnummer.",
+    metaDescription: "Extra vierge olijfolie met een hoog polyfenolgehalte van rond de Middellandse Zee. Elke fles draagt haar lotnummer.",
     eyebrow: "Winkel",
     title: "Elke fles",
     lead: "Elk per lot gebotteld. Zoek op naam, formaat of lotnummer.",
@@ -122,7 +122,6 @@ export const nl: Messages = {
     originHarvest: "Herkomst & oogst",
     currentLot: "Huidig lot",
     variety: "Olijfras",
-    mill: "Molen",
     bottled: "Gebotteld",
     bestBefore: "Ten minste houdbaar tot",
     ingredientsNutrition: "Ingrediënten & voedingswaarden",
@@ -145,7 +144,6 @@ export const nl: Messages = {
   intel: {
     country: "Land van herkomst",
     region: "Streek",
-    producer: "Producent",
     composition: "Type",
     single: "Eén olijfras",
     blend: "Blend",
@@ -461,7 +459,6 @@ export const nl: Messages = {
     lotNumber: "Lotnummer",
     trace: "Traceren",
     none: "Voor dat lotnummer is nog geen gegevensblad gepubliceerd.",
-    grove: "Boomgaard",
     sample: "Voorbeeldticket",
   },
   notFound: {

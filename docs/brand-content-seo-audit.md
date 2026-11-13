@@ -28,7 +28,7 @@ What was changed on the site as part of this audit is listed in section 7. Every
 
 ## 2. Positioning
 
-**One sentence.** Azzopardi is a husband and wife who choose high-polyphenol extra virgin olive oils from named producers around the Mediterranean, produce a house blend of their own, and show you the laboratory report for the bottle in your hand.
+**One sentence.** Azzopardi is a husband and wife who choose high-polyphenol extra virgin olive oils from around the Mediterranean, following each country's harvest season, produce a house blend of their own, and show you the laboratory report for the bottle in your hand.
 
 **Why a customer should believe it.**
 
@@ -322,3 +322,25 @@ Nothing below has been written or guessed. Each item is a gap on the site today.
 **Not changed, on purpose:** the legal templates; the customer emails; product text in the database; anything that would need a fact the owners have not given.
 
 **Unproven:** the German, Dutch, French, Italian and Spanish versions of the three changed interface texts were written by the development team and have not had a native review. No search ranking can be shown, because the site is not live.
+
+## 8. Correction: producers are not named (2026-11-13)
+
+After this audit was written you told us that who produces your oils is secret. The audit above was written on the opposite assumption ("named producers", "the producer's name stays on it"), and those lines in it are out of date.
+
+What was changed on the site:
+
+- Every promise to name a producer is gone: home page, Our story, Where the oils come from, Harvest & production, Quality & traceability, Journal, the FAQ and the shop's description for search engines (six languages).
+- The product page no longer has "Producer" or "Mill" rows. The lot lookup no longer shows "Grove" or "Mill".
+- The shop's data and its API cannot carry a producer, a grove or a mill, even if one is recorded and was marked "name on the shop". A test fails if that changes.
+- The customer assistant is not given the producer and is told to say that you do not share it.
+- In the admin panel, producers remain as your own records, with a note that they are never shown.
+
+What the site says in its place: that you follow the harvest season country by country, taste each lot, read its laboratory report, and show the country, region, olive varieties, dates and laboratory results for each oil.
+
+What only you can check:
+
+- **Laboratory reports.** A report published on a lot's page is the laboratory's own PDF. If it names the producer or the mill as the client, publishing it reveals them. Check each PDF before marking it verified, or ask the laboratory for a copy issued in your name.
+- **Free-text fields.** "Origin", the product description and journal articles are typed by you. Nothing stops a name being typed there.
+- **The label.** EU rules require the label to carry the name and address of the business responsible for the oil, and in some cases where it was bottled. That is a question for your food-law adviser, not something the website decides.
+- **Item 12 of section 6** asked whether each producer agrees to be named. That no longer applies; the producer is still worth recording in the admin panel for your own traceability.
+

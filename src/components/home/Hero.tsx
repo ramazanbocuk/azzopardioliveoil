@@ -72,7 +72,7 @@ export function Hero({ scene }: { scene: ReactNode }) {
               lot={SAMPLE_LOT}
               rows={[
                 { label: "Harvest", value: "—" },
-                { label: "Producer", value: "—" },
+                { label: "Origin", value: "—" },
               ]}
             />
           </Reveal>

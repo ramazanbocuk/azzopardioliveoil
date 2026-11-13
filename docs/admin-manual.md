@@ -61,7 +61,7 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 - **Tracking**: with a carrier connected, events arrive by themselves. Without one, open the shipment on the order page and use "Record tracking by hand" to add the tracking number and what you learn. Parcels with a problem, late or without a number are listed under Shipping & fulfilment. See `docs/shipping.md`.
 - **Backorders**: off unless switched on per product. The Backorders screen lists what is owed and to whom; arriving stock is set aside for those orders automatically.
 - **Taking units off an order**: managers only; it does not refund. Issue the refund afterwards.
-- **Producers, Countries & regions, Olive varieties**: the reference lists. A producer is named on the shop only when marked public.
+- **Producers, Countries & regions, Olive varieties**: the reference lists. Producers are for your own records and are never shown on the shop, nor are the grove and mill entered on a lot.
 - **Harvest batches**: one per bottling, with its harvest year. Open "Documents and laboratory results" to upload the laboratory's report (PDF) and enter the values. Staff enter; a manager verifies the report and then each value. Only verified values of a published batch are shown to customers.
 - **Laboratory results**: the list of what is still missing per batch and per product.
 - **Translations**: products, categories and journal articles in German, Dutch, French, Italian and Spanish. Save a draft, then a manager publishes it; until then customers see English with a note. The overview shows what is missing or out of date. See `docs/internationalisation.md`.

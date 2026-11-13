@@ -8,7 +8,7 @@ import { DESKTOP_MOTION, gsap, useGSAP } from "@/motion/gsap";
 const tones: PlateTone[] = ["olive", "stone", "gold", "dawn", "terracotta"];
 
 /**
- * Producer to door. On desktop the section pins and the steps travel
+ * Harvest to door. On desktop the section pins and the steps travel
  * sideways with the scroll; on touch and under reduced motion it is a plain
  * vertical list.
  */
@@ -44,7 +44,7 @@ export function Process() {
         <li className="flex flex-col justify-center lg:w-[38vw] lg:max-w-[40rem] lg:shrink-0">
           <p className="text-label text-gold-700">How an oil reaches you</p>
           <h2 id="process-title" className="text-h1 mt-5 max-w-[11ch]">
-            From the producer to your door, in order.
+            From the harvest to your door, in order.
           </h2>
           <p className="text-lead mt-6 max-w-[32ch] text-ink/80">Five steps, no shortcuts between them. What is known about each lot is published with its number.</p>
         </li>

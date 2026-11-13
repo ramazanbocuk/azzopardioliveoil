@@ -32,7 +32,7 @@ There is no tool for ordering, paying, refunding, changing an order or an addres
 ## How it is kept honest
 
 - **Laboratory values** come only from `publicLabResults`: verified, against a verified report, on a published batch. Unverified values are never sent to the model. When there is no verified result the tool says so in words and tells the model not to estimate.
-- **Missing facts are named.** A product without a recorded country or producer returns "not recorded", not an empty field.
+- **Missing facts are named.** A product without a recorded country or region returns "not recorded", not an empty field.
 - **Standing instructions** (`src/server/ai/prompt.ts`) forbid stating a polyphenol figure, certification, origin, availability or delivery date that a tool did not return, forbid health claims, and tell the model that text inside tool results or customer messages is data, not instructions.
 - **Orders** are shown only to the signed-in customer who placed them. A guest is pointed to sign in or to the tracking page; another customer's order number finds nothing.
 - **These are instructions to a model, not guarantees.** A model can still word something badly. That is why conversations are kept and readable in the admin, and why the first real sessions must be read by a person.

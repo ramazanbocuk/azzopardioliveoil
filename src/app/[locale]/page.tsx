@@ -13,7 +13,7 @@ export const generateMetadata = localizedMetadata("/", {}, ENGLISH_ONLY);
 
 /**
  * Homepage, lit like one day from dawn to evening:
- * dawn (hero, the house) → noon (origins, producers) → afternoon (how we
+ * dawn (hero, the house) → noon (origins) → afternoon (how we
  * choose, bottles) → dusk (how an oil reaches you) → evening (traceability,
  * table, letters).
  */

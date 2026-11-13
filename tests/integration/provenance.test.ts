@@ -3,6 +3,7 @@ import { GET as publicCertificate } from "@/app/media/certificate/[id]/route";
 import { createServer } from "@/graphql/server";
 import { storefrontSchema } from "@/graphql/storefront";
 import { saveBatch } from "@/server/admin";
+import { loadCatalog } from "@/server/catalogView";
 import type { Ctx } from "@/server/context";
 import {
   addBatchDocument,
@@ -100,6 +101,36 @@ describe("origin, producer and varieties", () => {
     // Saving again replaces the list of varieties instead of adding to it.
     await save({ composition: "SINGLE_VARIETY", varieties: [{ varietyId: picual.id }] });
     expect(await db.productVariety.count({ where: { productId } })).toBe(1);
+  });
+});
+
+describe("who produces an oil", () => {
+  it("never reaches the shop, whatever is recorded in the admin panel", async () => {
+    // Everything the owners might record, including the old "name on the shop" mark.
+    const region = await saveRegion(manager, null, { countryCode: "GR", name: "Crete" });
+    const producer = await saveProducer(manager, null, { name: "Secretos Estate", slug: "secretos-estate", regionId: region.id, town: "Hiddenville", isPublic: true });
+    await db.product.update({ where: { id: productId }, data: { producerId: producer.id, regionId: region.id, originCountry: "GR" } });
+    const batch = await lot(true);
+    await db.batch.update({ where: { id: batch.id }, data: { producerId: producer.id, grove: "Quietgrove", mill: "Silentmill" } });
+    const secrets = ["Secretos", "Hiddenville", "Quietgrove", "Silentmill"];
+
+    // The catalogue every shop page and the customer assistant read from.
+    const catalogue = JSON.stringify(await loadCatalog(db));
+    expect(catalogue).toContain("Crete"); // country and region are still shown
+    for (const secret of secrets) expect(catalogue).not.toContain(secret);
+
+    // The shop's API has no field that could carry it, so a page cannot ask for it by mistake.
+    const fields = Object.values(storefrontSchema.getTypeMap())
+      .filter((type) => !type.name.startsWith("__"))
+      .flatMap((type) => ("getFields" in type ? Object.keys(type.getFields()) : []))
+      .map((name) => name.toLowerCase());
+    expect(fields).toContain("milledat"); // the list is real: a date is still there
+    expect(fields.filter((name) => /producer|grove|supplier|^mill$/.test(name))).toEqual([]);
+    const asked = await createClient(server).gql(`{ lot(lotNumber: "AZ-0001") { lot { grove mill } } }`);
+    expect(asked.data ?? null).toBeNull();
+    const found = await createClient(server).gql(`{ lot(lotNumber: "AZ-0001") { productName lot { lotNumber harvestYear harvestDate milledAt bottledAt bestBefore } documents { title } } }`);
+    expect(found.data).toBeTruthy();
+    for (const secret of secrets) expect(JSON.stringify(found)).not.toContain(secret);
   });
 });
 

@@ -80,7 +80,7 @@ export const en = {
   },
   shop: {
     metaTitle: "Shop all",
-    metaDescription: "Shop high-polyphenol extra virgin olive oil from named producers around the Mediterranean. Every bottle carries its lot number.",
+    metaDescription: "Shop high-polyphenol extra virgin olive oil from around the Mediterranean. Every bottle carries its lot number.",
     eyebrow: "Shop",
     title: "Every bottle",
     lead: "Each bottled by the lot. Search by name, size or lot number.",
@@ -127,7 +127,6 @@ export const en = {
     originHarvest: "Origin & harvest",
     currentLot: "Current lot",
     variety: "Olive variety",
-    mill: "Mill",
     bottled: "Bottled",
     bestBefore: "Best before",
     ingredientsNutrition: "Ingredients & nutrition",
@@ -150,7 +149,6 @@ export const en = {
   intel: {
     country: "Country of origin",
     region: "Region",
-    producer: "Producer",
     composition: "Type",
     single: "Single variety",
     blend: "Blend",
@@ -466,7 +464,6 @@ export const en = {
     lotNumber: "Lot number",
     trace: "Trace",
     none: "No published record for that lot number yet.",
-    grove: "Grove",
     sample: "Sample ticket",
   },
   notFound: {
