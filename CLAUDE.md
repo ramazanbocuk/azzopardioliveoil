@@ -4,7 +4,7 @@ Read `AGENTS.md` first: this Next.js version differs from older ones, and its ow
 
 ## What this is
 
-A bespoke ecommerce platform for Azzopardi (premium olive oil): one Next.js 16 application, PostgreSQL through Prisma, a GraphQL API for the storefront, server actions over a service layer for the admin panel, Stripe Checkout, Resend email.
+A bespoke ecommerce platform for Azzopardi, a house that selects extra virgin olive oils from producers in Morocco, Turkey, Italy, Greece and Spain and sends them from Belgium. It is not a grower and not Sicilian: never write copy in a grower's voice ("our grove", "we pick", "we mill"). The platform: one Next.js 16 application, PostgreSQL through Prisma, a GraphQL API for the storefront, server actions over a service layer for the admin panel, Stripe Checkout, Resend email.
 
 The master brief is being built in phases. `docs/platform-audit.md` has the audit, the architecture decisions and the phase plan. Phase 3 (languages) is built: `docs/internationalisation.md`. Phase 4 (producers, varieties, lab results per batch) is built: `docs/product-intelligence.md`. Phase 5 (several shipments per order, backorders, stock holds) is built: `docs/fulfilment.md`. Phase 6 (UPS adapter, tracking events, delivery problems) is built without a carrier account: `docs/shipping.md`.
 
@@ -44,4 +44,5 @@ Phase 10 (system status, stored error reports, staging mode, admin host) is buil
 - Email leaves only through `sendEmail`, which refuses recipients not on the allow-list when `APP_ENV=staging`. Never call the provider from anywhere else.
 - A new integration or background duty gets a line in `systemChecks` (`src/server/system.ts`) that says in plain words what is wrong when it is.
 - Every folder under `src/app/admin/` that has a `page.tsx` also has a `loading.tsx` (one line, re-exporting `@/components/admin/Loading`). Admin pages read the session per request, so without it moving between pages blocks and Next.js reports "uncached data … outside of Suspense" in development. A loading file in a parent folder does not count for moves between its children; nor does a template.
+- The editorial pages and the home page are hand-written English (marked `ENGLISH_ONLY`). Copy may say what the house does and what a record shows; it may not describe a particular producer's methods, a figure, or "high polyphenol" as a quality of a product. Where an oil comes from is read from the catalogue (`/olive-groves` lists it), never typed into a page.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost, UPS) have never called a carrier. Non-English text has not had a native review.

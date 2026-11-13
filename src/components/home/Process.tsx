@@ -8,7 +8,7 @@ import { DESKTOP_MOTION, gsap, useGSAP } from "@/motion/gsap";
 const tones: PlateTone[] = ["olive", "stone", "gold", "dawn", "terracotta"];
 
 /**
- * Branch to bottle. On desktop the section pins and the steps travel
+ * Producer to door. On desktop the section pins and the steps travel
  * sideways with the scroll; on touch and under reduced motion it is a plain
  * vertical list.
  */
@@ -42,11 +42,11 @@ export function Process() {
     <section ref={root} data-tone="#ebddbc" aria-labelledby="process-title" className="overflow-hidden py-section lg:flex lg:h-svh lg:min-h-[44rem] lg:items-center lg:py-0">
       <ol ref={track} className="flex flex-col gap-y-16 px-gutter will-change-transform lg:w-max lg:flex-row lg:items-stretch lg:gap-x-[6vw] lg:pr-[12vw]">
         <li className="flex flex-col justify-center lg:w-[38vw] lg:max-w-[40rem] lg:shrink-0">
-          <p className="text-label text-gold-700">Harvest &amp; production</p>
+          <p className="text-label text-gold-700">How an oil reaches you</p>
           <h2 id="process-title" className="text-h1 mt-5 max-w-[11ch]">
-            From branch to bottle, in order.
+            From the producer to your door, in order.
           </h2>
-          <p className="text-lead mt-6 max-w-[32ch] text-ink/80">Five steps, no shortcuts between them. The details of each lot are published with its number.</p>
+          <p className="text-lead mt-6 max-w-[32ch] text-ink/80">Five steps, no shortcuts between them. What is known about each lot is published with its number.</p>
         </li>
 
         {processSteps.map((step, index) => (

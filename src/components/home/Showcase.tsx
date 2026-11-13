@@ -54,7 +54,7 @@ export function Showcase({ product }: { product: Product }) {
 
         <div className="lg:col-span-5 lg:col-start-8">
           <Reveal>
-            <p className="text-label text-stone-700">Sicilian olive oil</p>
+            <p className="text-label text-stone-700">Extra virgin olive oil</p>
           </Reveal>
           <SplitHeading id="showcase-title" className="text-h1 mt-4">
             {product.name}

@@ -12,9 +12,10 @@ import { getCatalogData } from "@/server/storefrontData";
 export const generateMetadata = localizedMetadata("/", {}, ENGLISH_ONLY);
 
 /**
- * Homepage — one harvest day, top to bottom:
- * dawn (hero, the house) → noon (heritage, groves) → afternoon (philosophy,
- * bottles) → dusk (production) → evening (traceability, table, letters).
+ * Homepage, lit like one day from dawn to evening:
+ * dawn (hero, the house) → noon (origins, producers) → afternoon (how we
+ * choose, bottles) → dusk (how an oil reaches you) → evening (traceability,
+ * table, letters).
  */
 export default async function HomePage() {
   const { products, items } = await getCatalogData((await getI18n()).language);
