@@ -19,6 +19,7 @@ export const CartFields = graphql(`
       unitPriceCents
       lineTotalCents
       enoughStock
+      backorderQuantity
       variant {
         label
         volumeMl
@@ -130,6 +131,10 @@ export const OrderFields = graphql(`
       lotNumber
       quantity
       lineTotalCents
+      shippedQuantity
+      cancelledQuantity
+      toFollow
+      awaitingStock
     }
     events {
       kind
@@ -141,6 +146,15 @@ export const OrderFields = graphql(`
       status
       trackingNumber
       trackingUrl
+      shippedAt
+      deliveredAt
+      items {
+        sku
+        productName
+        variantLabel
+        quantity
+        lotNumber
+      }
     }
   }
 `);

@@ -304,6 +304,7 @@ export function CheckoutView({ countries }: { countries: { code: string; name: s
             </div>
           </dl>
           <p className="text-small mt-2 text-stone-700">{c.vatNote}</p>
+          {cart.lines.some((line) => line.backorderQuantity > 0) && <p className="text-small mt-3 border-l-2 border-gold-700 pl-3 text-ink/80">{m.fulfil.checkoutNote}</p>}
 
           <Checkbox label={c.terms} name="terms" required className="mt-6" />
           <Button type="submit" disabled={submitting || !rate} className="mt-5 w-full">

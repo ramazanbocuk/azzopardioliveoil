@@ -106,6 +106,8 @@ export async function recordRefund(
     await tx.order.update({ where: { id: payment.orderId }, data: { paymentStatus: status } });
     await syncOrderStatus(tx, payment.orderId);
   }
+  // A fully refunded order is owed nothing more: anything still waiting for stock is closed, so a later delivery is not set aside for it.
+  if (status === "REFUNDED") await tx.$executeRaw`UPDATE "Backorder" SET "cancelledQuantity" = "quantity" - "filledQuantity", "closedAt" = NOW(), "updatedAt" = NOW() WHERE "orderId" = ${payment.orderId} AND "closedAt" IS NULL`;
   return { created, changed, full: status === "REFUNDED", orderId: payment.orderId, status };
 }
 

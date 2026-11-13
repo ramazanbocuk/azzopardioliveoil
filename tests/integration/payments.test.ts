@@ -196,7 +196,9 @@ describe("Stripe webhook", () => {
     const { payload, signature } = paidSession(number, totalCents);
     expect(await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(payload, signature))).toBe("paid");
     expect(await db.order.findFirstOrThrow()).toMatchObject({ status: "PAID", paymentStatus: "PAID" });
-    expect(await stockOf("t-500")).toEqual([1, 0]); // never driven negative
+    // The customer has paid for two; one bottle is left. It is set aside for them and the other is owed as a backorder.
+    expect(await stockOf("t-500")).toEqual([0, 0]); // never driven negative
+    expect(await db.backorder.findFirstOrThrow()).toMatchObject({ quantity: 2, filledQuantity: 1, cancelledQuantity: 0, closedAt: null });
     expect(await db.auditLog.findFirstOrThrow({ where: { action: "order.paid_without_stock" } })).toBeTruthy();
   });
 });

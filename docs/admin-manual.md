@@ -55,6 +55,9 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 ## Money and reports
 
 - **Payments**: every payment and refund for a period, and the list of disputes. A refund made directly in Stripe appears on the order by itself, marked "at the payment provider", and the customer gets the refund email. Stock is never put back automatically. If a bank bounces a refund, it is marked failed, the order goes back to paid, and the shop is emailed.
+- **Several shipments per order**: on the order page choose the quantities (and lot) for this parcel; repeat when the rest is ready. Each shipment has its own tracking, packing slip and customer email. See `docs/fulfilment.md`.
+- **Backorders**: off unless switched on per product. The Backorders screen lists what is owed and to whom; arriving stock is set aside for those orders automatically.
+- **Taking units off an order**: managers only; it does not refund. Issue the refund afterwards.
 - **Producers, Countries & regions, Olive varieties**: the reference lists. A producer is named on the shop only when marked public.
 - **Harvest batches**: one per bottling, with its harvest year. Open "Documents and laboratory results" to upload the laboratory's report (PDF) and enter the values. Staff enter; a manager verifies the report and then each value. Only verified values of a published batch are shown to customers.
 - **Laboratory results**: the list of what is still missing per batch and per product.

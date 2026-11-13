@@ -80,7 +80,7 @@ async function ProductPageContent({ params }: Pick<PageProps<"/[locale]/products
             lowPrice: (Math.min(...prices) / 100).toFixed(2),
             highPrice: (Math.max(...prices) / 100).toFixed(2),
             offerCount: prices.length,
-            availability: product.variants.some((v) => v.inStock) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            availability: product.variants.some((v) => v.inStock) ? "https://schema.org/InStock" : product.variants.some((v) => v.backorder) ? "https://schema.org/BackOrder" : "https://schema.org/OutOfStock",
           },
         }
       : {}),

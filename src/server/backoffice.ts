@@ -1,3 +1,4 @@
+import { allocateBackorders } from "./stock";
 import { z } from "zod";
 import type { Prisma, ReviewStatus } from "@/generated/prisma/client";
 import { audit, toCsv } from "./admin";
@@ -523,6 +524,8 @@ export async function receivePurchaseOrder(ctx: Ctx, id: string) {
     for (const line of order.lines) {
       await tx.variant.update({ where: { id: line.variantId }, data: { stock: { increment: line.quantity }, costCents: line.unitCostCents } });
       await tx.inventoryMovement.create({ data: { variantId: line.variantId, delta: line.quantity, reason: "RECEIVED", adminUserId: admin.id, note: purchaseNumber(order.sequence) } });
+      // The delivery goes first to customers who have already paid and are waiting.
+      await allocateBackorders(tx, line.variantId);
     }
   });
   await audit(ctx, "purchase.received", "PurchaseOrder", id);

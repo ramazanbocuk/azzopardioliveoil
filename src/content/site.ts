@@ -18,6 +18,8 @@ export type Variant = {
   /** Relative bottle height used by the illustration. */
   scale: number;
   inStock: boolean;
+  /** Out of stock, but the owner allows it to be ordered and sent when it arrives. */
+  backorder: boolean;
 };
 
 export type Product = {
@@ -26,6 +28,8 @@ export type Product = {
   categorySlug: string;
   blurb: string;
   description: string[];
+  /** What the owner says about the wait when the product is out of stock. Null when nothing was written. */
+  backorderNote: string | null;
   /** Languages this product's own text is published in. English is always one of them. */
   languages: string[];
   /** False when the page is in another language but this text is still the English source. */
@@ -83,13 +87,14 @@ export function bottleScale(ml: number): number {
 /** Illustrative item for the design-system page only. The shop reads the database. */
 export const sampleItem: CatalogItem = {
   category: { slug: "extra-virgin-olive-oil", name: "Extra Virgin Olive Oil", intro: "", languages: ["en"] },
-  variant: { sku: "sample-750", ml: 750, label: "750 ml", priceCents: 2600, scale: bottleScale(750), inStock: true },
+  variant: { sku: "sample-750", ml: 750, label: "750 ml", priceCents: 2600, scale: bottleScale(750), inStock: true, backorder: false },
   product: {
     slug: "extra-virgin-olive-oil",
     name: "Extra Virgin Olive Oil",
     categorySlug: "extra-virgin-olive-oil",
     blurb: "",
     description: [],
+    backorderNote: null,
     languages: ["en"],
     translated: true,
     variants: [],

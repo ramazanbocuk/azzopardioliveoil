@@ -73,6 +73,10 @@ model Product {
   pungency           Int?
   pairings           String?
   packaging          String?
+  /// When true, customers may order more than is in stock; the rest is sent when it arrives. Off unless the owner switches it on.
+  allowBackorder     Boolean   @default(false)
+  /// What the shop tells a customer about the wait, in the owner's words. Never generated.
+  backorderNote      String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
@@ -116,7 +120,7 @@ model Variant {
   priceCents        Int
   compareAtCents    Int?
   weightGrams       Int
-  /// Units physically on hand.
+  /// Units that can still be sold or are held for unpaid orders. A paid unit leaves this count at payment, not at dispatch.
   stock             Int      @default(0)
   /// Units held by orders awaiting payment. Available = stock - reserved.
   reserved          Int      @default(0)
@@ -563,12 +567,18 @@ model OrderItem {
   taxCents        Int?
   /// Units of this line already sent in a shipment.
   shippedQuantity Int            @default(0)
+  /// Units that were not in stock when the order was placed. Fixed at checkout; what is still owed is on the Backorder row.
+  backorderQuantity Int          @default(0)
+  /// Units taken off the order after payment because they will not be supplied.
+  cancelledQuantity Int          @default(0)
   // Customs snapshot, needed on labels for destinations outside the EU
   weightGrams     Int            @default(0)
   hsCode          String?
   originCountry   String?        @db.Char(2)
   order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   shipmentItems   ShipmentItem[]
+  backorder       Backorder?
+  reservations    StockReservation[]
 
   @@index([orderId])
 }
@@ -781,6 +791,8 @@ model ShipmentItem {
   shipmentId  String
   orderItemId String
   quantity    Int
+  /// The lot these units came from. Two shipments of one order line can come from different lots.
+  lotNumber   String?
   shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
@@ -1133,4 +1145,51 @@ model LabResult {
   document     BatchDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
 
   @@index([batchId])
+}
+
+enum ReservationStatus {
+  /// Stock is held for an order awaiting payment.
+  HELD
+  /// The order was paid: the units were sold.
+  CONVERTED
+  /// The order was cancelled or its hold expired: the units went back on sale.
+  RELEASED
+}
+
+/// One hold of stock for one order line, from checkout until payment or expiry.
+/// `Variant.reserved` is the running total of HELD rows; this table is the record of who holds what.
+model StockReservation {
+  id          String            @id @default(cuid())
+  orderId     String
+  orderItemId String
+  variantId   String
+  quantity    Int
+  status      ReservationStatus @default(HELD)
+  expiresAt   DateTime
+  createdAt   DateTime          @default(now())
+  closedAt    DateTime?
+  orderItem   OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([variantId, status])
+  @@index([orderId])
+}
+
+/// Units a customer has paid for that were not in stock. Created when the order is paid.
+/// Open = quantity - filledQuantity - cancelledQuantity. Arriving stock fills the oldest open backorder first.
+model Backorder {
+  id                String    @id @default(cuid())
+  orderId           String
+  orderItemId       String    @unique
+  variantId         String
+  quantity          Int
+  filledQuantity    Int       @default(0)
+  cancelledQuantity Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  /// When nothing was left open.
+  closedAt          DateTime?
+  orderItem         OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([variantId, closedAt, createdAt])
+  @@index([orderId])
 }

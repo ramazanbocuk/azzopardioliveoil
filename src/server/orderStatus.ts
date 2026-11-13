@@ -65,9 +65,12 @@ export function deriveOrderStatus(order: { paymentStatus: PaymentStatus; fulfilm
 export const PAYMENT_ALLOWS_FULFILMENT: PaymentStatus[] = ["PAID", "PARTIALLY_REFUNDED"];
 
 /** Fulfilment state implied by how many units of each line have been sent. */
-export function fulfilmentFromQuantities(items: { quantity: number; shippedQuantity: number }[], current: FulfilmentStatus): FulfilmentStatus {
-  const ordered = items.reduce((sum, item) => sum + item.quantity, 0);
-  const shipped = items.reduce((sum, item) => sum + Math.min(item.shippedQuantity, item.quantity), 0);
+export function fulfilmentFromQuantities(items: { quantity: number; shippedQuantity: number; cancelledQuantity?: number }[], current: FulfilmentStatus): FulfilmentStatus {
+  // Units taken off the order are no longer owed; an order is complete when everything still on it has left.
+  const owed = (item: { quantity: number; cancelledQuantity?: number }) => item.quantity - (item.cancelledQuantity ?? 0);
+  const ordered = items.reduce((sum, item) => sum + owed(item), 0);
+  const shipped = items.reduce((sum, item) => sum + Math.min(item.shippedQuantity, owed(item)), 0);
+  if (ordered === 0) return current === "PARTIALLY_SHIPPED" ? "SHIPPED" : current;
   if (shipped === 0) return current === "PARTIALLY_SHIPPED" || current === "SHIPPED" ? "READY" : current;
   if (shipped < ordered) return "PARTIALLY_SHIPPED";
   return current === "DELIVERED" ? "DELIVERED" : "SHIPPED";

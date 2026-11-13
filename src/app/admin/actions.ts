@@ -5,6 +5,7 @@ import type { AdminRole } from "@/generated/prisma/client";
 import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
 import * as provenance from "@/server/provenance";
+import * as stock from "@/server/stock";
 import * as translations from "@/server/translations";
 import * as fulfilment from "@/server/fulfilment";
 import * as twoFactor from "@/server/twoFactor";
@@ -55,7 +56,7 @@ export async function ship(orderId: string, form: FormData) {
     `/admin/orders/${orderId}`,
     async (ctx) => {
       const number = (key: string) => Number(text(form, key).trim().replace(",", "."));
-      const items = [...form.keys()].filter((key) => key.startsWith("qty:")).map((key) => ({ orderItemId: key.slice(4), quantity: Math.round(number(key)) || 0 }));
+      const items = [...form.keys()].filter((key) => key.startsWith("qty:")).map((key) => ({ orderItemId: key.slice(4), quantity: Math.round(number(key)) || 0, lotNumber: text(form, `lot:${key.slice(4)}`) }));
       const boxes = Math.min(20, Math.max(1, Math.round(number("boxes")) || 1));
       const kg = number("weightKg");
       const mm = (key: string) => (text(form, key).trim() ? Math.round(number(key) * 10) : null);
@@ -145,7 +146,7 @@ export async function returnStatus(orderId: string, returnId: string, status: "A
 
 export async function saveProduct(id: string | null, form: FormData) {
   await run(id ? `/admin/products/${id}` : "/admin/products/new", async (ctx) => {
-    const product = await admin.saveProduct(ctx, id, formData(form, { booleans: ["isVisible", "isFeatured"] }));
+    const product = await admin.saveProduct(ctx, id, formData(form, { booleans: ["isVisible", "isFeatured", "allowBackorder"] }));
     updateTag("catalog");
     return `/admin/products/${product.id}`;
   });
@@ -492,4 +493,13 @@ export async function removeLabResult(batchId: string, resultId: string) {
     await provenance.removeLabResult(ctx, resultId);
     updateTag("catalog");
   }, "Result removed.");
+}
+
+// ── Backorders and taking units off an order ──
+
+export async function cancelUnits(orderId: string, form: FormData) {
+  await run(`/admin/orders/${orderId}`, async (ctx) => {
+    await stock.cancelOutstanding(ctx, text(form, "orderItemId"), Math.round(Number(text(form, "quantity"))));
+    updateTag("catalog");
+  }, "Units taken off the order. No money has been returned: issue a refund if one is owed.");
 }

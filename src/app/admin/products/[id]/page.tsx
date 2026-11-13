@@ -36,6 +36,11 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
               <Check label="Visible in the shop" name="isVisible" defaultChecked={product?.isVisible} />
               <Check label="Featured" name="isFeatured" defaultChecked={product?.isFeatured} />
             </div>
+            <div className="sm:col-span-2">
+              <Check label="Allow orders when out of stock (backorder)" name="allowBackorder" defaultChecked={product?.allowBackorder} />
+              <p className="text-small mt-1 text-stone-700">Off by default. When on, a customer can pay for more than is in stock; the rest is sent as a separate parcel when it arrives, and they are told so in the cart and at checkout. Switch it on only if you are sure the stock is coming.</p>
+            </div>
+            <Field label="What to tell customers about the wait" name="backorderNote" maxLength={200} defaultValue={product?.backorderNote ?? ""} placeholder="The new harvest is expected in the first half of December." className="sm:col-span-2" hint="Shown beside the product when it is out of stock. Write only what you can keep to." />
             <Field label="Short description" name="blurb" defaultValue={product?.blurb} className="sm:col-span-2" />
             <TextArea label="Full description" name="description" rows={6} defaultValue={product?.description} className="sm:col-span-2" hint="Leave a blank line between paragraphs." />
           </div>

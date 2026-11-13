@@ -25,7 +25,7 @@ export function ProductCard({ item }: { item: CatalogItem }) {
           />
         </div>
         {product.lot && <span className="text-ticket absolute left-4 top-4 text-stone-700">{fill(m.shop.lot, { lot: product.lot })}</span>}
-        {!variant.inStock && <span className="text-label absolute bottom-4 left-4 bg-ink px-3 py-2 text-ivory">{m.shop.soldOut}</span>}
+        {!variant.inStock && <span className="text-label absolute bottom-4 left-4 bg-ink px-3 py-2 text-ivory">{variant.backorder ? m.fulfil.orderAhead : m.shop.soldOut}</span>}
       </div>
 
       <div className="mt-5 flex items-start justify-between gap-6">

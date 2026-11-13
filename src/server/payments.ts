@@ -5,6 +5,7 @@ import { hashToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError } from "./errors";
 import { syncOrderStatus } from "./orderStatus";
+import { allocateBackorders } from "./stock";
 import { applyDisputeEvent, applyRefundEvent, type DisputeEvent, type RefundEvent, type SyncResult } from "./paymentSync";
 import { enforce } from "./rateLimit";
 
@@ -232,18 +233,31 @@ export async function applyPaymentEvent(db: Db, provider: ProviderName, event: P
       let short = false;
       for (const item of order.items) {
         if (!item.variantId) continue;
-        const moved = wasReserved
-          ? await tx.$executeRaw`UPDATE "Variant" SET "stock" = "stock" - ${item.quantity}, "reserved" = GREATEST("reserved" - ${item.quantity}, 0) WHERE "id" = ${item.variantId} AND "stock" >= ${item.quantity}`
-          : // Paid after the reservation lapsed: take stock only if it is still there.
-            await tx.$executeRaw`UPDATE "Variant" SET "stock" = "stock" - ${item.quantity} WHERE "id" = ${item.variantId} AND "stock" - "reserved" >= ${item.quantity}`;
-        if (moved === 1) await tx.inventoryMovement.create({ data: { variantId: item.variantId, delta: -item.quantity, reason: "SALE", orderId: order.id } });
-        else short = true;
+        // Units held at checkout are sold now. Units the customer knowingly ordered ahead of stock become a backorder.
+        const need = item.quantity - item.backorderQuantity;
+        let owed = item.backorderQuantity;
+        if (need > 0) {
+          const moved = wasReserved
+            ? await tx.$executeRaw`UPDATE "Variant" SET "stock" = "stock" - ${need}, "reserved" = GREATEST("reserved" - ${need}, 0) WHERE "id" = ${item.variantId} AND "stock" >= ${need}`
+            : // Paid after the reservation lapsed: take stock only if it is still there.
+              await tx.$executeRaw`UPDATE "Variant" SET "stock" = "stock" - ${need} WHERE "id" = ${item.variantId} AND "stock" - "reserved" >= ${need}`;
+          if (moved === 1) await tx.inventoryMovement.create({ data: { variantId: item.variantId, delta: -need, reason: "SALE", orderId: order.id } });
+          else {
+            // The money is in but the bottles are not on the shelf: they are owed like any other backorder, and a person is told.
+            short = true;
+            owed += need;
+          }
+        }
+        if (owed > 0) await tx.backorder.create({ data: { orderId: order.id, orderItemId: item.id, variantId: item.variantId, quantity: owed } });
       }
+      await tx.stockReservation.updateMany({ where: { orderId: order.id, status: "HELD" }, data: { status: "CONVERTED", closedAt: new Date() } });
+      // Stock may already be free for a backorder created just now (for example after a lapsed hold was released).
+      for (const variantId of new Set(order.items.flatMap((item) => (item.variantId ? [item.variantId] : [])))) await allocateBackorders(tx, variantId);
 
       await tx.payment.update({ where: { id: payment.id }, data: { status: "PAID", method: event.method } });
       await tx.orderEvent.create({ data: { orderId: order.id, kind: "paid", message: "Payment received." } });
       if (short) {
-        await tx.auditLog.create({ data: { actorType: "system", action: "order.paid_without_stock", entity: "Order", entityId: order.id, data: { note: "Paid after reservation expired and stock was no longer available. Needs manual review." } } });
+        await tx.auditLog.create({ data: { actorType: "system", action: "order.paid_without_stock", entity: "Order", entityId: order.id, data: { note: "Paid, but some units were no longer in stock. They are recorded as a backorder: tell the customer, then ship when stock arrives or take them off the order and refund." } } });
       }
       await tx.outboxJob.createMany({ data: PAID_JOBS.map((kind) => ({ kind, dedupeKey: `${kind}:${order.id}`, payload: { orderId: order.id } })), skipDuplicates: true });
       // One low-stock alert per product per day, when this sale took it to or below its alert level.

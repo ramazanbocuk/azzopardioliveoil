@@ -114,20 +114,48 @@ export function customerConfirmationEmail(order: FullOrder): Email {
   };
 }
 
-export function customerShippedEmail(order: FullOrder, shipment: Shipment | null): Email {
+/** What one shipment carried, and what the order still owes after it. The job fills this in; without it the email covers the whole order. */
+export type ShipmentContents = { lines: { name: string; quantity: number; lotNumber: string | null }[]; toFollow: { name: string; quantity: number }[]; first: boolean };
+
+/**
+ * One email per shipment. It lists what is in that parcel, with its own
+ * tracking, and says plainly whether more is to come. An order sent in two
+ * parcels produces two of these, each in the customer's language.
+ */
+export function customerShippedEmail(order: FullOrder, shipment: Shipment | null, contents?: ShipmentContents): Email {
   const { t } = speak(order.locale);
   const sh = t.shipped;
   const number = order.number ?? "";
   const carrier = shipment?.carrier ?? sh.ourCarrier;
   const tracking = shipment?.trackingUrl ? fill(sh.trackHere, { url: shipment.trackingUrl }) : shipment?.trackingNumber ? fill(sh.trackingNumber, { number: shipment.trackingNumber }) : "";
+  const lines = contents?.lines ?? order.items.map((item) => ({ name: `${item.productName} ${item.variantLabel}`, quantity: item.quantity, lotNumber: item.lotNumber }));
+  const toFollow = contents?.toFollow ?? [];
+  // "Part of your order" whenever this parcel is not the whole of it: more is to come, or something went before.
+  const part = toFollow.length > 0 || contents?.first === false;
+  const closing = toFollow.length > 0 ? sh.followNote : part ? sh.completes : "";
+  const lineText = (line: { name: string; quantity: number; lotNumber?: string | null }) => `- ${line.name} x ${line.quantity}${line.lotNumber ? ` (${fill(t.lot, { lot: line.lotNumber }).toLowerCase()})` : ""}`;
+  const lineHtml = (line: { name: string; quantity: number; lotNumber?: string | null }) =>
+    `<tr><td style="padding:8px 0;border-bottom:1px solid #d2cbbd">${escape(line.name)}${line.lotNumber ? `<br><span style="color:#6b6558;font-size:13px">${escape(fill(t.lot, { lot: line.lotNumber }))}</span>` : ""}</td><td align="right" style="padding:8px 0;border-bottom:1px solid #d2cbbd">&times; ${line.quantity}</td></tr>`;
+  const table = (rows: { name: string; quantity: number; lotNumber?: string | null }[]) => `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:8px 0 16px">${rows.map(lineHtml).join("")}</table>`;
+
   return {
     to: order.email,
-    subject: fill(sh.subject, { number }),
-    text: [fill(sh.left, { name: order.shipFirstName, number, carrier }), tracking, "", ...order.items.map((item) => `- ${itemLine(item)}${item.lotNumber ? ` (${fill(t.lot, { lot: item.lotNumber }).toLowerCase()})` : ""}`)].filter((line) => line !== undefined).join("\n"),
+    subject: fill(part ? sh.partSubject : sh.subject, { number }),
+    text: [
+      fill(sh.left, { name: order.shipFirstName, number, carrier }),
+      tracking,
+      "",
+      ...(part ? [`${sh.inParcel}:`] : []),
+      ...lines.map(lineText),
+      ...(toFollow.length > 0 ? ["", `${sh.toFollow}:`, ...toFollow.map(lineText)] : []),
+      ...(closing ? ["", closing] : []),
+    ].join("\n"),
     html: layout(
-      sh.title,
+      part ? sh.partTitle : sh.title,
       `<p>${bold(fill(sh.leftShort, { number, carrier }), number)}</p>
-${shipment?.trackingUrl ? `<p><a href="${escape(shipment.trackingUrl)}" style="color:#2f3a22">${escape(sh.trackParcel)}</a></p>` : shipment?.trackingNumber ? `<p>${escape(fill(sh.trackingNumber, { number: shipment.trackingNumber }))}</p>` : ""}${itemsTable(order)}`,
+${shipment?.trackingUrl ? `<p><a href="${escape(shipment.trackingUrl)}" style="color:#2f3a22">${escape(sh.trackParcel)}</a></p>` : shipment?.trackingNumber ? `<p>${escape(fill(sh.trackingNumber, { number: shipment.trackingNumber }))}</p>` : ""}
+${part ? `<p style="margin:16px 0 0"><strong>${escape(sh.inParcel)}</strong></p>` : ""}${table(lines)}
+${toFollow.length > 0 ? `<p style="margin:16px 0 0"><strong>${escape(sh.toFollow)}</strong></p>${table(toFollow)}` : ""}${closing ? `<p>${escape(closing)}</p>` : ""}`,
     ),
   };
 }
