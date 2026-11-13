@@ -42,7 +42,7 @@ Generate secrets with `openssl rand -base64 48`. Never put any of these in the r
 
 ## 3. Scheduler
 
-`vercel.json` schedules `GET /api/cron/jobs` every 5 minutes. It sends queued notifications, retries failures, cancels unpaid orders whose stock hold expired, and purges expired sessions. Schedules more frequent than daily need a paid Vercel plan. On another host, call the same address with the header `Authorization: Bearer <CRON_SECRET>`.
+`vercel.json` schedules `GET /api/cron/jobs` once a day (04:00 UTC), because Vercel's free plan refuses a deployment with anything more frequent. **That is enough to try the site, not to run a shop**: with a daily run, order emails wait up to a day, unpaid orders keep their stock that long, and System status reports the scheduler as late. Before opening, either move to a paid Vercel plan and set the schedule back to `*/5 * * * *`, or have an outside timer call the same address every 5 minutes with the header `Authorization: Bearer <CRON_SECRET>`. It sends queued notifications, retries failures, cancels unpaid orders whose stock hold expired, and purges expired sessions. Schedules more frequent than daily need a paid Vercel plan. On another host, call the same address with the header `Authorization: Bearer <CRON_SECRET>`.
 
 ## 4. Payment webhook
 
