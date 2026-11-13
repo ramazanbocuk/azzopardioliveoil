@@ -527,7 +527,7 @@ export async function testCarrier(key: string) {
 // ── Assistant, knowledge base and support ──
 
 export async function saveAssistant(form: FormData) {
-  await run("/admin/assistant", (ctx) => assistantAdmin.saveAssistantSettings(ctx, formData(form, { booleans: ["customerEnabled"] })), "Assistant settings saved.");
+  await run("/admin/assistant", (ctx) => assistantAdmin.saveAssistantSettings(ctx, formData(form, { booleans: ["customerEnabled", "staffEnabled"] })), "Assistant settings saved.");
 }
 
 export async function saveArticle(id: string | null, form: FormData) {

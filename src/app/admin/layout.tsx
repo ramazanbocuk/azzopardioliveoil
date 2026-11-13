@@ -39,6 +39,7 @@ const NAV = [
   { href: "/admin/traceability", label: "Food traceability" },
   { href: "/admin/content", label: "Website content" },
   { href: "/admin/translations", label: "Translations" },
+  { href: "/admin/staff-assistant", label: "Staff assistant" },
   { href: "/admin/assistant", label: "Customer assistant" },
   { href: "/admin/knowledge", label: "Knowledge base" },
   { href: "/admin/support", label: "Support requests" },

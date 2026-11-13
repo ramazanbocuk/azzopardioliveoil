@@ -183,3 +183,35 @@ export async function cancelOutstanding(ctx: Ctx, orderItemId: string, quantity:
   await ctx.db.auditLog.create({ data: { actorType: "admin", actorId: admin.id, action: "order.line.cancel", entity: "Order", entityId: result.orderId, data: { orderItemId, quantity, valueCents: result.valueCents }, ip: ctx.ip } });
   return result;
 }
+
+/**
+ * Paid orders of which part has been sent and part has not: the orders that
+ * are waiting for a further shipment. For each, what is still to send, split
+ * into what is on the shelf now and what is waiting for stock.
+ */
+export async function ordersAwaitingFurtherShipment(ctx: Ctx) {
+  requireAdmin(ctx, "VIEW", "orders");
+  const orders = await ctx.db.order.findMany({
+    where: { cancelledAt: null, paymentStatus: { in: ["PAID", "PARTIALLY_REFUNDED"] }, fulfilmentStatus: "PARTIALLY_SHIPPED" },
+    orderBy: { paidAt: "asc" },
+    take: 100,
+    include: { items: { include: { backorder: true } }, shipments: { where: { cancelledAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, carrier: true, trackingNumber: true, status: true, shippedAt: true } } },
+  });
+  return orders
+    .map((order) => {
+      const lines = order.items.filter((item) => outstanding(item) > 0).map((item) => ({ sku: item.sku, name: `${item.productName} ${item.variantLabel}`, stillToSend: outstanding(item), readyNow: readyToShip(item), waitingForStock: openBackorder(item.backorder) }));
+      return {
+        id: order.id,
+        number: order.number,
+        customer: `${order.shipFirstName} ${order.shipLastName}`,
+        country: order.shipCountryCode,
+        paidAt: order.paidAt,
+        shipmentsSent: order.shipments.length,
+        lastShipmentAt: order.shipments.at(-1)?.shippedAt ?? null,
+        lines,
+        unitsReadyNow: lines.reduce((sum, line) => sum + line.readyNow, 0),
+        unitsWaitingForStock: lines.reduce((sum, line) => sum + line.waitingForStock, 0),
+      };
+    })
+    .filter((order) => order.lines.length > 0);
+}
