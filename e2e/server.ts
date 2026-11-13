@@ -40,7 +40,11 @@ async function main() {
   run("npx", ["next", "build"]);
 
   const server = spawn("npx", ["next", "start", "-p", String(PORT)], { env, stdio: "inherit" });
+  // Runs once, whichever of the three signals below arrives first: the site first, then the database, cleanly.
+  let stopping = false;
   const stop = async () => {
+    if (stopping) return;
+    stopping = true;
     server.kill();
     await pg.stop().catch(() => {});
     rmSync(databaseDir, { recursive: true, force: true });

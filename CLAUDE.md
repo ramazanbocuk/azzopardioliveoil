@@ -20,6 +20,7 @@ Phase 10 (system status, stored error reports, staging mode, admin host) is buil
 - `npm run typecheck`, `npm run lint`, `npm test` (Vitest, own database), `npm run test:e2e` (Playwright against a production build, own database).
 - `npx prisma migrate deploy && npx prisma generate` after adding a migration. Migrations are hand-written SQL.
 - `npm run codegen` after changing a GraphQL operation or the storefront schema.
+- If a test database will not start with "could not create shared memory segment: No space left on device", earlier PostgreSQL servers were killed without shutting down and left segments behind (macOS allows 32). `ipcs -m -o` lists them; remove only those with 0 attached (`ipcrm -m <id>`). Playwright is told to stop its server gracefully so this should not build up again.
 
 ## Rules that are easy to break
 
