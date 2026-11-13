@@ -15,7 +15,7 @@ import type { AdminRole } from "@/generated/prisma/client";
  * from the screen it protects is a permission that can be escalated.
  */
 
-export const AREAS = ["orders", "catalog", "inventory", "customers", "shipping", "payments", "discounts", "marketing", "wholesale", "returns", "reviews", "reports", "accounting", "suppliers", "traceability", "content", "notifications", "staff", "security", "settings", "integrations", "general"] as const;
+export const AREAS = ["orders", "catalog", "inventory", "customers", "shipping", "payments", "discounts", "marketing", "wholesale", "returns", "reviews", "reports", "accounting", "suppliers", "traceability", "content", "notifications", "staff", "security", "settings", "integrations", "assistant", "support", "general"] as const;
 export type Area = (typeof AREAS)[number];
 export type Level = "VIEW" | "STAFF" | "MANAGER" | "ADMINISTRATOR";
 
@@ -32,9 +32,9 @@ export const ROLES: Record<AdminRole, { label: string; summary: string; base: Le
   MANAGER: { label: "Manager", summary: "As operations manager. Kept for accounts created before the nine roles.", ...role("MANAGER") },
   WAREHOUSE_MANAGER: { label: "Warehouse manager", summary: "Stock, lots, suppliers and packing. Sees orders and customers; no prices, money or reports.", ...role("NONE", { inventory: "MANAGER", suppliers: "MANAGER", traceability: "MANAGER", returns: "MANAGER", orders: "STAFF", shipping: "STAFF", catalog: "VIEW", customers: "VIEW", notifications: "VIEW" }) },
   SHIPPING_MANAGER: { label: "Shipping manager", summary: "Labels, carriers, shipping rates and deliveries. Processes orders; no money or reports.", ...role("NONE", { shipping: "MANAGER", orders: "STAFF", traceability: "STAFF", inventory: "VIEW", catalog: "VIEW", customers: "VIEW", returns: "VIEW", notifications: "VIEW", integrations: "VIEW" }) },
-  CUSTOMER_SUPPORT: { label: "Customer support", summary: "Orders, customers, returns and reviews. Sees payments and shipments; cannot refund.", ...role("NONE", { orders: "STAFF", customers: "STAFF", returns: "MANAGER", reviews: "MANAGER", shipping: "VIEW", payments: "VIEW", catalog: "VIEW", inventory: "VIEW", wholesale: "VIEW", traceability: "VIEW", notifications: "VIEW" }) },
+  CUSTOMER_SUPPORT: { label: "Customer support", summary: "Orders, customers, returns and reviews. Sees payments and shipments; cannot refund.", ...role("NONE", { orders: "STAFF", customers: "STAFF", returns: "MANAGER", reviews: "MANAGER", support: "MANAGER", assistant: "VIEW", shipping: "VIEW", payments: "VIEW", catalog: "VIEW", inventory: "VIEW", wholesale: "VIEW", traceability: "VIEW", notifications: "VIEW" }) },
   ACCOUNTANT: { label: "Accountant", summary: "Payments, refunds, VAT and sales reports and their exports. Sees orders and customers.", ...role("NONE", { payments: "ADMINISTRATOR", accounting: "MANAGER", reports: "MANAGER", orders: "VIEW", customers: "VIEW", wholesale: "VIEW", discounts: "VIEW", returns: "VIEW" }) },
-  MARKETING_MANAGER: { label: "Marketing manager", summary: "Discounts, newsletter, journal, reviews, product copy and sales reports. Sees orders and customers.", ...role("NONE", { marketing: "MANAGER", discounts: "MANAGER", content: "MANAGER", reviews: "MANAGER", catalog: "MANAGER", reports: "MANAGER", orders: "VIEW", customers: "VIEW", wholesale: "VIEW", inventory: "VIEW" }) },
+  MARKETING_MANAGER: { label: "Marketing manager", summary: "Discounts, newsletter, journal, reviews, product copy and sales reports. Sees orders and customers.", ...role("NONE", { marketing: "MANAGER", discounts: "MANAGER", content: "MANAGER", assistant: "MANAGER", reviews: "MANAGER", catalog: "MANAGER", reports: "MANAGER", orders: "VIEW", customers: "VIEW", wholesale: "VIEW", inventory: "VIEW" }) },
   ANALYST: { label: "Read-only analyst", summary: "Sees everything operational and every report. Changes nothing.", ...role("VIEW", { reports: "MANAGER", accounting: "MANAGER", staff: "NONE", settings: "NONE" }) },
   STAFF: { label: "Staff", summary: "Day-to-day work in every area. Kept for accounts created before the nine roles.", ...role("STAFF") },
 };

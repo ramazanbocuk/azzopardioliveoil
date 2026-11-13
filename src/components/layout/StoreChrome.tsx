@@ -8,6 +8,10 @@ import { SmoothScroll } from "@/motion/SmoothScroll";
 import { ToneShift } from "@/motion/ToneShift";
 import { Footer } from "./Footer";
 import { Header } from "./Header";
+import { AssistantWidget } from "@/components/assistant/AssistantWidget";
+import { customerAssistantState } from "@/server/ai/assistant";
+import { getPrisma } from "@/server/db";
+import { connection } from "next/server";
 import { LanguagePrompt } from "./LocaleSelector";
 import { MainRegion } from "./MainRegion";
 import "lenis/dist/lenis.css";
@@ -29,6 +33,15 @@ async function Announcement() {
       </p>
     </aside>
   );
+}
+
+/** The chat button, shown only while the assistant can really answer: connected, switched on and within its budget. */
+async function Assistant() {
+  // Asked on every request: the budget can run out, or the owner can switch it off, at any moment.
+  await connection();
+  // The chat is an extra. If its state cannot be read, the shop goes on without it.
+  const available = await customerAssistantState(getPrisma()).then((state) => state.available, (error: unknown) => (console.error("[assistant] state could not be read", error), false));
+  return available ? <AssistantWidget /> : null;
 }
 
 /** Everything that surrounds a storefront page. The admin panel has its own shell. */
@@ -58,6 +71,9 @@ export async function StoreChrome({ children }: { children: ReactNode }) {
         <Announcement />
       </Suspense>
       <Footer />
+      <Suspense>
+        <Assistant />
+      </Suspense>
       <CookieNotice />
       <Suspense>
         <SmoothScroll />

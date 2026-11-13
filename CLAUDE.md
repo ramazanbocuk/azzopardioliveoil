@@ -8,6 +8,8 @@ A bespoke ecommerce platform for Azzopardi (premium olive oil): one Next.js 16 a
 
 The master brief is being built in phases. `docs/platform-audit.md` has the audit, the architecture decisions and the phase plan. Phase 3 (languages) is built: `docs/internationalisation.md`. Phase 4 (producers, varieties, lab results per batch) is built: `docs/product-intelligence.md`. Phase 5 (several shipments per order, backorders, stock holds) is built: `docs/fulfilment.md`. Phase 6 (UPS adapter, tracking events, delivery problems) is built without a carrier account: `docs/shipping.md`.
 
+Phase 7 (customer assistant, knowledge base, support requests) is built but has never called the real model: `docs/assistant.md`.
+
 ## Commands
 
 - `npm run dev` — development server (needs `npm run db:start` first). After schema changes or odd caching: `npm run dev:clean`.
@@ -26,4 +28,7 @@ The master brief is being built in phases. `docs/platform-audit.md` has the audi
 - Never state a certification, lab value, health claim or delivery date that is not in the database. Empty means "—".
 - A laboratory value reaches customers only through `publicLabResults` (verified, published batch). Do not read `LabResult` directly in storefront code.
 - An optional number in a zod schema is `z.union([...]).optional()`, not a union containing `z.undefined()`: the latter makes the key required.
+- The model never touches the database. It can only call the tools in `src/server/ai/customerTools.ts`; each validates its input with zod, reads through the same services as the shop, and returns gaps as words ("not recorded"), never as empty fields the model could fill. No tool writes an order, a cart, a payment or a product.
+- Tools of one model turn run one after another, not in parallel (two calls in one turn once created two support requests).
+- Tests replace the model with `setModelProvider(script)`. They prove what the application does around the model, not how the model words an answer.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost, UPS) have never called a carrier. Non-English text has not had a native review.

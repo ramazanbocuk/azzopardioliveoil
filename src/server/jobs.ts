@@ -1,3 +1,4 @@
+import { purgeOldConversations } from "./ai/assistant";
 import { afterShipment } from "./stock";
 import type { OutboxJob } from "@/generated/prisma/client";
 import { refreshTracking } from "./fulfilment";
@@ -125,6 +126,26 @@ const handlers: Record<string, Handler> = {
     await sendEmail(staffAlertEmail(to, { subject: `${payload.subject}: ${order.number}`, heading: payload.subject, lines: [`Order ${order.number}`, ...(payload.lines ?? [])], path: `/admin/orders/${order.id}` }), job.dedupeKey, env, transport);
   },
 
+  // A request for a person, created by the assistant or by staff. The email carries the request itself, read from the database when it is sent.
+  async "notify.owner.support"(db, job, { env, transport }) {
+    const to = (await notificationSettings(db)).emailRecipient;
+    if (!to) throw new Skip("No email recipient is set in Settings.");
+    const id = (job.payload as { supportRequestId?: string }).supportRequestId;
+    const request = id ? await db.supportRequest.findUnique({ where: { id } }) : null;
+    if (!request) throw new Skip("The support request no longer exists.");
+    const lines = [`From ${request.name ?? "a customer"} <${request.email}>${request.orderNumber ? `, about order ${request.orderNumber}` : ""}.`, request.body, "The customer was told the team will reply by email. Reply to them directly, then mark the request answered."];
+    await sendEmail(staffAlertEmail(to, { subject: `${request.urgent ? "Urgent: " : ""}${request.subject}`, heading: request.urgent ? "A customer needs help urgently" : "A customer asked for a person", lines, path: "/admin/support" }), job.dedupeKey, env, transport);
+  },
+
+  // A notice that concerns no particular order: the wording is fixed when it is queued.
+  async "notify.owner.notice"(db, job, { env, transport }) {
+    const to = (await notificationSettings(db)).emailRecipient;
+    if (!to) throw new Skip("No email recipient is set in Settings.");
+    const payload = job.payload as { subject?: string; lines?: string[]; path?: string };
+    if (!payload.subject) throw new Skip("The notice has no subject.");
+    await sendEmail(staffAlertEmail(to, { subject: payload.subject, heading: payload.subject, lines: payload.lines ?? [], path: payload.path }), job.dedupeKey, env, transport);
+  },
+
   // The same alert under a name that fits delivery problems and anything else that is not about money.
   async "notify.owner.alert"(db, job, options) {
     await handlers["notify.owner.payment_alert"](db, job, options);
@@ -237,5 +258,6 @@ export async function runScheduledWork(db: Db, options: Options = {}) {
   const jobs = await processJobs(db, options);
   const purged = await purgeExpired(db, options.now);
   const tracking = await refreshTracking(db, options.now);
-  return { releasedOrders: released, jobs, purged, tracking };
+  const conversations = await purgeOldConversations(db, options.now);
+  return { releasedOrders: released, jobs, purged: { ...purged, conversations }, tracking };
 }

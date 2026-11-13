@@ -81,6 +81,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
             ["Stripe payments", connected(getPaymentProvider() !== null)],
             ["Mollie payments", <span key="m" className="text-stone-700">Not built</span>],
             ["Email (Resend)", connected(Boolean(process.env.RESEND_API_KEY))],
+            ["Customer assistant (Anthropic)", connected(Boolean(process.env.ANTHROPIC_API_KEY))],
             ["WhatsApp Business Platform", connected(Boolean(process.env.WHATSAPP_ACCESS_TOKEN))],
             ["SMS (Twilio)", connected(Boolean(process.env.TWILIO_AUTH_TOKEN))],
             ["Shipping carrier", <span key="s" className="text-stone-700">Not built</span>],

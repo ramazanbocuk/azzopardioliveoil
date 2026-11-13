@@ -81,6 +81,13 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 - **Integrations**: what is configured. Keys are set where the site is hosted, never in this panel.
 - **Website content**: journal articles, announcement band.
 
+## Customer assistant
+
+- **Customer assistant**: whether it is answering and why not, this month's estimated spending against the budget, recent conversations (open one to read every message and every lookup it made), and the list of things it is able to do. Only an administrator can switch it on, and only with a monthly budget. When the budget is spent it stops and the shop is emailed once.
+- **Knowledge base**: short articles the assistant may quote (storage, how to choose, gifts). It quotes only published articles marked for customers. Do not write health claims here: the assistant will repeat them.
+- **Support requests**: questions the assistant passed to a person, with the customer's address and a summary. Urgent ones (damage, payment, complaint) are marked. Reply from the shop’s own mailbox, then mark the request answered.
+- The assistant cannot place an order, take a payment, change an order or an address, or give a refund. It can only show an "add to cart" button the customer presses.
+
 ## What the panel cannot do
 
 See "Known software gaps" in `launch-checklist.md`.
