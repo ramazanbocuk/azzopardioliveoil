@@ -32,6 +32,7 @@ The software cannot do these for you. Each is needed before taking real orders.
 
 ## Before opening
 - [ ] One real end-to-end purchase with a live card, then refund it from the admin
+- [ ] One refund made in the Stripe Dashboard (test mode), checked to appear on the order within a minute
 - [ ] One real message through each channel
 - [ ] One practice database restore
 - [ ] First administrator created; seed password removed; staff accounts created with the right roles
@@ -48,7 +49,7 @@ Measured against the full enterprise brief. "Not proven" means written and teste
 - Stripe live mode, delayed payment methods, and email to addresses other than your own (needs a verified domain).
 
 **Not built**
-- *Payments:* PayPal as its own integration (it can be switched on inside Stripe Checkout), Mollie, recording the provider's fees, picking up refunds or disputes made directly in the Stripe Dashboard.
+- *Payments:* PayPal as its own integration (it can be switched on inside Stripe Checkout), Mollie, recording the provider's fees. Refunds and disputes made at Stripe are mirrored, but only tested against signed sample events, not yet against a real refund or dispute in Stripe; a dispute cannot be answered from the admin panel; a lost dispute does not change the order's payment status or the sales and VAT reports; a refund in a currency other than the order's (Stripe Adaptive Pricing) is flagged for a person rather than recorded.
 - *Shipping:* carrier push updates, pickup booking, return labels, insurance, one-file bulk label printing, ZPL labels, rules by package size.
 - *Inventory:* several warehouses, part-received purchase orders, packaging variants, barcode scanning.
 - *Products:* dimensions, VAT category per product (one rate per destination country applies to everything), videos, bundles, gift sets, subscriptions, translated product pages.

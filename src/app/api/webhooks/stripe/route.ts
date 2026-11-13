@@ -2,6 +2,7 @@ import { afterResponse } from "@/server/afterResponse";
 import { getPrisma } from "@/server/db";
 import { processJobs } from "@/server/jobs";
 import { applyPaymentEvent, getPaymentProvider } from "@/server/payments";
+import { linkIntent } from "@/server/paymentSync";
 
 /**
  * Stripe webhook. The raw body is verified against the signing secret before
@@ -20,9 +21,11 @@ export async function POST(request: Request) {
     return new Response("Invalid signature.", { status: 400 });
   }
 
+  // Refunds and disputes name the payment, not the checkout. A lookup failure here answers 500, so Stripe sends the event again.
+  if (event.outcome === "refund" || event.outcome === "dispute") await linkIntent(getPrisma(), provider, event.intentRef);
   const result = await applyPaymentEvent(getPrisma(), "STRIPE", event);
   // Notifications were queued in the same transaction; send them once the response is out.
   // If this never runs, the scheduler picks the jobs up within minutes.
-  if (result === "paid") afterResponse(() => processJobs(getPrisma()), "run after webhook");
+  if (result !== "duplicate" && result !== "ignored" && result !== "unknown-payment") afterResponse(() => processJobs(getPrisma()), "run after webhook");
   return Response.json({ received: true, result });
 }

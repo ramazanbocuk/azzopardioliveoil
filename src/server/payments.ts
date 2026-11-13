@@ -5,10 +5,13 @@ import { hashToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError } from "./errors";
 import { syncOrderStatus } from "./orderStatus";
+import { applyDisputeEvent, applyRefundEvent, type DisputeEvent, type RefundEvent, type SyncResult } from "./paymentSync";
 import { enforce } from "./rateLimit";
 
 /**
  * Payments.
+ *
+ * Refunds and disputes that happen at the provider are mirrored by paymentSync.ts.
  *
  * The browser is never trusted about money. It is sent to the provider's
  * hosted payment page; the order becomes PAID only when the provider calls
@@ -24,17 +27,26 @@ export type PaymentEvent = {
   amountCents: number | null;
   currency: string | null;
   method: string | null;
+  /** The provider's id for the money itself, once it exists. Refunds and disputes refer to it. */
+  intentRef?: string | null;
 };
+
+/** Everything a provider can tell us: about a checkout, a refund, or a dispute. */
+export type ProviderEvent = PaymentEvent | RefundEvent | DisputeEvent;
 
 export interface PaymentProvider {
   readonly name: ProviderName;
   /** Creates a hosted payment page for exactly the order total. */
   createCheckout(input: { order: Order; successUrl: string; cancelUrl: string; expiresAt: Date }): Promise<{ providerRef: string; url: string }>;
   /** Verifies the signature and translates the event. Throws if the signature is not valid. */
-  parseWebhook(rawBody: string, signature: string | null): PaymentEvent;
+  parseWebhook(rawBody: string, signature: string | null): ProviderEvent;
   /** Returns money for a paid checkout. Resolves with the provider's refund id. */
   refund?(input: { providerRef: string; amountCents: number; idempotencyKey: string }): Promise<string>;
+  /** Finds the checkout a provider payment id belongs to, for payments recorded before that id was stored. */
+  findCheckoutRef?(intentRef: string): Promise<string | null>;
 }
+
+const idOf = (value: string | { id: string } | null | undefined) => (typeof value === "string" ? value : (value?.id ?? null));
 
 /** Stripe Checkout (hosted). Card data never touches this application. */
 export function createStripeProvider(secretKey: string, webhookSecret: string): PaymentProvider {
@@ -71,11 +83,31 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
       return refund.id;
     },
 
+    async findCheckoutRef(intentRef) {
+      const sessions = await stripe.checkout.sessions.list({ payment_intent: intentRef, limit: 1 });
+      return sessions.data[0]?.id ?? null;
+    },
+
     parseWebhook(rawBody, signature) {
       if (!signature) throw new Error("Missing Stripe-Signature header.");
       const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
       const base = { eventId: event.id, type: event.type };
       const none = { ...base, outcome: "ignored" as const, providerRef: "", amountCents: null, currency: null, method: null };
+
+      if (event.type === "refund.created" || event.type === "refund.updated" || event.type === "refund.failed") {
+        const refund = event.data.object;
+        const intentRef = idOf(refund.payment_intent);
+        // "pending" counts: the money has left for the customer. Stripe sends refund.failed / refund.updated if it bounces.
+        if (!intentRef || refund.status === "requires_action") return none;
+        return { ...base, outcome: "refund", intentRef, refundRef: refund.id, amountCents: refund.amount, currency: refund.currency.toUpperCase(), state: refund.status === "failed" || refund.status === "canceled" ? "failed" : "ok", reason: refund.reason ? refund.reason.replaceAll("_", " ") : null };
+      }
+      if (event.type === "charge.dispute.created" || event.type === "charge.dispute.updated" || event.type === "charge.dispute.closed" || event.type === "charge.dispute.funds_withdrawn" || event.type === "charge.dispute.funds_reinstated") {
+        const dispute = event.data.object;
+        const intentRef = idOf(dispute.payment_intent);
+        if (!intentRef) return none;
+        const due = dispute.evidence_details?.due_by;
+        return { ...base, outcome: "dispute", intentRef, disputeRef: dispute.id, amountCents: dispute.amount, currency: dispute.currency.toUpperCase(), reason: dispute.reason || null, status: dispute.status, evidenceDueAt: due ? new Date(due * 1000) : null, at: new Date(event.created * 1000) };
+      }
 
       if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded" && event.type !== "checkout.session.async_payment_failed" && event.type !== "checkout.session.expired") {
         return none;
@@ -84,7 +116,7 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
       // With Adaptive Pricing a customer may pay in their own currency. The session then reports that
       // currency, and the amount we actually asked for sits in currency_conversion; compare against that.
       const asked = session.currency_conversion ? { amount: session.currency_conversion.amount_total, currency: session.currency_conversion.source_currency } : { amount: session.amount_total, currency: session.currency };
-      const detail = { ...base, providerRef: session.id, amountCents: asked.amount, currency: asked.currency?.toUpperCase() ?? null, method: session.payment_method_types?.[0] ?? null };
+      const detail = { ...base, providerRef: session.id, amountCents: asked.amount, currency: asked.currency?.toUpperCase() ?? null, method: session.payment_method_types?.[0] ?? null, intentRef: idOf(session.payment_intent) };
 
       if (event.type === "checkout.session.expired") return { ...detail, outcome: "expired" };
       if (event.type === "checkout.session.async_payment_failed") return { ...detail, outcome: "failed" };
@@ -143,7 +175,7 @@ export async function startPayment(ctx: Ctx, number: string, token: string): Pro
   return { url: checkout.url };
 }
 
-export type WebhookResult = "paid" | "processing" | "duplicate" | "ignored" | "unknown-payment" | "amount-mismatch" | "failed" | "expired";
+export type WebhookResult = SyncResult | "paid" | "processing" | "duplicate" | "ignored" | "unknown-payment" | "amount-mismatch" | "failed" | "expired";
 
 /** Notifications owed for a paid order. Delivered with retries in Phase 7; each can exist only once. */
 const PAID_JOBS = ["notify.owner.whatsapp", "notify.owner.email", "notify.owner.sms", "notify.customer.confirmation"] as const;
@@ -153,15 +185,18 @@ const PAID_JOBS = ["notify.owner.whatsapp", "notify.owner.email", "notify.owner.
  * The unique (provider, eventId) row is the idempotency lock: a redelivered
  * webhook fails that insert and nothing else runs.
  */
-export async function applyPaymentEvent(db: Db, provider: ProviderName, event: PaymentEvent): Promise<WebhookResult> {
+export async function applyPaymentEvent(db: Db, provider: ProviderName, event: ProviderEvent): Promise<WebhookResult> {
   try {
     return await db.$transaction(async (tx) => {
       await tx.webhookEvent.create({ data: { provider, eventId: event.eventId, type: event.type, processedAt: new Date() } });
       if (event.outcome === "ignored") return "ignored";
+      if (event.outcome === "refund") return applyRefundEvent(tx, provider, event);
+      if (event.outcome === "dispute") return applyDisputeEvent(tx, provider, event);
 
       const payment = await tx.payment.findUnique({ where: { provider_providerRef: { provider, providerRef: event.providerRef } }, include: { order: { include: { items: true } } } });
       if (!payment) return "unknown-payment";
       const { order } = payment;
+      if (event.intentRef && !payment.intentRef) await tx.payment.update({ where: { id: payment.id }, data: { intentRef: event.intentRef } });
 
       if (event.outcome === "failed" || event.outcome === "expired") {
         if (payment.status === "UNPAID" || payment.status === "PROCESSING") await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });

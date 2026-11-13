@@ -82,13 +82,15 @@ export async function listPayments(ctx: Ctx, input: { status?: string; from?: st
   const status = PAYMENT_STATES.find((value) => value === input.status);
   const where: Prisma.PaymentWhereInput = { createdAt: { gte: range.from, lt: range.end }, ...(status ? { status } : {}) };
   const page = Math.max(1, Math.round(input.page ?? 1) || 1);
-  const [rows, count, received, refunded] = await Promise.all([
-    ctx.db.payment.findMany({ where, orderBy: { createdAt: "desc" }, take: 30, skip: (page - 1) * 30, include: { refunds: true, order: { select: { id: true, number: true, email: true } } } }),
+  const [rows, count, received, refunded, disputes] = await Promise.all([
+    ctx.db.payment.findMany({ where, orderBy: { createdAt: "desc" }, take: 30, skip: (page - 1) * 30, include: { refunds: { where: { failedAt: null } }, order: { select: { id: true, number: true, email: true } } } }),
     ctx.db.payment.count({ where }),
     ctx.db.payment.aggregate({ where: { createdAt: { gte: range.from, lt: range.end }, status: { in: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] } }, _sum: { amountCents: true }, _count: true }),
-    ctx.db.refund.aggregate({ where: { createdAt: { gte: range.from, lt: range.end } }, _sum: { amountCents: true }, _count: true }),
+    ctx.db.refund.aggregate({ where: { failedAt: null, createdAt: { gte: range.from, lt: range.end } }, _sum: { amountCents: true }, _count: true }),
+    ctx.db.dispute.findMany({ where: { OR: [{ closedAt: null }, { createdAt: { gte: range.from, lt: range.end } }] }, orderBy: { createdAt: "desc" }, take: 50, include: { payment: { select: { order: { select: { id: true, number: true, email: true } } } } } }),
   ]);
-  return { rows, count, page, pages: Math.max(1, Math.ceil(count / 30)), range, receivedCents: received._sum.amountCents ?? 0, receivedCount: received._count, refundedCents: refunded._sum.amountCents ?? 0, refundedCount: refunded._count };
+  const lost = disputes.filter((dispute) => dispute.status === "lost" && dispute.closedAt && dispute.closedAt >= range.from && dispute.closedAt < range.end);
+  return { disputes, lostCents: lost.reduce((sum, dispute) => sum + dispute.amountCents, 0), lostCount: lost.length, rows, count, page, pages: Math.max(1, Math.ceil(count / 30)), range, receivedCents: received._sum.amountCents ?? 0, receivedCount: received._count, refundedCents: refunded._sum.amountCents ?? 0, refundedCount: refunded._count };
 }
 
 export async function listReturnsAndRefunds(ctx: Ctx) {
@@ -104,7 +106,7 @@ export async function listReturnsAndRefunds(ctx: Ctx) {
       return { ...request, lines: lines.map((line) => ({ quantity: line.quantity ?? 0, name: (() => { const item = request.order.items.find((candidate) => candidate.id === line.orderItemId); return item ? `${item.productName} ${item.variantLabel}` : "Removed line"; })() })) };
     }),
     open: returns.filter((request) => request.status === "REQUESTED" || request.status === "APPROVED").length,
-    refunds: refunds.map((refund) => ({ ...refund, by: refund.adminUserId ? (staff.get(refund.adminUserId) ?? "Former staff") : "—" })),
+    refunds: refunds.map((refund) => ({ ...refund, by: refund.adminUserId ? (staff.get(refund.adminUserId) ?? "Former staff") : "At the payment provider" })),
   };
 }
 
@@ -160,7 +162,7 @@ export async function salesReport(ctx: Ctx, input: { from?: string; to?: string 
       SELECT p."method", COUNT(*)::bigint AS payments, SUM(p."amountCents")::bigint AS amount
       FROM "Payment" p JOIN "Order" o ON o."id" = p."orderId"
       WHERE o."paidAt" >= ${from} AND o."paidAt" < ${end} AND p."status" IN ('PAID', 'PARTIALLY_REFUNDED', 'REFUNDED') GROUP BY 1 ORDER BY 3 DESC`,
-    ctx.db.refund.aggregate({ where: { createdAt: { gte: from, lt: end } }, _sum: { amountCents: true }, _count: true }),
+    ctx.db.refund.aggregate({ where: { failedAt: null, createdAt: { gte: from, lt: end } }, _sum: { amountCents: true }, _count: true }),
     ctx.db.$queryRaw<{ returning: bigint; first: bigint }[]>`
       SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM "Order" p WHERE p."email" = o."email" AND p."paidAt" < o."paidAt"))::bigint AS returning,
              COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM "Order" p WHERE p."email" = o."email" AND p."paidAt" < o."paidAt"))::bigint AS first
@@ -213,7 +215,7 @@ export async function vatReport(ctx: Ctx, input: { from?: string; to?: string })
     ctx.db.$queryRaw<{ country: string; rate: number | null; orders: bigint; gross: Money; tax: Money; shipping_tax: Money }[]>`
       SELECT "shipCountryCode" AS country, "taxRateBps" AS rate, COUNT(*)::bigint AS orders, SUM("totalCents")::bigint AS gross, SUM(COALESCE("taxCents", 0))::bigint AS tax, SUM(COALESCE("shippingTaxCents", 0))::bigint AS shipping_tax
       FROM "Order" WHERE "paidAt" >= ${range.from} AND "paidAt" < ${range.end} GROUP BY 1, 2 ORDER BY 1, 2`,
-    ctx.db.refund.findMany({ where: { createdAt: { gte: range.from, lt: range.end } }, orderBy: { createdAt: "asc" }, include: { payment: { select: { order: { select: { id: true, number: true, shipCountryCode: true, taxRateBps: true } } } } } }),
+    ctx.db.refund.findMany({ where: { failedAt: null, createdAt: { gte: range.from, lt: range.end } }, orderBy: { createdAt: "asc" }, include: { payment: { select: { order: { select: { id: true, number: true, shipCountryCode: true, taxRateBps: true } } } } } }),
   ]);
   const lines = rows.map((row) => ({ country: row.country, rateBps: row.rate, orders: num(row.orders), grossCents: num(row.gross), taxCents: num(row.tax), netCents: num(row.gross) - num(row.tax), shippingTaxCents: num(row.shipping_tax) }));
   return {
@@ -562,7 +564,7 @@ export async function customerDirectory(ctx: Ctx, input: { q?: string; segment?:
 /** Everything staff need about one customer: what they bought, spent and were refunded, and what staff have noted. */
 export async function customerProfile(ctx: Ctx, id: string) {
   requireAdmin(ctx, "VIEW", "customers");
-  const customer = await ctx.db.customer.findUnique({ where: { id }, include: { addresses: true, notes: { orderBy: { createdAt: "desc" } }, orders: { orderBy: { placedAt: "desc" }, include: { payments: { include: { refunds: true } }, returns: { select: { id: true } } } } } });
+  const customer = await ctx.db.customer.findUnique({ where: { id }, include: { addresses: true, notes: { orderBy: { createdAt: "desc" } }, orders: { orderBy: { placedAt: "desc" }, include: { payments: { include: { refunds: { where: { failedAt: null } } } }, returns: { select: { id: true } } } } } });
   if (!customer) throw new AppError("NOT_FOUND", "Customer not found.");
   const paid = customer.orders.filter((order) => order.paidAt);
   const spent = paid.reduce((sum, order) => sum + order.totalCents, 0);

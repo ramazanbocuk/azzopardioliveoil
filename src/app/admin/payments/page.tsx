@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge, Card, Field, Flash, LinkButton, Page, Select, Stat, Submit, Table, cellLink, dateTime, money } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
 import { listPayments } from "@/server/backoffice";
+import { DISPUTE_LABEL } from "@/server/paymentSync";
 
 export const metadata = { title: "Payments" };
 
@@ -18,10 +19,11 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
   return (
     <Page title="Payments" eyebrow={`${result.range.fromText} to ${result.range.toText}`}>
       <Flash params={params} />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Received" value={money(result.receivedCents)} note={`${result.receivedCount} payment${result.receivedCount === 1 ? "" : "s"} started in this period`} />
         <Stat label="Refunded" value={money(result.refundedCents)} note={`${result.refundedCount} refund${result.refundedCount === 1 ? "" : "s"} issued in this period`} />
-        <Stat label="Net of refunds" value={money(result.receivedCents - result.refundedCents)} note="Before the payment provider's fees, which are not recorded here." />
+        <Stat label="Lost to disputes" value={money(result.lostCents)} note={`${result.lostCount} dispute${result.lostCount === 1 ? "" : "s"} lost in this period`} />
+        <Stat label="Net of refunds and disputes" value={money(result.receivedCents - result.refundedCents - result.lostCents)} note="Before the payment provider's fees, which are not recorded here." />
       </div>
       <Card>
         <form className="flex flex-wrap items-end gap-4">
@@ -38,7 +40,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
           <Submit variant="secondary">Filter</Submit>
         </form>
       </Card>
-      <Card description="A payment is marked paid only by a signed message from the payment provider, never by the browser. Refunds are issued from the order page.">
+      <Card description="A payment is marked paid only by a signed message from the payment provider, never by the browser. Refunds are issued from the order page; a refund made directly at the provider is picked up from the provider's own report.">
         <Table head={["Started", "Order", "Provider", "Method", "State", "Amount", "Refunded", "Provider reference"]} empty={result.rows.length === 0 ? "No payments in this period." : undefined}>
           {result.rows.map((payment) => (
             <tr key={payment.id}>
@@ -71,6 +73,25 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
             {result.page < result.pages ? <LinkButton href={`/admin/payments?${query(result.page + 1)}`}>Next</LinkButton> : <span />}
           </nav>
         )}
+      </Card>
+      <Card title="Disputes" description="A dispute is a cardholder asking their bank to take a payment back. Open disputes, and those opened in this period, are listed. They are answered at the payment provider, not here; this list only mirrors what the provider reports.">
+        <Table head={["Opened", "Order", "Amount", "Reason given", "State", "Answer by"]} empty={result.disputes.length === 0 ? "No disputes." : undefined}>
+          {result.disputes.map((dispute) => (
+            <tr key={dispute.id}>
+              <td className="whitespace-nowrap">{dateTime(dispute.createdAt)}</td>
+              <td>
+                <Link href={`/admin/orders/${dispute.payment.order.id}`} className={cellLink}>
+                  {dispute.payment.order.number}
+                </Link>
+                <span className="text-small block text-stone-700">{dispute.payment.order.email}</span>
+              </td>
+              <td className="tabular-nums">{money(dispute.amountCents)}</td>
+              <td>{dispute.reason ? dispute.reason.replaceAll("_", " ") : "—"}</td>
+              <td>{DISPUTE_LABEL[dispute.status] ?? dispute.status.replaceAll("_", " ")}</td>
+              <td className="whitespace-nowrap">{dispute.closedAt || !dispute.evidenceDueAt ? "—" : dateTime(dispute.evidenceDueAt)}</td>
+            </tr>
+          ))}
+        </Table>
       </Card>
     </Page>
   );
