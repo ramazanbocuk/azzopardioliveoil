@@ -46,7 +46,7 @@ export default async function OriginsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Where the oils come from" title="Five countries. Named producers." tone="#dddad1" lead="We look for high-polyphenol olive oils wherever they are made, and work with producers in Morocco, Turkey, Italy, Greece and Spain. This page shows where each oil on sale today comes from, as it is recorded for that oil." />
+      <PageHeader eyebrow="Where the oils come from" title="We follow the harvest season, country by country." tone="#dddad1" lead="We look for high-polyphenol olive oils wherever they are made, and follow the harvest season in each country we buy from: Morocco, Turkey, Italy, Greece and Spain. This page shows where each oil on sale today comes from, as it is recorded for that oil." />
       <DraftBand>Draft copy. Each producer’s own page (who they are, where they farm, which olives they grow) will be written with the owner and the producer. The list below is not draft: it is read from the catalogue.</DraftBand>
       <LeadPlate label="a grove at midday" tone="dawn">
         <GroveScene id="groves-lead" tone="noon" seed={7} className="absolute inset-0 h-full w-full" />
