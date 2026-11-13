@@ -406,3 +406,123 @@ describe("photos and integrations", () => {
     expect(() => integrationStatus(anonymous(), {})).toThrow(AppError);
   });
 });
+
+describe("roles in practice", () => {
+  it("enforces each role on the server, whichever screen the action comes from", async () => {
+    const paid = await order({});
+    const analyst = await as("ANALYST");
+    expect((await admin.listOrders(analyst, {})).count).toBe(1);
+    expect((await backoffice.salesReport(analyst, {})).orders).toBe(1);
+    await refused(admin.addOrderNote(analyst, paid.id, "hello"), "FORBIDDEN");
+    await refused(admin.startFulfilment(analyst, paid.id), "FORBIDDEN");
+    await refused(admin.getSettings(analyst), "FORBIDDEN");
+
+    const warehouse = await as("WAREHOUSE_MANAGER");
+    const variant = await db.variant.findUniqueOrThrow({ where: { sku: "t-500" } });
+    await admin.adjustStock(warehouse, variant.id, 5, "RECEIVED", "delivery");
+    await admin.startFulfilment(warehouse, paid.id);
+    await refused(backoffice.listPayments(warehouse, {}), "FORBIDDEN");
+    await refused(backoffice.salesReport(warehouse, {}), "FORBIDDEN");
+    await refused(admin.saveDiscount(warehouse, null, { code: "X", kind: "PERCENT", value: 10 }), "FORBIDDEN");
+
+    const support = await as("CUSTOMER_SUPPORT");
+    await admin.addOrderNote(support, paid.id, "Customer called about delivery.");
+    await refused(admin.refundOrder(support, paid.id, { amountCents: 100 }), "FORBIDDEN");
+    await refused(admin.adjustStock(support, variant.id, 1, "ADJUSTMENT"), "FORBIDDEN");
+
+    const accountant = await as("ACCOUNTANT");
+    expect((await backoffice.vatReport(accountant, {})).lines).toHaveLength(1);
+    await refused(admin.addOrderNote(accountant, paid.id, "x"), "FORBIDDEN");
+    await refused(admin.saveTaxRate(accountant, { countryCode: "BE", rateBps: 600 }), "FORBIDDEN"); // VAT rates stay with administrators
+
+    const marketing = await as("MARKETING_MANAGER");
+    await admin.saveDiscount(marketing, null, { code: "SPRING", kind: "PERCENT", value: 10 });
+    await refused(backoffice.listPayments(marketing, {}), "FORBIDDEN");
+  });
+
+  it("protects super administrators and the last person who can manage staff", async () => {
+    const boss = await as("ADMINISTRATOR");
+    const top = await as("SUPER_ADMINISTRATOR");
+    const helper = await as("CUSTOMER_SUPPORT");
+    await refused(admin.updateStaff(boss, top.admin!.id, { role: "STAFF" }), /super administrator/);
+    await refused(admin.updateStaff(boss, helper.admin!.id, { role: "SUPER_ADMINISTRATOR" }), /super administrator/);
+    await refused(admin.createStaff(boss, { name: "X", email: "x@test.local", role: "SUPER_ADMINISTRATOR", password: "a long enough password" }), /super administrator/);
+    await refused(admin.updateStaff(boss, helper.admin!.id, { role: "NOT_A_ROLE" as never }), "BAD_INPUT");
+    await admin.updateStaff(boss, helper.admin!.id, { role: "SHIPPING_MANAGER" });
+    await admin.updateStaff(top, boss.admin!.id, { role: "ANALYST" });
+    // The only remaining account that can manage staff cannot be removed by anyone else, and nobody can demote themselves.
+    await refused(admin.updateStaff(top, top.admin!.id, { isActive: false }), /your own role/);
+    expect(await db.adminUser.count({ where: { role: "SUPER_ADMINISTRATOR", isActive: true } })).toBe(1);
+  });
+});
+
+describe("purchasing and customer records", () => {
+  it("adds a delivery to stock once, with its cost, and values stock at cost", async () => {
+    const manager = await as("MANAGER");
+    const supplier = await backoffice.saveSupplier(manager, null, { name: "Bottler", kind: "Bottler", isActive: true });
+    await refused(backoffice.createPurchaseOrder(manager, { supplierId: supplier, lines: [] }), "BAD_INPUT");
+    await refused(backoffice.createPurchaseOrder(manager, { supplierId: supplier, lines: [{ sku: "nope", quantity: 5, unitCostCents: 100 }] }), /no product with SKU/);
+    const id = await backoffice.createPurchaseOrder(manager, { supplierId: supplier, expectedAt: "2026-12-01", lines: [{ sku: "t-500", quantity: 24, unitCostCents: 720 }, { sku: "t-750", quantity: 12, unitCostCents: 980 }] });
+    expect(await backoffice.listPurchaseOrders(manager)).toMatchObject([{ number: "PO-0001", status: "DRAFT", units: 36, costCents: 24 * 720 + 12 * 980 }]);
+    expect((await db.variant.findUniqueOrThrow({ where: { sku: "t-500" } })).stock).toBe(10); // nothing moves until it arrives
+
+    await backoffice.setPurchaseOrderStatus(manager, id, "ORDERED");
+    await refused(backoffice.receivePurchaseOrder(await as("STAFF"), id), "FORBIDDEN");
+    await backoffice.receivePurchaseOrder(manager, id);
+    await refused(backoffice.receivePurchaseOrder(manager, id), /already been received/);
+    await refused(backoffice.setPurchaseOrderStatus(manager, id, "CANCELLED"), /cannot be cancelled/);
+    expect(await db.variant.findUniqueOrThrow({ where: { sku: "t-500" } })).toMatchObject({ stock: 34, costCents: 720 });
+    expect(await db.inventoryMovement.findMany({ where: { note: "PO-0001" }, orderBy: { delta: "desc" } })).toMatchObject([{ delta: 24, reason: "RECEIVED" }, { delta: 12, reason: "RECEIVED" }]);
+
+    const stock = await backoffice.inventoryOverview(manager);
+    expect(stock.costValueCents).toBe(34 * 720 + 22 * 980);
+    expect(stock.variantsWithoutCost).toBe(stock.rows.filter((row) => row.costCents === null && row.stock > 0).length); // uncosted stock is counted, never valued
+  });
+
+  it("validates barcodes and keeps cost and location on the variant", async () => {
+    const manager = await as("MANAGER");
+    const variant = await db.variant.findUniqueOrThrow({ where: { sku: "t-500" } });
+    const base = { sku: "t-500", label: "500 ml", volumeMl: 500, priceCents: 1800, weightGrams: 950 };
+    await refused(admin.saveVariant(manager, variant.productId, variant.id, { ...base, barcode: "12AB" }), "BAD_INPUT");
+    await admin.saveVariant(manager, variant.productId, variant.id, { ...base, barcode: "5412345678908", costCents: 720, location: "Rack B2" });
+    expect(await db.variant.findUniqueOrThrow({ where: { id: variant.id } })).toMatchObject({ barcode: "5412345678908", costCents: 720, location: "Rack B2" });
+    await admin.saveVariant(manager, variant.productId, variant.id, base);
+    expect(await db.variant.findUniqueOrThrow({ where: { id: variant.id } })).toMatchObject({ barcode: null, costCents: null, location: null });
+  });
+
+  it("builds a customer's record: spend, lifetime value, tags, notes and segments", async () => {
+    const support = await as("CUSTOMER_SUPPORT");
+    const customer = await db.customer.create({ data: { email: "loyal@example.com", passwordHash: "x", firstName: "Loyal", lastName: "Buyer", marketingOptIn: true } });
+    const fresh = await db.customer.create({ data: { email: "new@example.com", passwordHash: "x", firstName: "New", lastName: "Person" } });
+    const first = await order({ email: customer.email, total: 4000 });
+    const second = await order({ email: customer.email, total: 6000 });
+    await db.order.updateMany({ where: { id: { in: [first.id, second.id] } }, data: { customerId: customer.id } });
+    await db.refund.create({ data: { paymentId: first.payments[0].id, amountCents: 1000 } });
+
+    await backoffice.setCustomerTags(support, customer.id, " vip , Restaurant; restaurant ,, Press ");
+    await backoffice.addCustomerNote(support, customer.id, "Prefers delivery on Tuesdays.");
+    await refused(backoffice.addCustomerNote(support, customer.id, "   "), "BAD_INPUT");
+    await refused(backoffice.addCustomerNote(await as("ANALYST"), customer.id, "x"), "FORBIDDEN");
+
+    const profile = await backoffice.customerProfile(support, customer.id);
+    expect(profile.customer.tags).toEqual(["VIP", "Restaurant", "restaurant", "Press"]);
+    expect(profile.metrics).toMatchObject({ paidOrders: 2, spentCents: 10000, averageCents: 5000, refundedCents: 1000, lifetimeCents: 9000 });
+    expect(profile.notes).toMatchObject([{ body: "Prefers delivery on Tuesdays.", by: "CUSTOMER_SUPPORT" }]);
+
+    const names = async (filter: { segment?: string; tag?: string; q?: string }) => (await backoffice.customerDirectory(support, filter)).rows.map((row) => row.email).sort();
+    expect(await names({})).toEqual(["loyal@example.com", "new@example.com"]);
+    expect(await names({ segment: "repeat" })).toEqual(["loyal@example.com"]);
+    expect(await names({ segment: "vip" })).toEqual(["loyal@example.com"]);
+    expect(await names({ segment: "consent" })).toEqual(["loyal@example.com"]);
+    expect(await names({ segment: "none" })).toEqual(["new@example.com"]);
+    expect(await names({ tag: "Press" })).toEqual(["loyal@example.com"]);
+    expect(await names({ segment: "wholesale" })).toEqual([]);
+    expect((await backoffice.customerDirectory(support, {})).tags).toEqual(["Press", "Restaurant", "VIP", "restaurant"]);
+
+    // Erasing the customer removes what staff wrote about them too.
+    await admin.eraseCustomer(await as("ADMINISTRATOR"), customer.id);
+    expect(await db.customerNote.count()).toBe(0);
+    expect((await db.customer.findUniqueOrThrow({ where: { id: customer.id } })).tags).toEqual([]);
+    expect(fresh.id).toBeTruthy();
+  });
+});

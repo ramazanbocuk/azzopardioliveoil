@@ -18,7 +18,7 @@ import { carrierStates, connectedCarriers, getCarrier } from "./shipping/registr
 /** Members of the EU customs union: parcels between them need no customs declaration. */
 const EU = new Set(["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "MC"]);
 
-type ShippingSettings = Partial<Record<"senderName" | "senderCompany" | "senderLine1" | "senderLine2" | "senderPostalCode" | "senderCity" | "senderCountryCode" | "senderPhone" | "senderEmail", string | null>> & { carrierRule?: "manual" | "cheapest" | "fastest"; packagingGrams?: number };
+type ShippingSettings = { labelFormat?: "THERMAL" | "A4" } & Partial<Record<"senderName" | "senderCompany" | "senderLine1" | "senderLine2" | "senderPostalCode" | "senderCity" | "senderCountryCode" | "senderPhone" | "senderEmail", string | null>> & { carrierRule?: "manual" | "cheapest" | "fastest"; packagingGrams?: number };
 
 export async function shippingSettings(db: Db): Promise<ShippingSettings> {
   return ((await db.setting.findUnique({ where: { key: "shipping" } }))?.value ?? {}) as ShippingSettings;
@@ -44,7 +44,7 @@ function linesToShip(order: FullOrder, wanted?: Line[] | null): { item: OrderIte
   return result;
 }
 
-export function buildShipmentRequest(order: FullOrder, sender: Party, boxes: Box[], wanted: Line[] | null | undefined, reference: string, shipDate = new Date()): ShipmentRequest {
+export function buildShipmentRequest(order: FullOrder, sender: Party, boxes: Box[], wanted: Line[] | null | undefined, reference: string, shipDate = new Date(), labelFormat: "THERMAL" | "A4" = "THERMAL"): ShipmentRequest {
   const lines = linesToShip(order, wanted);
   if (boxes.length === 0 || boxes.some((box) => !(box.weightGrams > 0))) throw new AppError("BAD_INPUT", "Enter the weight of each box.");
   const customs = !(EU.has(sender.countryCode) && EU.has(order.shipCountryCode));
@@ -69,6 +69,7 @@ export function buildShipmentRequest(order: FullOrder, sender: Party, boxes: Box
     declaredValueCents: commodities.reduce((sum, line) => sum + line.unitValueCents * line.quantity, 0),
     customs,
     shipDate,
+    labelFormat,
   };
 }
 
@@ -83,10 +84,10 @@ export type RateComparison = { quotes: (RateQuote & { suggested: boolean })[]; p
 
 /** Asks every connected carrier that has a rating API what this shipment would cost. One carrier failing never hides the others. */
 export async function compareRates(ctx: Ctx, orderId: string, boxes: Box[], wanted?: Line[] | null): Promise<RateComparison> {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "shipping");
   const order = await shippableOrder(ctx, orderId);
   const settings = await shippingSettings(ctx.db);
-  const request = buildShipmentRequest(order, senderFrom(settings), boxes, wanted, order.number ?? order.id);
+  const request = buildShipmentRequest(order, senderFrom(settings), boxes, wanted, order.number ?? order.id, new Date(), settings.labelFormat ?? "THERMAL");
   const carriers = connectedCarriers();
   const quotes: RateQuote[] = [];
   const problems: RateComparison["problems"] = [];
@@ -112,14 +113,28 @@ export async function compareRates(ctx: Ctx, orderId: string, boxes: Box[], want
   };
 }
 
+/** The units an attempt covers, so the same units cannot be booked twice at once. */
+function fingerprintOf(order: FullOrder, wanted?: Line[] | null): string {
+  return linesToShip(order, wanted)
+    .map((line) => `${line.item.id}:${line.quantity}`)
+    .sort()
+    .join("|");
+}
+
 /**
  * Books the shipment with the carrier, stores the label it returns, and
- * records the shipment. The carrier is called first: if it refuses, nothing
- * is recorded. If recording fails after the carrier accepted, the booking is
- * written to the audit log with its tracking number so it can be cancelled.
+ * records the shipment.
+ *
+ * A label costs money, so it must never be bought twice. Before the carrier
+ * is called, an attempt is written under a lock on the order: while one is
+ * open for the same units, a second click, a browser retry or a second
+ * person is refused. If the carrier refuses, the attempt is closed and
+ * nothing is recorded. If the carrier never answers, whether it booked is
+ * unknown: the attempt stays open and blocks a retry until someone has
+ * checked with the carrier and released it.
  */
 export async function bookLabel(ctx: Ctx, orderId: string, input: { carrier: string; service: string; boxes: Box[]; items?: Line[] | null }): Promise<string> {
-  requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "shipping");
   const order = await shippableOrder(ctx, orderId);
   let carrier;
   try {
@@ -128,33 +143,95 @@ export async function bookLabel(ctx: Ctx, orderId: string, input: { carrier: str
     throw error instanceof CarrierNotConnected ? new AppError("BAD_INPUT", error.message) : error;
   }
   if (!input.service) throw new AppError("BAD_INPUT", "Choose a service.");
+  const settings = await shippingSettings(ctx.db);
   const previous = await ctx.db.shipment.count({ where: { orderId } });
-  const request = buildShipmentRequest(order, senderFrom(await shippingSettings(ctx.db)), input.boxes, input.items, `${order.number ?? order.id}-${previous + 1}`);
+  const request = buildShipmentRequest(order, senderFrom(settings), input.boxes, input.items, `${order.number ?? order.id}-${previous + 1}`, new Date(), settings.labelFormat ?? "THERMAL");
+  const fingerprint = fingerprintOf(order, input.items);
+
+  const attempt = await ctx.db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
+    const open = await tx.shipmentAttempt.findFirst({ where: { orderId, fingerprint, status: { in: ["STARTED", "UNKNOWN"] } } });
+    if (open?.status === "UNKNOWN") throw new AppError("BAD_INPUT", `An earlier booking with ${open.carrier} got no answer, so it may have gone through. Check with ${open.carrier} whether a shipment exists for this order, then release the attempt on the order page before booking again.`);
+    if (open) throw new AppError("BAD_INPUT", "A label is already being booked for these items. Wait a moment and reload the order.");
+    return tx.shipmentAttempt.create({ data: { orderId, fingerprint, carrier: carrier.name, service: input.service, adminUserId: admin.id } });
+  });
 
   let booked;
   try {
     booked = await carrier.book(request, input.service);
   } catch (error) {
-    if (!(error instanceof CarrierError)) throw error;
-    await audit(ctx, "shipment.book_failed", "Order", orderId, { carrier: carrier.key, service: input.service, message: error.message.slice(0, 500) });
-    throw new AppError("BAD_INPUT", `${error.message} Nothing was booked.`);
+    if (!(error instanceof CarrierError)) {
+      await ctx.db.shipmentAttempt.update({ where: { id: attempt.id }, data: { status: "UNKNOWN", error: "Unexpected error while booking." } });
+      throw error;
+    }
+    const answered = error.status !== undefined;
+    await ctx.db.shipmentAttempt.update({ where: { id: attempt.id }, data: { status: answered ? "FAILED" : "UNKNOWN", error: error.message.slice(0, 500) } });
+    await audit(ctx, answered ? "shipment.book_failed" : "shipment.book_unknown", "Order", orderId, { carrier: carrier.key, service: input.service, message: error.message.slice(0, 500) });
+    await ctx.db.outboxJob.createMany({ data: [{ kind: "notify.owner.label_failed", dedupeKey: `notify.owner.label_failed:${attempt.id}`, payload: { orderId, carrier: carrier.name, message: error.message.slice(0, 300), unknown: !answered } }], skipDuplicates: true });
+    throw new AppError("BAD_INPUT", answered ? `${error.message} Nothing was booked.` : `${error.message} It is not known whether ${carrier.name} booked the shipment. Check with ${carrier.name} before trying again.`);
   }
 
   try {
     const serviceName = carrier.services.find((service) => service.code === input.service)?.name ?? input.service;
     const shipmentId = await createShipment(ctx, orderId, { carrier: carrier.name, service: serviceName, trackingNumber: booked.trackingNumber, trackingUrl: booked.trackingUrl, items: input.items ?? null, parcels: input.boxes }, booked);
+    await ctx.db.shipmentAttempt.update({ where: { id: attempt.id }, data: { status: "SUCCEEDED", shipmentId } });
     await audit(ctx, "shipment.booked", "Order", orderId, { shipmentId, carrier: carrier.key, service: input.service, trackingNumber: booked.trackingNumber, environment: carrier.environment });
     return shipmentId;
   } catch (cause) {
     console.error("[fulfilment] carrier booked a shipment that could not be recorded", cause);
+    await ctx.db.shipmentAttempt.update({ where: { id: attempt.id }, data: { status: "UNKNOWN", error: `Booked with ${carrier.name} (tracking ${booked.trackingNumber}) but not recorded here.` } });
     await audit(ctx, "shipment.orphaned", "Order", orderId, { carrier: carrier.key, carrierRef: booked.carrierRef, trackingNumber: booked.trackingNumber, note: "The carrier booked this shipment but it could not be recorded. Cancel it with the carrier." });
-    throw new AppError("BAD_INPUT", `${carrier.name} booked the shipment (tracking ${booked.trackingNumber}) but it could not be saved here. Cancel it with ${carrier.name} and try again.`);
+    throw new AppError("BAD_INPUT", `${carrier.name} booked the shipment (tracking ${booked.trackingNumber}) but it could not be saved here. Cancel it with ${carrier.name}, then release the attempt on the order page.`);
   }
+}
+
+/** After checking with the carrier that nothing was booked, lets the order be booked again. */
+export async function releaseAttempt(ctx: Ctx, attemptId: string) {
+  requireAdmin(ctx, "MANAGER", "shipping");
+  const attempt = await ctx.db.shipmentAttempt.findUnique({ where: { id: attemptId } });
+  if (!attempt || attempt.status !== "UNKNOWN") throw new AppError("BAD_INPUT", "This attempt is not waiting to be checked.");
+  await ctx.db.shipmentAttempt.update({ where: { id: attemptId }, data: { status: "FAILED", error: `${attempt.error ?? ""} Released by staff after checking with the carrier.`.trim() } });
+  await audit(ctx, "shipment.attempt_released", "Order", attempt.orderId, { attemptId, carrier: attempt.carrier });
+}
+
+export function openAttempts(ctx: Ctx, orderId: string) {
+  requireAdmin(ctx, "VIEW", "shipping");
+  return ctx.db.shipmentAttempt.findMany({ where: { orderId, status: "UNKNOWN" }, orderBy: { createdAt: "desc" } });
+}
+
+/**
+ * Books labels for many orders in one go, each as one box holding everything
+ * not yet shipped (goods weight plus the packaging weight from Settings).
+ * Orders are booked one after another; one that fails is reported and never
+ * stops the rest.
+ */
+export async function bulkBookLabels(ctx: Ctx, orderIds: string[], input: { carrier: string; service: string }) {
+  requireAdmin(ctx, "STAFF", "shipping");
+  const ids = [...new Set(orderIds)].slice(0, 50);
+  if (ids.length === 0) throw new AppError("BAD_INPUT", "Select at least one order.");
+  if (!input.carrier || !input.service) throw new AppError("BAD_INPUT", "Choose a carrier and service.");
+  const packaging = (await shippingSettings(ctx.db)).packagingGrams ?? 0;
+  const orders = await ctx.db.order.findMany({ where: { id: { in: ids } }, include: { items: true } });
+  const booked: { number: string; shipmentId: string }[] = [];
+  const failed: { number: string; reason: string }[] = [];
+  for (const order of orders) {
+    const number = order.number ?? order.id;
+    const goods = order.items.reduce((sum, item) => sum + item.weightGrams * Math.max(0, item.quantity - item.shippedQuantity), 0);
+    try {
+      if (goods <= 0) throw new AppError("BAD_INPUT", "The products on this order have no weight recorded, so the box cannot be weighed automatically.");
+      booked.push({ number, shipmentId: await bookLabel(ctx, order.id, { carrier: input.carrier, service: input.service, boxes: [{ weightGrams: goods + packaging }] }) });
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      failed.push({ number, reason: error.message });
+    }
+  }
+  await audit(ctx, "shipment.bulk_book", "Order", null, { carrier: input.carrier, service: input.service, booked: booked.length, failed: failed.length });
+  return { booked, failed };
 }
 
 /** Cancels a carrier booking and puts its units back to "not shipped". */
 export async function cancelBooking(ctx: Ctx, shipmentId: string): Promise<{ cancelledWithCarrier: boolean }> {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "shipping");
   const shipment = await ctx.db.shipment.findUnique({ where: { id: shipmentId }, include: { items: true, order: true } });
   if (!shipment || shipment.cancelledAt) throw new AppError("BAD_INPUT", "This shipment is not open.");
   if (shipment.status !== "LABEL_CREATED" && shipment.status !== "PENDING") throw new AppError("BAD_INPUT", "The carrier already has this parcel, so it can no longer be cancelled here.");
@@ -187,7 +264,7 @@ export async function cancelBooking(ctx: Ctx, shipmentId: string): Promise<{ can
 }
 
 export async function getLabel(ctx: Ctx, shipmentId: string, position: number) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "shipping");
   const label = await ctx.db.shipmentLabel.findFirst({ where: { shipmentId, position }, include: { shipment: { select: { orderId: true, trackingNumber: true } } } });
   if (!label) throw new AppError("NOT_FOUND", "Label not found.");
   await audit(ctx, "shipment.label_printed", "Order", label.shipment.orderId, { shipmentId, position });
@@ -239,7 +316,7 @@ export async function refreshTracking(db: Db, now = new Date(), limit = 20): Pro
 
 /** The shipping dashboard: what is waiting to leave, and what left recently. */
 export async function fulfilmentBoard(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "shipping");
   const [waiting, shipments, settings] = await Promise.all([
     ctx.db.order.findMany({ where: { cancelledAt: null, paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT }, fulfilmentStatus: { in: ["UNFULFILLED", "PROCESSING", "READY", "PARTIALLY_SHIPPED"] } }, orderBy: { paidAt: "asc" }, take: 100, include: { items: true } }),
     ctx.db.shipment.findMany({ orderBy: { createdAt: "desc" }, take: 30, include: { order: { select: { id: true, number: true, shipCountryCode: true, shipFirstName: true, shipLastName: true } }, parcels: true, _count: { select: { labels: true } } } }),

@@ -7,7 +7,7 @@ export const metadata = { title: "Newsletter" };
 export default async function NewsletterPage() {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "marketing");
   const subscribers = await ctx.db.newsletterSubscriber.findMany({ orderBy: { createdAt: "desc" }, take: 500 });
   const confirmed = subscribers.filter((s) => s.status === "SUBSCRIBED").length;
 

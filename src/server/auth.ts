@@ -1,10 +1,11 @@
 import { z } from "zod";
-import type { AdminRole, AdminUser, Customer } from "@/generated/prisma/client";
+import type { AdminUser, Customer } from "@/generated/prisma/client";
 import { COOKIE, TTL, clearCookie, setCookie, type Ctx } from "./context";
 import { burnPasswordCheck, hashPassword, hashToken, newToken, verifyPassword } from "./crypto";
 import { AppError, parse } from "./errors";
 import { resetPurpose, verifyLink } from "./notifications/messages";
 import { eraseCustomerData } from "./privacy";
+import { can, type Area, type Level } from "./permissions";
 import { enforce } from "./rateLimit";
 import { checkSecondFactor } from "./totp";
 
@@ -157,11 +158,13 @@ export function requireCustomer(ctx: Ctx): Customer {
   return ctx.customer;
 }
 
-/** Roles in ascending order of power. A minimum role admits everything above it. */
-const RANK: Record<AdminRole, number> = { STAFF: 1, MANAGER: 2, ADMINISTRATOR: 3 };
-
-export function requireAdmin(ctx: Ctx, minimum: AdminRole = "STAFF"): AdminUser {
+/**
+ * The server-side gate for every staff action. `minimum` is the level the
+ * action needs and `area` is the part of the business it belongs to; the
+ * person's role must reach that level in that area (see permissions.ts).
+ */
+export function requireAdmin(ctx: Ctx, minimum: Level = "STAFF", area: Area = "general"): AdminUser {
   if (!ctx.admin) throw new AppError("UNAUTHENTICATED", "Please sign in.");
-  if (RANK[ctx.admin.role] < RANK[minimum]) throw new AppError("FORBIDDEN", "Your role does not allow this action.");
+  if (!can(ctx.admin.role, minimum, area)) throw new AppError("FORBIDDEN", "Your role does not allow this action.");
   return ctx.admin;
 }

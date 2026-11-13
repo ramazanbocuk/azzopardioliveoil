@@ -5,6 +5,7 @@ import type { Ctx } from "./context";
 import { hashPassword } from "./crypto";
 import type { Tx } from "./db";
 import { AppError, parse } from "./errors";
+import { ROLE_ORDER, can } from "./permissions";
 import { ORDER_STATUSES, PAYMENT_ALLOWS_FULFILMENT, fulfilmentFromQuantities, syncOrderStatus } from "./orderStatus";
 import { getPaymentProvider } from "./payments";
 import { eraseCustomerData } from "./privacy";
@@ -49,7 +50,7 @@ export function eurosToCents(input: unknown): number {
 
 
 export async function dashboard(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "orders");
   const { db } = ctx;
   const now = new Date();
   const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -156,7 +157,7 @@ function orderWhere(input: OrderFilter): Prisma.OrderWhereInput {
 }
 
 export async function listOrders(ctx: Ctx, input: OrderFilter) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "orders");
   const where = orderWhere(input);
   const page = parse(orderFilter, input).page;
   const [rows, count, countries] = await Promise.all([
@@ -168,7 +169,7 @@ export async function listOrders(ctx: Ctx, input: OrderFilter) {
 }
 
 export async function getOrder(ctx: Ctx, id: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "orders");
   const order = await ctx.db.order.findFirst({ where: { OR: [{ id }, { number: id.toUpperCase() }] }, include: orderDetail });
   if (!order) throw new AppError("NOT_FOUND", "Order not found.");
   // Every message queued for this order, sent or not: the customer communication history.
@@ -182,7 +183,7 @@ export function timeline(tx: Tx, ctx: Ctx, orderId: string, kind: string, messag
 }
 
 export async function addOrderNote(ctx: Ctx, orderId: string, body: string) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "orders");
   const text = body.trim();
   if (text.length < 1 || text.length > 2000) throw new AppError("BAD_INPUT", "Write a note of up to 2000 characters.");
   await ctx.db.orderNote.create({ data: { orderId, adminUserId: admin.id, body: text } });
@@ -191,7 +192,7 @@ export async function addOrderNote(ctx: Ctx, orderId: string, body: string) {
 
 /** The lot each line was packed from. Recorded when the parcel is prepared. */
 export async function setItemLot(ctx: Ctx, orderItemId: string, lotNumber: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "traceability");
   const lot = lotNumber.trim().toUpperCase();
   if (lot && !(await ctx.db.batch.findUnique({ where: { lotNumber: lot } }))) throw new AppError("BAD_INPUT", `Lot ${lot} does not exist. Create it under Lots first.`);
   const item = await ctx.db.orderItem.update({ where: { id: orderItemId }, data: { lotNumber: lot || null } });
@@ -210,13 +211,13 @@ async function advanceFulfilment(ctx: Ctx, orderId: string, from: FulfilmentStat
 }
 
 export async function startFulfilment(ctx: Ctx, orderId: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "orders");
   await advanceFulfilment(ctx, orderId, ["UNFULFILLED"], "PROCESSING", "Only a paid order that has not been started can be moved to processing.", "processing", "Your order is being prepared.", false);
 }
 
 /** Packed, checked and waiting for a label or collection. */
 export async function markReady(ctx: Ctx, orderId: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "orders");
   await advanceFulfilment(ctx, orderId, ["UNFULFILLED", "PROCESSING"], "READY", "Only a paid order that has not shipped can be marked ready.", "ready", "Packed and ready for the carrier.", true);
 }
 
@@ -248,7 +249,7 @@ const shipInput = z.object({
  * once every unit has left.
  */
 export async function createShipment(ctx: Ctx, orderId: string, input: unknown, booked?: CarrierBooking) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "shipping");
   const data = parse(shipInput, input);
   const shipmentId = await ctx.db.$transaction(async (tx) => {
     // Lock the order row so two people cannot ship the same units at once.
@@ -308,7 +309,7 @@ export async function markShipped(ctx: Ctx, orderId: string, input: unknown) {
 }
 
 export async function markDelivered(ctx: Ctx, orderId: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "orders");
   await ctx.db.$transaction(async (tx) => {
     const changed = await tx.order.updateMany({ where: { id: orderId, fulfilmentStatus: "SHIPPED", cancelledAt: null }, data: { fulfilmentStatus: "DELIVERED" } });
     if (changed.count !== 1) throw new AppError("BAD_INPUT", "Only a fully shipped order can be marked delivered.");
@@ -321,7 +322,7 @@ export async function markDelivered(ctx: Ctx, orderId: string) {
 
 /** Cancels an order that has not been paid and returns its held stock to sale. */
 export async function cancelUnpaidOrder(ctx: Ctx, orderId: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "orders");
   await ctx.db.$transaction(async (tx) => {
     const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
     const changed = await tx.order.updateMany({ where: { id: orderId, paymentStatus: { in: ["UNPAID", "FAILED"] }, cancelledAt: null }, data: { status: "CANCELLED", cancelledAt: new Date(), reservedUntil: null } });
@@ -343,7 +344,7 @@ export type BulkAction = keyof typeof BULK_ACTIONS;
  * that cannot take the step is skipped and reported, and never blocks the rest.
  */
 export async function bulkUpdateOrders(ctx: Ctx, orderIds: string[], action: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "STAFF", "orders");
   if (!isOneOf(Object.keys(BULK_ACTIONS) as BulkAction[], action)) throw new AppError("BAD_INPUT", "Choose what to do with the selected orders.");
   const ids = [...new Set(orderIds)].slice(0, 200);
   if (ids.length === 0) throw new AppError("BAD_INPUT", "Select at least one order.");
@@ -375,7 +376,7 @@ const refundInput = z.object({ amountCents: cents.min(1, "Enter an amount."), re
  * that was not. Administrators only.
  */
 export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
-  const admin = requireAdmin(ctx, "ADMINISTRATOR");
+  const admin = requireAdmin(ctx, "ADMINISTRATOR", "payments");
   const data = parse(refundInput, input);
   const order = await ctx.db.order.findUnique({ where: { id: orderId }, include: { items: true, payments: { where: { status: { in: ["PAID", "PARTIALLY_REFUNDED"] } }, include: { refunds: true } } } });
   const payment = order?.payments[0];
@@ -401,12 +402,13 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
       }
     }
     await timeline(tx, ctx, orderId, "refunded", full ? "Order refunded." : "Partial refund issued.");
+    await tx.outboxJob.createMany({ data: [{ kind: "notify.customer.refund", dedupeKey: `notify.customer.refund:${payment.id}:${already}:${data.amountCents}`, payload: { orderId, amountCents: data.amountCents, full } }], skipDuplicates: true });
   });
   await audit(ctx, "order.refund", "Order", orderId, { amountCents: data.amountCents, restock: data.restock, providerRef });
 }
 
 export async function setReturnStatus(ctx: Ctx, returnId: string, status: "APPROVED" | "REJECTED" | "RECEIVED") {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "returns");
   const updated = await ctx.db.returnRequest.update({ where: { id: returnId }, data: { status } });
   await ctx.db.orderEvent.create({ data: { orderId: updated.orderId, kind: `return_${status.toLowerCase()}`, message: `Return ${status.toLowerCase()}.`, adminUserId: ctx.admin?.id ?? null } });
   await audit(ctx, "return.status", "ReturnRequest", returnId, { status });
@@ -434,19 +436,19 @@ const productInput = z.object({
 });
 
 export async function listProducts(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "catalog");
   return ctx.db.product.findMany({ where: { deletedAt: null }, orderBy: [{ position: "asc" }, { name: "asc" }], include: { category: true, variants: { orderBy: { position: "asc" } } } });
 }
 
 export async function getProduct(ctx: Ctx, id: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "catalog");
   const product = await ctx.db.product.findFirst({ where: { id, deletedAt: null }, include: { variants: { orderBy: { position: "asc" } }, batches: { orderBy: { createdAt: "desc" } } } });
   if (!product) throw new AppError("NOT_FOUND", "Product not found.");
   return product;
 }
 
 export async function saveProduct(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "catalog");
   const data = parse(productInput, input);
   const clash = await ctx.db.product.findFirst({ where: { slug: data.slug, NOT: id ? { id } : undefined }, select: { id: true } });
   if (clash) throw new AppError("BAD_INPUT", "Another product already uses this web address.", "slug");
@@ -457,7 +459,7 @@ export async function saveProduct(ctx: Ctx, id: string | null, input: unknown) {
 
 /** Soft delete: the product disappears from sale but past orders keep their history. */
 export async function deleteProduct(ctx: Ctx, id: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "catalog");
   await ctx.db.product.update({ where: { id }, data: { deletedAt: new Date(), isVisible: false, slug: `deleted-${id}` } });
   await audit(ctx, "product.delete", "Product", id);
 }
@@ -470,11 +472,14 @@ const variantInput = z.object({
   compareAtCents: cents.nullish().transform((value) => value || null),
   weightGrams: z.coerce.number().int().min(1, "Enter the packed weight.").max(100_000),
   lowStockThreshold: z.coerce.number().int().min(0).max(10_000).default(6),
+  barcode: z.string().trim().regex(/^\d{8,14}$/, "Enter the barcode as 8 to 14 digits.").nullish().or(z.literal("")).transform((value) => value || null),
+  costCents: cents.nullish().transform((value) => (value === undefined || value === null ? null : value)),
+  location: optionalText(60),
   isActive: z.boolean().default(true),
 });
 
 export async function saveVariant(ctx: Ctx, productId: string, variantId: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "catalog");
   const data = parse(variantInput, input);
   const clash = await ctx.db.variant.findFirst({ where: { sku: data.sku, NOT: variantId ? { id: variantId } : undefined }, select: { id: true } });
   if (clash) throw new AppError("BAD_INPUT", "Another size already uses this SKU.", "sku");
@@ -486,7 +491,7 @@ export async function saveVariant(ctx: Ctx, productId: string, variantId: string
 }
 
 export async function adjustStock(ctx: Ctx, variantId: string, delta: number, reason: "RECEIVED" | "ADJUSTMENT" | "RETURN" | "DAMAGED", note?: string) {
-  const admin = requireAdmin(ctx, "MANAGER");
+  const admin = requireAdmin(ctx, "MANAGER", "inventory");
   if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 100_000) throw new AppError("BAD_INPUT", "Enter a whole number other than zero.");
   await ctx.db.$transaction(async (tx) => {
     const changed = await tx.$executeRaw`UPDATE "Variant" SET "stock" = "stock" + ${delta} WHERE "id" = ${variantId} AND "stock" + ${delta} >= "reserved"`;
@@ -499,7 +504,7 @@ export async function adjustStock(ctx: Ctx, variantId: string, delta: number, re
 const categoryInput = z.object({ name: z.string().trim().min(1).max(120), slug, intro: z.string().trim().max(500).default(""), isVisible: z.boolean().default(true) });
 
 export async function saveCategory(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "catalog");
   const data = parse(categoryInput, input);
   const category = id ? await ctx.db.category.update({ where: { id }, data }) : await ctx.db.category.create({ data });
   await audit(ctx, id ? "category.update" : "category.create", "Category", category.id);
@@ -522,7 +527,7 @@ const batchInput = z.object({
 
 /** A lot is the public record behind a label. Publishing makes it visible to anyone with the number. */
 export async function saveBatch(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "traceability");
   const data = parse(batchInput, input);
   const clash = await ctx.db.batch.findFirst({ where: { lotNumber: data.lotNumber, NOT: id ? { id } : undefined }, select: { id: true } });
   if (clash) throw new AppError("BAD_INPUT", "This lot number already exists.", "lotNumber");
@@ -534,7 +539,7 @@ export async function saveBatch(ctx: Ctx, id: string | null, input: unknown) {
 // ───────────────────────────── Customers ─────────────────────────────
 
 export async function listCustomers(ctx: Ctx, q?: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "customers");
   const term = q?.trim();
   return ctx.db.customer.findMany({
     where: { erasedAt: null, ...(term ? { OR: [{ email: { contains: term, mode: "insensitive" } }, { lastName: { contains: term, mode: "insensitive" } }, { firstName: { contains: term, mode: "insensitive" } }] } : {}) },
@@ -545,7 +550,7 @@ export async function listCustomers(ctx: Ctx, q?: string) {
 }
 
 export async function getCustomer(ctx: Ctx, id: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "customers");
   const customer = await ctx.db.customer.findUnique({ where: { id }, include: { orders: { orderBy: { placedAt: "desc" } }, addresses: true } });
   if (!customer) throw new AppError("NOT_FOUND", "Customer not found.");
   return customer;
@@ -557,7 +562,7 @@ export async function getCustomer(ctx: Ctx, id: string) {
  * be retained by law, but are detached from the account.
  */
 export async function eraseCustomer(ctx: Ctx, id: string) {
-  requireAdmin(ctx, "ADMINISTRATOR");
+  requireAdmin(ctx, "ADMINISTRATOR", "customers");
   await eraseCustomerData(ctx.db, id);
   await audit(ctx, "customer.erase", "Customer", id);
 }
@@ -573,7 +578,7 @@ export function toCsv(rows: (string | number | null)[][]): string {
 }
 
 export async function exportCustomersCsv(ctx: Ctx) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "customers");
   const customers = await listCustomers(ctx);
   await audit(ctx, "customer.export", "Customer", null, { count: customers.length });
   return toCsv([
@@ -583,7 +588,7 @@ export async function exportCustomersCsv(ctx: Ctx) {
 }
 
 export async function exportOrdersCsv(ctx: Ctx, filter: OrderFilter = {}) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "reports");
   const orders = await ctx.db.order.findMany({ where: orderWhere(filter), orderBy: { placedAt: "desc" }, take: 5000, include: { items: true, shipments: true } });
   await audit(ctx, "order.export", "Order", null, { count: orders.length });
   const money = (value: number | null) => (value === null ? null : value / 100);
@@ -618,7 +623,7 @@ export async function exportOrdersCsv(ctx: Ctx, filter: OrderFilter = {}) {
 }
 
 export async function exportNewsletterCsv(ctx: Ctx) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "marketing");
   const rows = await ctx.db.newsletterSubscriber.findMany({ orderBy: { createdAt: "desc" } });
   await audit(ctx, "newsletter.export", "NewsletterSubscriber", null, { count: rows.length });
   return toCsv([["Email", "Status", "Locale", "Consent given", "Added"], ...rows.map((r) => [r.email, r.status, r.locale, r.consentAt?.toISOString() ?? null, r.createdAt.toISOString()])]);
@@ -638,7 +643,7 @@ const discountInput = z.object({
 });
 
 export async function saveDiscount(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "discounts");
   const data = parse(discountInput, input);
   if (data.kind === "PERCENT" && (data.value < 1 || data.value > 100)) throw new AppError("BAD_INPUT", "A percentage must be between 1 and 100.", "value");
   const clash = await ctx.db.discount.findFirst({ where: { code: data.code, NOT: id ? { id } : undefined }, select: { id: true } });
@@ -660,21 +665,21 @@ const rateInput = z.object({
 });
 
 export async function saveZone(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "shipping");
   const data = parse(zoneInput, input);
   const zone = id ? await ctx.db.shippingZone.update({ where: { id }, data }) : await ctx.db.shippingZone.create({ data });
   await audit(ctx, id ? "shipping.zone.update" : "shipping.zone.create", "ShippingZone", zone.id, { countries: data.countries });
 }
 
 export async function saveRate(ctx: Ctx, zoneId: string, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "shipping");
   const data = parse(rateInput, input);
   const rate = id ? await ctx.db.shippingRate.update({ where: { id }, data }) : await ctx.db.shippingRate.create({ data: { ...data, zoneId } });
   await audit(ctx, id ? "shipping.rate.update" : "shipping.rate.create", "ShippingRate", rate.id, { priceCents: data.priceCents });
 }
 
 export async function deleteRate(ctx: Ctx, id: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "shipping");
   await ctx.db.shippingRate.delete({ where: { id } });
   await audit(ctx, "shipping.rate.delete", "ShippingRate", id);
 }
@@ -683,7 +688,7 @@ const taxInput = z.object({ countryCode: z.string().trim().toUpperCase().regex(/
 
 /** VAT rates have tax consequences, so only administrators set them. */
 export async function saveTaxRate(ctx: Ctx, input: unknown) {
-  requireAdmin(ctx, "ADMINISTRATOR");
+  requireAdmin(ctx, "ADMINISTRATOR", "accounting");
   const data = parse(taxInput, input);
   const rateBps = Math.round(data.ratePercent * 100);
   await ctx.db.taxRate.upsert({ where: { countryCode: data.countryCode }, update: { rateBps, label: data.label, isActive: true }, create: { countryCode: data.countryCode, rateBps, label: data.label } });
@@ -691,7 +696,7 @@ export async function saveTaxRate(ctx: Ctx, input: unknown) {
 }
 
 export async function deleteTaxRate(ctx: Ctx, countryCode: string) {
-  requireAdmin(ctx, "ADMINISTRATOR");
+  requireAdmin(ctx, "ADMINISTRATOR", "accounting");
   await ctx.db.taxRate.delete({ where: { countryCode } });
   await audit(ctx, "tax.delete", "TaxRate", countryCode);
 }
@@ -722,6 +727,7 @@ const settingSchemas = {
     senderEmail: optionalText(254),
     /** How a carrier is suggested when comparing rates: the user always confirms. */
     carrierRule: z.enum(["manual", "cheapest", "fastest"]).default("manual"),
+    labelFormat: z.enum(["THERMAL", "A4"]).default("THERMAL"),
     packagingGrams: z.coerce.number().int().min(0).max(20_000).default(0),
   }),
   notifications: z.object({
@@ -736,14 +742,22 @@ const settingSchemas = {
 } as const;
 
 export async function getSettings(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "settings");
   const rows = await ctx.db.setting.findMany({ where: { key: { in: [...SETTING_KEYS] } } });
   const value = (key: SettingKey) => (rows.find((row) => row.key === key)?.value ?? {}) as Record<string, string | boolean | null>;
   return { store: value("store"), notifications: value("notifications"), shipping: value("shipping"), content: value("content") };
 }
 
+/** Seller details printed on invoices, packing slips and customs documents. Anyone who can see an order can print its documents. */
+export async function documentSettings(ctx: Ctx) {
+  requireAdmin(ctx, "VIEW", "orders");
+  const rows = await ctx.db.setting.findMany({ where: { key: { in: ["store", "shipping"] } } });
+  const value = (key: string) => (rows.find((row) => row.key === key)?.value ?? {}) as Record<string, string | boolean | null>;
+  return { store: value("store"), shipping: value("shipping") };
+}
+
 export async function saveSetting(ctx: Ctx, key: SettingKey, input: unknown) {
-  requireAdmin(ctx, "ADMINISTRATOR");
+  requireAdmin(ctx, "ADMINISTRATOR", "settings");
   const value = parse(settingSchemas[key], input);
   await ctx.db.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
   await audit(ctx, "setting.save", "Setting", key);
@@ -752,24 +766,31 @@ export async function saveSetting(ctx: Ctx, key: SettingKey, input: unknown) {
 const staffInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254),
   name: z.string().trim().min(1).max(120),
-  role: z.enum(["ADMINISTRATOR", "MANAGER", "STAFF"]),
+  role: z.enum(ROLE_ORDER as [AdminRole, ...AdminRole[]]),
   password: z.string().min(12, "Use at least 12 characters.").max(128),
 });
 
 export async function createStaff(ctx: Ctx, input: unknown) {
-  requireAdmin(ctx, "ADMINISTRATOR");
+  const admin = requireAdmin(ctx, "ADMINISTRATOR", "staff");
   const data = parse(staffInput, input);
+  if (data.role === "SUPER_ADMINISTRATOR" && admin.role !== "SUPER_ADMINISTRATOR") throw new AppError("FORBIDDEN", "Only a super administrator can create a super administrator.");
   if (await ctx.db.adminUser.findUnique({ where: { email: data.email } })) throw new AppError("EMAIL_TAKEN", "A staff account with this email already exists.", "email");
   const user = await ctx.db.adminUser.create({ data: { email: data.email, name: data.name, role: data.role, passwordHash: await hashPassword(data.password) } });
   await audit(ctx, "staff.create", "AdminUser", user.id, { email: data.email, role: data.role });
 }
 
 export async function updateStaff(ctx: Ctx, id: string, change: { role?: AdminRole; isActive?: boolean }) {
-  const admin = requireAdmin(ctx, "ADMINISTRATOR");
+  const admin = requireAdmin(ctx, "ADMINISTRATOR", "staff");
   if (id === admin.id) throw new AppError("BAD_INPUT", "You cannot change your own role or deactivate yourself.");
-  const losesAdmin = change.isActive === false || (change.role && change.role !== "ADMINISTRATOR");
+  if (change.role && !ROLE_ORDER.includes(change.role)) throw new AppError("BAD_INPUT", "Choose a role from the list.");
+  const target = await ctx.db.adminUser.findUnique({ where: { id }, select: { role: true } });
+  if (!target) throw new AppError("NOT_FOUND", "Staff account not found.");
+  // Only a super administrator may create, change or remove a super administrator.
+  if ((target.role === "SUPER_ADMINISTRATOR" || change.role === "SUPER_ADMINISTRATOR") && admin.role !== "SUPER_ADMINISTRATOR") throw new AppError("FORBIDDEN", "Only a super administrator can change a super administrator.");
+  const keepsStaffControl = (role: AdminRole) => can(role, "ADMINISTRATOR", "staff");
+  const losesAdmin = keepsStaffControl(target.role) && (change.isActive === false || (change.role !== undefined && !keepsStaffControl(change.role)));
   if (losesAdmin) {
-    const others = await ctx.db.adminUser.count({ where: { role: "ADMINISTRATOR", isActive: true, NOT: { id } } });
+    const others = await ctx.db.adminUser.count({ where: { role: { in: ROLE_ORDER.filter(keepsStaffControl) }, isActive: true, NOT: { id } } });
     if (others === 0) throw new AppError("BAD_INPUT", "There must always be at least one active administrator.");
   }
   await ctx.db.adminUser.update({ where: { id }, data: change });

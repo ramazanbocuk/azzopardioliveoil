@@ -4,6 +4,7 @@ import { requireAdmin } from "./auth";
 import type { Ctx } from "./context";
 import { hashToken, verifyPassword } from "./crypto";
 import { AppError } from "./errors";
+import { can } from "./permissions";
 import { enforce } from "./rateLimit";
 import { base32Encode, openSecret, sealSecret, verifyTotp } from "./totp";
 
@@ -11,7 +12,7 @@ import { base32Encode, openSecret, sealSecret, verifyTotp } from "./totp";
 
 /** Starts enrolment: makes a new secret and returns it once, for the authenticator app. Not enforced until confirmed. */
 export async function beginTotp(ctx: Ctx) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "security");
   if (admin.totpEnabledAt) throw new AppError("BAD_INPUT", "Two-factor sign-in is already on. Turn it off first to set it up again.");
   const secret = base32Encode(randomBytes(20));
   await ctx.db.adminUser.update({ where: { id: admin.id }, data: { totpSecret: sealSecret(secret) } });
@@ -22,7 +23,7 @@ export async function beginTotp(ctx: Ctx) {
 
 /** The secret of an enrolment that has been started but not confirmed, so the setup screen can show it again. */
 export async function pendingTotp(ctx: Ctx) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "security");
   if (admin.totpEnabledAt || !admin.totpSecret) return null;
   try {
     const secret = openSecret(admin.totpSecret);
@@ -34,7 +35,7 @@ export async function pendingTotp(ctx: Ctx) {
 
 /** Finishes enrolment by proving the app produces the right code. From now on sign-in needs a code. */
 export async function confirmTotp(ctx: Ctx, code: string) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "security");
   await enforce(ctx.db, `admin-2fa:${admin.id}`, 10, 900);
   if (admin.totpEnabledAt || !admin.totpSecret) throw new AppError("BAD_INPUT", "Start two-factor setup first.");
   if (!verifyTotp(openSecret(admin.totpSecret), code)) throw new AppError("BAD_INPUT", "That code is not right. Check the time on your phone and enter the current code.", "code");
@@ -44,7 +45,7 @@ export async function confirmTotp(ctx: Ctx, code: string) {
 
 /** Turns your own second factor off. Needs your password, so an unattended screen cannot do it. */
 export async function disableTotp(ctx: Ctx, password: string) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "security");
   await enforce(ctx.db, `admin-2fa:${admin.id}`, 10, 900);
   if (!(await verifyPassword(admin.passwordHash, password))) throw new AppError("BAD_INPUT", "That password is not right.", "password");
   await ctx.db.adminUser.update({ where: { id: admin.id }, data: { totpSecret: null, totpEnabledAt: null } });
@@ -53,7 +54,7 @@ export async function disableTotp(ctx: Ctx, password: string) {
 
 /** An administrator clears someone else's second factor, for a lost phone. That person is signed out everywhere. */
 export async function resetTotpFor(ctx: Ctx, adminUserId: string) {
-  requireAdmin(ctx, "ADMINISTRATOR");
+  requireAdmin(ctx, "ADMINISTRATOR", "security");
   await ctx.db.$transaction([ctx.db.adminUser.update({ where: { id: adminUserId }, data: { totpSecret: null, totpEnabledAt: null } }), ctx.db.adminSession.deleteMany({ where: { adminUserId } })]);
   await audit(ctx, "admin.2fa.reset", "AdminUser", adminUserId);
 }
@@ -61,8 +62,8 @@ export async function resetTotpFor(ctx: Ctx, adminUserId: string) {
 // ── Sessions ──
 
 export async function securityOverview(ctx: Ctx) {
-  const admin = requireAdmin(ctx);
-  const everyone = admin.role === "ADMINISTRATOR";
+  const admin = requireAdmin(ctx, "STAFF", "security");
+  const everyone = can(admin.role, "ADMINISTRATOR", "security");
   const current = ctx.cookies["azz_admin"] ? hashToken(ctx.cookies["azz_admin"]) : null;
   const dayAgo = new Date(Date.now() - 86_400_000);
   const [sessions, staff, failures, recent] = await Promise.all([
@@ -83,9 +84,9 @@ export async function securityOverview(ctx: Ctx) {
 
 /** Signs a device out. Staff may end their own sessions; administrators may end anyone's. */
 export async function revokeSession(ctx: Ctx, sessionId: string) {
-  const admin = requireAdmin(ctx);
+  const admin = requireAdmin(ctx, "STAFF", "security");
   const session = await ctx.db.adminSession.findUnique({ where: { id: sessionId } });
-  if (!session || (session.adminUserId !== admin.id && admin.role !== "ADMINISTRATOR")) throw new AppError("NOT_FOUND", "Session not found.");
+  if (!session || (session.adminUserId !== admin.id && !can(admin.role, "ADMINISTRATOR", "security"))) throw new AppError("NOT_FOUND", "Session not found.");
   await ctx.db.adminSession.delete({ where: { id: sessionId } });
   await audit(ctx, "admin.session.revoked", "AdminUser", session.adminUserId);
 }

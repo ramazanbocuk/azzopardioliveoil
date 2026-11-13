@@ -3,7 +3,7 @@ import { refreshTracking } from "./fulfilment";
 import { releaseExpiredReservations } from "./checkout";
 import type { Db } from "./db";
 import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Env, type Transport } from "./notifications/channels";
-import { contactEmail, customerConfirmationEmail, customerShippedEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, passwordResetEmail } from "./notifications/messages";
+import { contactEmail, customerConfirmationEmail, customerShippedEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, passwordResetEmail, customerRefundEmail, staffAlertEmail, wholesaleApprovedEmail } from "./notifications/messages";
 
 /**
  * Background jobs (the outbox).
@@ -93,6 +93,43 @@ const handlers: Record<string, Handler> = {
     const email = passwordResetEmail(customer, now);
     if (!email) throw new NotConfigured("Signed links (APP_SECRET of at least 32 characters)");
     await sendEmail(email, job.dedupeKey, env, transport);
+  },
+
+  // Operational alerts go to the shop's notification address. They never block the action that raised them.
+  async "notify.owner.label_failed"(db, job, { env, transport }) {
+    const to = (await notificationSettings(db)).emailRecipient;
+    if (!to) throw new Skip("No email recipient is set in Settings.");
+    const payload = job.payload as { orderId?: string; carrier?: string; message?: string; unknown?: boolean };
+    const order = payload.orderId ? await db.order.findUnique({ where: { id: payload.orderId }, select: { id: true, number: true } }) : null;
+    if (!order) throw new Skip("The order no longer exists.");
+    const lines = [`Booking a ${payload.carrier ?? "carrier"} label for order ${order.number} did not succeed.`, payload.message ?? "", payload.unknown ? `The carrier did not answer, so it is not known whether a shipment was created. Check with ${payload.carrier ?? "the carrier"} before booking again.` : "The carrier refused the request. Nothing was booked."].filter(Boolean);
+    await sendEmail(staffAlertEmail(to, { subject: `Label not booked for ${order.number}`, heading: "A shipping label could not be booked", lines, path: `/admin/orders/${order.id}` }), job.dedupeKey, env, transport);
+  },
+
+  async "notify.owner.low_stock"(db, job, { env, transport }) {
+    const to = (await notificationSettings(db)).emailRecipient;
+    if (!to) throw new Skip("No email recipient is set in Settings.");
+    const id = (job.payload as { variantId?: string }).variantId;
+    const variant = id ? await db.variant.findUnique({ where: { id }, include: { product: { select: { name: true } } } }) : null;
+    if (!variant || !variant.isActive) throw new Skip("The product is no longer on sale.");
+    const available = variant.stock - variant.reserved;
+    if (available > variant.lowStockThreshold) throw new Skip("Stock was topped up before this alert was sent.");
+    const name = `${variant.product.name} ${variant.label}`;
+    await sendEmail(staffAlertEmail(to, { subject: available <= 0 ? `Out of stock: ${name}` : `Low stock: ${name}`, heading: available <= 0 ? "A product is out of stock" : "A product is running low", lines: [`${name} (${variant.sku})`, `Available to sell: ${available}. Alert level: ${variant.lowStockThreshold}.`], path: "/admin/inventory" }), job.dedupeKey, env, transport);
+  },
+
+  async "notify.customer.refund"(db, job, { env, transport }) {
+    const payload = job.payload as { orderId?: string; amountCents?: number; full?: boolean };
+    const order = payload.orderId ? await db.order.findUnique({ where: { id: payload.orderId } }) : null;
+    if (!order || !payload.amountCents) throw new Skip("The order no longer exists.");
+    await sendEmail(customerRefundEmail(order, payload.amountCents, payload.full === true), job.dedupeKey, env, transport);
+  },
+
+  async "notify.customer.wholesale_approved"(db, job, { env, transport }) {
+    const id = (job.payload as { customerId?: string }).customerId;
+    const customer = id ? await db.customer.findUnique({ where: { id } }) : null;
+    if (!customer || customer.erasedAt || customer.wholesaleStatus !== "APPROVED") throw new Skip("The account is no longer an approved wholesale account.");
+    await sendEmail(wholesaleApprovedEmail(customer), job.dedupeKey, env, transport);
   },
 
   async "email.contact"(db, job, { env, transport }) {

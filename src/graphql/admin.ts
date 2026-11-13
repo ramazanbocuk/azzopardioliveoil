@@ -58,7 +58,7 @@ builder.queryType({
       type: [AdminProductType],
       description: "All products, including hidden ones, with stock levels. Staff and above.",
       resolve: (_root, _args, ctx) => {
-        requireAdmin(ctx, "STAFF");
+        requireAdmin(ctx, "VIEW", "catalog");
         return ctx.db.product.findMany({ where: { deletedAt: null }, orderBy: { position: "asc" }, include: { variants: { orderBy: { position: "asc" } } } });
       },
     }),
@@ -88,7 +88,7 @@ builder.mutationType({
         note: t.arg.string(),
       },
       resolve: async (_root, args, ctx) => {
-        const admin = requireAdmin(ctx, "MANAGER");
+        const admin = requireAdmin(ctx, "MANAGER", "inventory");
         if (args.delta === 0 || Math.abs(args.delta) > 100_000) throw new AppError("BAD_INPUT", "Enter a non-zero quantity.", "delta");
         return ctx.db.$transaction(async (tx) => {
           // Stock may not drop below what unpaid orders are holding.

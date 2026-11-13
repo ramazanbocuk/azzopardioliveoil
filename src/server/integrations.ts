@@ -11,7 +11,7 @@ import { carrierStates } from "./shipping/registry";
 export type Integration = { name: string; purpose: string; connected: boolean; detail: string; missing: string[] };
 
 export function integrationStatus(ctx: Ctx, env: Record<string, string | undefined> = process.env): Integration[] {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "integrations");
   const missing = (...keys: string[]) => keys.filter((key) => !env[key]);
   const stripeMissing = missing("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET");
   const stripeMode = /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY ?? "") ? "Live mode: real money." : /^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY ?? "") ? "Test mode: no real money is taken." : "";

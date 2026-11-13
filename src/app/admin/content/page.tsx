@@ -3,6 +3,7 @@ import { Badge, Card, Check, Field, Flash, LinkButton, Page, Submit, Table, cell
 import { getSettings } from "@/server/admin";
 import { adminCtx } from "@/server/adminSession";
 import { listPosts } from "@/server/backoffice";
+import { can } from "@/server/permissions";
 import { saveContent } from "../actions";
 
 export const metadata = { title: "Website content" };
@@ -10,7 +11,7 @@ export const metadata = { title: "Website content" };
 export default async function ContentPage({ searchParams }: PageProps<"/admin/content">) {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  const [posts, settings, params] = await Promise.all([listPosts(ctx), ctx.admin.role === "ADMINISTRATOR" ? getSettings(ctx) : null, searchParams]);
+  const [posts, settings, params] = await Promise.all([listPosts(ctx), can(ctx.admin.role, "ADMINISTRATOR", "settings") ? getSettings(ctx) : null, searchParams]);
   const content = settings?.content ?? {};
   const text = (key: string) => (typeof content[key] === "string" ? (content[key] as string) : "");
 

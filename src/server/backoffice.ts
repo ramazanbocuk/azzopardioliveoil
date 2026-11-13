@@ -41,7 +41,7 @@ export function period(input: { from?: unknown; to?: unknown }, now = new Date()
 // ───────────────────────────── Inventory ─────────────────────────────
 
 export async function inventoryOverview(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "inventory");
   const [variants, movements] = await Promise.all([
     ctx.db.variant.findMany({ where: { product: { deletedAt: null } }, orderBy: [{ product: { name: "asc" } }, { position: "asc" }], include: { product: { select: { id: true, name: true } } } }),
     ctx.db.inventoryMovement.findMany({ orderBy: { createdAt: "desc" }, take: 60, include: { variant: { select: { sku: true, label: true, product: { select: { name: true } } } } } }),
@@ -51,18 +51,22 @@ export async function inventoryOverview(ctx: Ctx) {
     const available = variant.stock - variant.reserved;
     return { ...variant, available, low: variant.isActive && available <= variant.lowStockThreshold, valueCents: variant.stock * variant.priceCents };
   });
+  const costed = rows.filter((row) => row.costCents !== null);
   return {
     rows,
     unitsOnHand: rows.reduce((sum, row) => sum + row.stock, 0),
     unitsReserved: rows.reduce((sum, row) => sum + row.reserved, 0),
     retailValueCents: rows.reduce((sum, row) => sum + row.valueCents, 0),
     lowCount: rows.filter((row) => row.low).length,
+    // Valuation at cost covers only the variants whose unit cost has been entered; the rest are counted, not guessed.
+    costValueCents: costed.reduce((sum, row) => sum + row.stock * (row.costCents ?? 0), 0),
+    variantsWithoutCost: rows.filter((row) => row.costCents === null && row.stock > 0).length,
     movements: movements.map((movement) => ({ ...movement, by: movement.adminUserId ? (staff.get(movement.adminUserId) ?? "Former staff") : movement.reason === "SALE" ? "Sale" : "System" })),
   };
 }
 
 export async function exportInventoryCsv(ctx: Ctx) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "inventory");
   const { rows } = await inventoryOverview(ctx);
   await audit(ctx, "inventory.export", "Variant", null, { count: rows.length });
   return toCsv([["Product", "Variant", "SKU", "On hand", "Reserved", "Available", "Low-stock threshold", "Active", "Price"], ...rows.map((row) => [row.product.name, row.label, row.sku, row.stock, row.reserved, row.available, row.lowStockThreshold, row.isActive ? "yes" : "no", row.priceCents / 100])]);
@@ -73,7 +77,7 @@ export async function exportInventoryCsv(ctx: Ctx) {
 const PAYMENT_STATES = ["UNPAID", "PROCESSING", "PAID", "PARTIALLY_REFUNDED", "REFUNDED", "FAILED"] as const;
 
 export async function listPayments(ctx: Ctx, input: { status?: string; from?: string; to?: string; page?: number }) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "payments");
   const range = period(input);
   const status = PAYMENT_STATES.find((value) => value === input.status);
   const where: Prisma.PaymentWhereInput = { createdAt: { gte: range.from, lt: range.end }, ...(status ? { status } : {}) };
@@ -88,7 +92,7 @@ export async function listPayments(ctx: Ctx, input: { status?: string; from?: st
 }
 
 export async function listReturnsAndRefunds(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "returns");
   const [returns, refunds] = await Promise.all([
     ctx.db.returnRequest.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { order: { select: { id: true, number: true, email: true, shipFirstName: true, shipLastName: true, items: true } } } }),
     ctx.db.refund.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { payment: { select: { provider: true, order: { select: { id: true, number: true } } } } } }),
@@ -109,7 +113,7 @@ export async function listReturnsAndRefunds(ctx: Ctx) {
 const REVIEW_STATES = ["PENDING", "APPROVED", "REJECTED"] as const satisfies readonly ReviewStatus[];
 
 export async function listReviews(ctx: Ctx, status?: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "reviews");
   const filter = REVIEW_STATES.find((value) => value === status);
   const [rows, counts] = await Promise.all([
     ctx.db.review.findMany({ where: filter ? { status: filter } : {}, orderBy: { createdAt: "desc" }, take: 100, include: { product: { select: { name: true, slug: true } }, customer: { select: { firstName: true, lastName: true, email: true } } } }),
@@ -120,7 +124,7 @@ export async function listReviews(ctx: Ctx, status?: string) {
 
 /** Only approved reviews are shown on the storefront. A customer's words are never edited: approve or reject. */
 export async function setReviewStatus(ctx: Ctx, id: string, status: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "reviews");
   const next = REVIEW_STATES.find((value) => value === status);
   if (!next) throw new AppError("BAD_INPUT", "Choose approve or reject.");
   const review = await ctx.db.review.update({ where: { id }, data: { status: next } }).catch(() => null);
@@ -135,7 +139,7 @@ const num = (value: Money) => Number(value ?? 0);
 
 /** Sales by payment date. "Gross" is what customers paid, VAT included; refunds are shown separately, by refund date. */
 export async function salesReport(ctx: Ctx, input: { from?: string; to?: string }) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "reports");
   const range = period(input);
   const { from, end } = range;
   const [totals, daily, countries, products, methods, refunds, customers] = await Promise.all([
@@ -203,7 +207,7 @@ export async function exportSalesCsv(ctx: Ctx, input: { from?: string; to?: stri
  * shop does not issue yet.
  */
 export async function vatReport(ctx: Ctx, input: { from?: string; to?: string }) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "accounting");
   const range = period(input);
   const [rows, refunds] = await Promise.all([
     ctx.db.$queryRaw<{ country: string; rate: number | null; orders: bigint; gross: Money; tax: Money; shipping_tax: Money }[]>`
@@ -257,12 +261,12 @@ const supplierInput = z.object({
 });
 
 export async function listSuppliers(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "suppliers");
   return ctx.db.supplier.findMany({ orderBy: [{ isActive: "desc" }, { name: "asc" }], include: { _count: { select: { batches: true } }, batches: { orderBy: { createdAt: "desc" }, take: 5, select: { id: true, lotNumber: true } } } });
 }
 
 export async function saveSupplier(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "suppliers");
   const data = parse(supplierInput, input);
   const supplier = id ? await ctx.db.supplier.update({ where: { id }, data }) : await ctx.db.supplier.create({ data });
   await audit(ctx, id ? "supplier.update" : "supplier.create", "Supplier", supplier.id, { name: supplier.name });
@@ -271,7 +275,7 @@ export async function saveSupplier(ctx: Ctx, id: string | null, input: unknown) 
 
 /** A supplier with lots on record is kept (deactivated) so traceability is never broken; one without is removed. */
 export async function removeSupplier(ctx: Ctx, id: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "suppliers");
   const lots = await ctx.db.batch.count({ where: { supplierId: id } });
   if (lots > 0) await ctx.db.supplier.update({ where: { id }, data: { isActive: false } });
   else await ctx.db.supplier.delete({ where: { id } });
@@ -287,7 +291,7 @@ export async function removeSupplier(ctx: Ctx, id: string) {
  * only be as complete as the lot numbers staff recorded on order lines.
  */
 export async function traceLot(ctx: Ctx, rawLot: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "traceability");
   const lotNumber = rawLot.trim().toUpperCase();
   if (!lotNumber) return null;
   const [batch, lines, unrecorded] = await Promise.all([
@@ -299,7 +303,7 @@ export async function traceLot(ctx: Ctx, rawLot: string) {
 }
 
 export async function exportLotTraceCsv(ctx: Ctx, rawLot: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "traceability");
   const trace = await traceLot(ctx, rawLot);
   if (!trace) throw new AppError("BAD_INPUT", "Enter a lot number.");
   await audit(ctx, "lot.trace.export", "Batch", trace.batch?.id ?? null, { lotNumber: trace.lotNumber, orders: trace.orders });
@@ -323,19 +327,19 @@ const postInput = z.object({
 });
 
 export async function listPosts(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "content");
   return ctx.db.journalPost.findMany({ orderBy: [{ isPublished: "desc" }, { updatedAt: "desc" }] });
 }
 
 export async function getPost(ctx: Ctx, id: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "content");
   const post = await ctx.db.journalPost.findUnique({ where: { id } });
   if (!post) throw new AppError("NOT_FOUND", "Article not found.");
   return post;
 }
 
 export async function savePost(ctx: Ctx, id: string | null, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "content");
   const data = parse(postInput, input);
   const clash = await ctx.db.journalPost.findUnique({ where: { slug: data.slug } });
   if (clash && clash.id !== id) throw new AppError("BAD_INPUT", "Another article already uses that address.", "slug");
@@ -347,7 +351,7 @@ export async function savePost(ctx: Ctx, id: string | null, input: unknown) {
 }
 
 export async function deletePost(ctx: Ctx, id: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "content");
   await ctx.db.journalPost.delete({ where: { id } });
   await audit(ctx, "content.post.delete", "JournalPost", id);
 }
@@ -364,26 +368,29 @@ const wholesaleInput = z.object({
 });
 
 export async function listWholesale(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "wholesale");
   const accounts = await ctx.db.customer.findMany({ where: { erasedAt: null, wholesaleStatus: { not: "NONE" } }, orderBy: [{ wholesaleStatus: "asc" }, { companyName: "asc" }], include: { orders: { where: { paidAt: { not: null } }, select: { totalCents: true } } } });
   return accounts.map((account) => ({ ...account, paidOrders: account.orders.length, spentCents: account.orders.reduce((sum, order) => sum + order.totalCents, 0) }));
 }
 
 /** Sets a customer's trade terms. An approved account gets its discount on goods automatically at checkout. */
 export async function setWholesale(ctx: Ctx, customerId: string, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "wholesale");
   const data = parse(wholesaleInput, input);
   if (data.wholesaleStatus === "APPROVED" && !data.companyName) throw new AppError("BAD_INPUT", "Enter the company name before approving a wholesale account.", "companyName");
   const customer = await ctx.db.customer.findFirst({ where: { id: customerId, erasedAt: null } });
   if (!customer) throw new AppError("NOT_FOUND", "Customer not found.");
   const wholesaleDiscountBps = data.wholesaleStatus === "APPROVED" ? Math.round(data.discountPercent * 100) : 0;
   await ctx.db.customer.update({ where: { id: customerId }, data: { wholesaleStatus: data.wholesaleStatus, companyName: data.companyName, companyVatNumber: data.companyVatNumber, wholesaleDiscountBps, wholesaleNote: data.wholesaleNote } });
+  if (data.wholesaleStatus === "APPROVED" && customer.wholesaleStatus !== "APPROVED") {
+    await ctx.db.outboxJob.createMany({ data: [{ kind: "notify.customer.wholesale_approved", dedupeKey: `notify.customer.wholesale_approved:${customerId}:${Date.now()}`, payload: { customerId } }], skipDuplicates: true });
+  }
   await audit(ctx, "customer.wholesale", "Customer", customerId, { status: data.wholesaleStatus, discountBps: wholesaleDiscountBps });
 }
 
 /** Opens trade terms for an existing customer account, found by its email address. */
 export async function setWholesaleByEmail(ctx: Ctx, email: string, input: unknown) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "wholesale");
   const customer = await ctx.db.customer.findFirst({ where: { email: email.trim().toLowerCase(), erasedAt: null }, select: { id: true } });
   if (!customer) throw new AppError("BAD_INPUT", "No customer account uses that email address. The customer must create an account on the shop first.", "email");
   await setWholesale(ctx, customer.id, input);
@@ -392,7 +399,7 @@ export async function setWholesaleByEmail(ctx: Ctx, email: string, input: unknow
 // ───────────────────────────── Marketing ─────────────────────────────
 
 export async function marketingOverview(ctx: Ctx) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "marketing");
   const dayAgo = new Date(Date.now() - DAY);
   const [subscribers, discounts, usage, carts] = await Promise.all([
     ctx.db.newsletterSubscriber.groupBy({ by: ["status"], _count: true }),
@@ -428,13 +435,13 @@ export function sniffImage(data: Uint8Array): "image/jpeg" | "image/png" | "imag
 }
 
 export async function listProductPhotos(ctx: Ctx, productId: string) {
-  requireAdmin(ctx);
+  requireAdmin(ctx, "VIEW", "catalog");
   return ctx.db.productImage.findMany({ where: { productId }, orderBy: { position: "asc" }, select: { id: true, url: true, alt: true, position: true, mime: true, bytes: true } });
 }
 
 /** Stores a photo in the database. JPEG, PNG or WebP up to 4 MB; anything else is refused, whatever its file name says. */
 export async function addProductPhoto(ctx: Ctx, productId: string, file: { data: Uint8Array; alt: string }) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "catalog");
   if (file.data.length === 0) throw new AppError("BAD_INPUT", "Choose a photo to upload.");
   if (file.data.length > PHOTO_MAX_BYTES) throw new AppError("BAD_INPUT", "That photo is larger than 4 MB. Export it smaller and try again.");
   const mime = sniffImage(file.data);
@@ -451,9 +458,137 @@ export async function addProductPhoto(ctx: Ctx, productId: string, file: { data:
 }
 
 export async function removeProductPhoto(ctx: Ctx, imageId: string) {
-  requireAdmin(ctx, "MANAGER");
+  requireAdmin(ctx, "MANAGER", "catalog");
   const image = await ctx.db.productImage.delete({ where: { id: imageId }, select: { productId: true } }).catch(() => null);
   if (!image) throw new AppError("NOT_FOUND", "Photo not found.");
   await audit(ctx, "product.photo.remove", "Product", image.productId, { imageId });
   return image.productId;
+}
+
+// ───────────────────────────── Purchase orders ─────────────────────────────
+
+const purchaseInput = z.object({
+  supplierId: z.string().min(1, "Choose a supplier."),
+  expectedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish().or(z.literal("")).transform((value) => (value ? new Date(`${value}T00:00:00Z`) : null)),
+  notes: optionalText(1000),
+  lines: z.array(z.object({ sku: z.string().trim().min(1), quantity: z.coerce.number().int().min(1).max(100_000), unitCostCents: z.coerce.number().int().min(0).max(10_000_000) })).min(1, "Add at least one line with a quantity."),
+});
+
+export const purchaseNumber = (sequence: number) => `PO-${String(sequence).padStart(4, "0")}`;
+
+export async function listPurchaseOrders(ctx: Ctx) {
+  requireAdmin(ctx, "VIEW", "inventory");
+  const orders = await ctx.db.purchaseOrder.findMany({ orderBy: { createdAt: "desc" }, take: 60, include: { supplier: { select: { name: true } }, lines: { include: { variant: { select: { sku: true, label: true, product: { select: { name: true } } } } } } } });
+  return orders.map((order) => ({ ...order, number: purchaseNumber(order.sequence), units: order.lines.reduce((sum, line) => sum + line.quantity, 0), costCents: order.lines.reduce((sum, line) => sum + line.quantity * line.unitCostCents, 0) }));
+}
+
+export async function createPurchaseOrder(ctx: Ctx, input: unknown) {
+  const admin = requireAdmin(ctx, "MANAGER", "inventory");
+  const data = parse(purchaseInput, input);
+  const supplier = await ctx.db.supplier.findFirst({ where: { id: data.supplierId, isActive: true } });
+  if (!supplier) throw new AppError("BAD_INPUT", "Choose an active supplier.", "supplierId");
+  const variants = await ctx.db.variant.findMany({ where: { sku: { in: data.lines.map((line) => line.sku) } }, select: { id: true, sku: true } });
+  const lines = data.lines.map((line) => {
+    const variant = variants.find((candidate) => candidate.sku === line.sku);
+    if (!variant) throw new AppError("BAD_INPUT", `There is no product with SKU ${line.sku}.`);
+    return { variantId: variant.id, quantity: line.quantity, unitCostCents: line.unitCostCents };
+  });
+  const order = await ctx.db.purchaseOrder.create({ data: { supplierId: supplier.id, expectedAt: data.expectedAt, notes: data.notes, adminUserId: admin.id, lines: { create: lines } } });
+  await audit(ctx, "purchase.create", "PurchaseOrder", order.id, { number: purchaseNumber(order.sequence), supplier: supplier.name, lines: lines.length });
+  return order.id;
+}
+
+/** Marks a draft as sent to the supplier, or cancels an order that has not arrived. Stock does not change. */
+export async function setPurchaseOrderStatus(ctx: Ctx, id: string, status: "ORDERED" | "CANCELLED") {
+  requireAdmin(ctx, "MANAGER", "inventory");
+  const from = status === "ORDERED" ? ["DRAFT"] : ["DRAFT", "ORDERED"];
+  const changed = await ctx.db.purchaseOrder.updateMany({ where: { id, status: { in: from } }, data: { status, ...(status === "ORDERED" ? { orderedAt: new Date() } : {}) } });
+  if (changed.count !== 1) throw new AppError("BAD_INPUT", status === "ORDERED" ? "Only a draft can be marked as ordered." : "A received or cancelled purchase order cannot be cancelled.");
+  await audit(ctx, `purchase.${status.toLowerCase()}`, "PurchaseOrder", id);
+}
+
+/**
+ * Books the delivery into stock, once: every line is added to stock with a
+ * ledger entry naming the purchase order, and its unit cost becomes the
+ * product's recorded cost. Receiving the same order twice is refused.
+ */
+export async function receivePurchaseOrder(ctx: Ctx, id: string) {
+  const admin = requireAdmin(ctx, "MANAGER", "inventory");
+  await ctx.db.$transaction(async (tx) => {
+    const claimed = await tx.purchaseOrder.updateMany({ where: { id, status: { in: ["DRAFT", "ORDERED"] } }, data: { status: "RECEIVED", receivedAt: new Date() } });
+    if (claimed.count !== 1) throw new AppError("BAD_INPUT", "This purchase order has already been received or was cancelled.");
+    const order = await tx.purchaseOrder.findUniqueOrThrow({ where: { id }, include: { lines: true } });
+    for (const line of order.lines) {
+      await tx.variant.update({ where: { id: line.variantId }, data: { stock: { increment: line.quantity }, costCents: line.unitCostCents } });
+      await tx.inventoryMovement.create({ data: { variantId: line.variantId, delta: line.quantity, reason: "RECEIVED", adminUserId: admin.id, note: purchaseNumber(order.sequence) } });
+    }
+  });
+  await audit(ctx, "purchase.received", "PurchaseOrder", id);
+}
+
+// ───────────────────────────── Customer relationship ─────────────────────────────
+
+export const SEGMENTS = { all: "Everyone", repeat: "Repeat customers (2+ paid orders)", vip: "Tagged VIP", wholesale: "Wholesale accounts", consent: "Agreed to marketing", none: "Account, no paid order" } as const;
+export type Segment = keyof typeof SEGMENTS;
+
+/** Customer accounts with what each has spent. Guests who never made an account are not listed here: they appear on their orders. */
+export async function customerDirectory(ctx: Ctx, input: { q?: string; segment?: string; tag?: string }) {
+  requireAdmin(ctx, "VIEW", "customers");
+  const term = input.q?.trim();
+  const segment = (Object.keys(SEGMENTS) as Segment[]).find((key) => key === input.segment) ?? "all";
+  const tag = input.tag?.trim();
+  const paid = { paidAt: { not: null } } as const;
+  const where: Prisma.CustomerWhereInput = {
+    erasedAt: null,
+    ...(term ? { OR: [{ email: { contains: term, mode: "insensitive" } }, { lastName: { contains: term, mode: "insensitive" } }, { firstName: { contains: term, mode: "insensitive" } }, { companyName: { contains: term, mode: "insensitive" } }] } : {}),
+    ...(tag ? { tags: { has: tag } } : {}),
+    ...(segment === "vip" ? { tags: { has: "VIP" } } : {}),
+    ...(segment === "wholesale" ? { wholesaleStatus: "APPROVED" } : {}),
+    ...(segment === "consent" ? { marketingOptIn: true } : {}),
+    ...(segment === "none" ? { orders: { none: paid } } : {}),
+  };
+  const customers = await ctx.db.customer.findMany({ where, orderBy: { createdAt: "desc" }, take: 300, include: { orders: { where: paid, select: { totalCents: true, paidAt: true } } } });
+  const rows = customers
+    .map((customer) => {
+      const spent = customer.orders.reduce((sum, order) => sum + order.totalCents, 0);
+      const last = customer.orders.reduce<Date | null>((latest, order) => (order.paidAt && (!latest || order.paidAt > latest) ? order.paidAt : latest), null);
+      return { id: customer.id, name: `${customer.firstName} ${customer.lastName}`, email: customer.email, companyName: customer.companyName, tags: customer.tags, wholesale: customer.wholesaleStatus === "APPROVED", marketingOptIn: customer.marketingOptIn, createdAt: customer.createdAt, paidOrders: customer.orders.length, spentCents: spent, averageCents: customer.orders.length ? Math.round(spent / customer.orders.length) : 0, lastOrderAt: last };
+    })
+    .filter((row) => segment !== "repeat" || row.paidOrders >= 2);
+  const tags = [...new Set((await ctx.db.customer.findMany({ where: { erasedAt: null, NOT: { tags: { isEmpty: true } } }, select: { tags: true } })).flatMap((customer) => customer.tags))].sort();
+  return { rows: rows.slice(0, 100), matched: rows.length, segment, tags };
+}
+
+/** Everything staff need about one customer: what they bought, spent and were refunded, and what staff have noted. */
+export async function customerProfile(ctx: Ctx, id: string) {
+  requireAdmin(ctx, "VIEW", "customers");
+  const customer = await ctx.db.customer.findUnique({ where: { id }, include: { addresses: true, notes: { orderBy: { createdAt: "desc" } }, orders: { orderBy: { placedAt: "desc" }, include: { payments: { include: { refunds: true } }, returns: { select: { id: true } } } } } });
+  if (!customer) throw new AppError("NOT_FOUND", "Customer not found.");
+  const paid = customer.orders.filter((order) => order.paidAt);
+  const spent = paid.reduce((sum, order) => sum + order.totalCents, 0);
+  const refunded = customer.orders.flatMap((order) => order.payments.flatMap((payment) => payment.refunds)).reduce((sum, refund) => sum + refund.amountCents, 0);
+  const staff = new Map((await ctx.db.adminUser.findMany({ where: { id: { in: customer.notes.map((note) => note.adminUserId).filter((value): value is string => !!value) } }, select: { id: true, name: true } })).map((user) => [user.id, user.name]));
+  return {
+    customer,
+    notes: customer.notes.map((note) => ({ ...note, by: note.adminUserId ? (staff.get(note.adminUserId) ?? "Former staff") : "System" })),
+    metrics: { paidOrders: paid.length, spentCents: spent, lifetimeCents: spent - refunded, averageCents: paid.length ? Math.round(spent / paid.length) : 0, refundedCents: refunded, returns: customer.orders.reduce((sum, order) => sum + order.returns.length, 0), firstOrderAt: paid.at(-1)?.paidAt ?? null, lastOrderAt: paid[0]?.paidAt ?? null },
+  };
+}
+
+export async function addCustomerNote(ctx: Ctx, customerId: string, body: string) {
+  const admin = requireAdmin(ctx, "STAFF", "customers");
+  const text = body.trim();
+  if (text.length < 1 || text.length > 2000) throw new AppError("BAD_INPUT", "Write a note of up to 2000 characters.");
+  if (!(await ctx.db.customer.findFirst({ where: { id: customerId, erasedAt: null }, select: { id: true } }))) throw new AppError("NOT_FOUND", "Customer not found.");
+  await ctx.db.customerNote.create({ data: { customerId, adminUserId: admin.id, body: text } });
+  await audit(ctx, "customer.note", "Customer", customerId);
+}
+
+/** Replaces a customer's tags. Tags are short labels: at most ten, tidied and de-duplicated. */
+export async function setCustomerTags(ctx: Ctx, customerId: string, raw: string) {
+  requireAdmin(ctx, "STAFF", "customers");
+  const tags = [...new Set(raw.split(/[,;\n]+/).map((tag) => tag.trim().replace(/\s+/g, " ")).filter(Boolean).map((tag) => (tag.toLowerCase() === "vip" ? "VIP" : tag.slice(0, 30))))].slice(0, 10);
+  const updated = await ctx.db.customer.updateMany({ where: { id: customerId, erasedAt: null }, data: { tags } });
+  if (updated.count !== 1) throw new AppError("NOT_FOUND", "Customer not found.");
+  await audit(ctx, "customer.tags", "Customer", customerId, { tags });
 }

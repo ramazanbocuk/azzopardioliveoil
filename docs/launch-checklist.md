@@ -41,16 +41,25 @@ The software cannot do these for you. Each is needed before taking real orders.
 
 ## Known software gaps at hand-over
 
-Built since the first hand-over: the 22-section admin, eleven order statuses, part-shipments, carrier adapters, sales and VAT reports, suppliers, lot recall, reviews moderation, wholesale terms, journal articles, announcement, product photo upload and staff two-factor sign-in.
+Measured against the full enterprise brief. "Not proven" means written and tested against documentation, never against the real service.
 
-Still not built, or not proven:
+**Not proven**
+- DHL Express, FedEx and bpost adapters: no carrier account exists, so none has called a carrier. Label format names and the bpost national box must be confirmed on a first test booking. See `shipping.md`.
+- Stripe live mode, delayed payment methods, and email to addresses other than your own (needs a verified domain).
 
-- **Carriers:** DHL Express, FedEx and bpost adapters are written from the carriers' documentation and have never called a carrier. Each needs an account and a test booking. See `docs/shipping.md`.
-- **Photos on the shop:** photos can be uploaded and are stored, but product pages still show the illustrated bottle.
-- **Content:** home page sections, story pages and legal pages are edited in code, not in the admin.
-- **Wholesale:** no application form for customers, no invoice payment terms, no minimum quantities or tiered price lists.
-- **Marketing:** no newsletter sending, no abandoned-cart reminders, no advertising or analytics tags.
-- **Accounting:** reports are working figures, not a VAT return; no credit notes; no separate invoice numbering; no link to accounting software.
-- **Security:** two-factor sign-in is optional per person and cannot be made compulsory; no single sign-on.
-- **Also:** Mollie, multilingual pages, saved customer addresses, bulk invoice and label printing, carrier pickup booking and return labels, tracking of refunds or disputes made directly in Stripe.
-- **Admin API:** the admin screens call the service layer directly; the admin GraphQL endpoint still covers sign-in, products and stock only.
+**Not built**
+- *Payments:* PayPal as its own integration (it can be switched on inside Stripe Checkout), Mollie, recording the provider's fees, picking up refunds or disputes made directly in the Stripe Dashboard.
+- *Shipping:* carrier push updates, pickup booking, return labels, insurance, one-file bulk label printing, ZPL labels, rules by package size.
+- *Inventory:* several warehouses, part-received purchase orders, packaging variants, barcode scanning.
+- *Products:* dimensions, VAT category per product (one rate per destination country applies to everything), videos, bundles, gift sets, subscriptions, translated product pages.
+- *Wholesale:* separate price lists, minimum quantities, volume tiers, VAT-number validation with VIES, payment on invoice, a customer application form.
+- *Accounting:* credit notes, separate invoice numbering, PDF files (invoices print from the browser), OSS returns, profitability (needs fees and full cost data).
+- *Marketing:* sending newsletters, abandoned-cart emails, analytics or advertising tags, conversion rate.
+- *Content:* home page, story pages and legal pages are edited in code. Uploaded product photos are stored but not yet shown on the shop.
+- *Security:* compulsory two-factor sign-in, suspicious-sign-in alerts, single sign-on.
+- *API:* the admin screens call the service layer directly. The admin GraphQL endpoint covers sign-in, products and stock only; it is not a full documented admin API.
+- *Operations:* staging environment, error-tracking and performance monitoring services, load testing, a penetration test.
+- *Emails:* order-processing and delivery-confirmation emails, failed-payment email to the customer, branded email design beyond the current template.
+
+**Needs a person, not software**
+- Everything under "Legal and tax" above, FAVV/AFSCA registration, packaging obligations, customs advice per destination, an EORI number for exports.

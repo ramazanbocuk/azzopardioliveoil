@@ -75,6 +75,9 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
                     <Field label="Was (€)" name="compareAtCents" inputMode="decimal" defaultValue={euros(variant?.compareAtCents)} />
                     <Field label="Weight (g)" name="weightGrams" inputMode="numeric" required defaultValue={variant?.weightGrams} />
                     <Field label="Low at" name="lowStockThreshold" inputMode="numeric" defaultValue={variant?.lowStockThreshold ?? 6} />
+                    <Field label="Barcode" name="barcode" inputMode="numeric" defaultValue={variant?.barcode ?? ""} />
+                    <Field label="Unit cost (€)" name="costCents" inputMode="decimal" defaultValue={euros(variant?.costCents)} />
+                    <Field label="Location" name="location" defaultValue={variant?.location ?? ""} />
                     <Check label="On sale" name="isActive" defaultChecked={variant?.isActive ?? true} />
                     <Submit variant={variant ? "secondary" : "primary"}>{variant ? "Save" : "Add"}</Submit>
                   </form>

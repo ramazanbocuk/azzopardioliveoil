@@ -94,7 +94,7 @@ export function createDhlExpress(env: Env, transport: CarrierTransport): Shippin
         productCode: service,
         accounts: [{ typeCode: "shipper", number: account }],
         customerReferences: [{ value: request.reference.slice(0, 35), typeCode: "CU" }],
-        outputImageProperties: { encodingFormat: "pdf", imageOptions: [{ typeCode: "label", templateName: "ECOM26_84_001" }] },
+        outputImageProperties: { encodingFormat: "pdf", imageOptions: [{ typeCode: "label", templateName: request.labelFormat === "A4" ? "ECOM26_84_A4_001" : "ECOM26_84_001" }] },
         customerDetails: { shipperDetails: party(request.sender), receiverDetails: party(request.recipient) },
         content: {
           packages: packages(request).map((box) => ({ ...box, customerReferences: [{ value: request.reference.slice(0, 35), typeCode: "CU" }] })),

@@ -1,0 +1,77 @@
+# Administrator's manual
+
+How to run the shop from the admin panel at `/admin`. For setting up accounts and keys see `deployment.md` and `shipping.md`; for when something breaks see `operations.md`.
+
+## Signing in
+
+Sign in with your email and password. If you have turned on two-factor sign-in (Security), enter the 6-digit code from your authenticator app as well. Five wrong passwords lock an address for 15 minutes. A lost phone: an administrator resets your two-factor sign-in under Security.
+
+## The daily round
+
+1. **Dashboard** — today's orders, revenue, low stock, orders waiting to ship.
+2. **Shipping & fulfilment** — everything paid and not yet sent, oldest first.
+3. Open an order → **Start processing** → pack → record the **lot** on each line → **Mark ready**.
+4. **Book a carrier label** (enter boxes and weight → Compare services and prices → Book label → Print label), or **Record a shipment by hand** if no carrier is connected.
+5. The customer is emailed the tracking link. Tracking is re-read every two hours and the order becomes Delivered when the carrier says so.
+
+To send many at once: tick the orders on Shipping & fulfilment, choose a carrier and service, **Book labels**. Each order goes as one box weighing its goods plus the packaging weight from Settings.
+
+## Orders
+
+- **Statuses** are worked out from payment and fulfilment; you never set one by hand. Payment: unpaid, processing, paid, partially refunded, refunded, failed. Fulfilment: unfulfilled, processing, ready, partially shipped, shipped, delivered.
+- **Filters**: status, payment, fulfilment, country, dates; search by order number, email, name, SKU or tracking number. **Export** downloads exactly what the filters show.
+- **Bulk actions**: move to processing, mark ready, mark delivered. Orders that cannot take the step are skipped and listed.
+- **Part-shipments**: set the units per line when recording or booking; the order is Shipped only when every unit has left.
+- **Documents**: Invoice, Packing slip, Commercial invoice (for parcels leaving the EU). Print from the browser; "Save as PDF" gives a PDF.
+- **Refund** (administrators and the accountant): sent through the payment provider first, recorded only if it succeeds; the customer is emailed.
+- **Messages**: every email and alert for the order, with sent, skipped or failed and why.
+- **Timeline**: who did what and when. Entries marked "staff only" are not shown to the customer.
+
+## If a label booking goes wrong
+
+- **The carrier refused** (bad address, missing data): its own message is shown, nothing was booked, fix and try again.
+- **The carrier did not answer**: the order shows a red notice and booking is blocked for those items. Look in the carrier's own system. If a shipment exists, cancel it there or record it by hand. Then press **Release**. This is what stops a label being paid for twice.
+- **Cancel a booked label**: on the shipment, while it is still "label created". DHL has no cancel API: it is cancelled in the shop only, and a label never handed over is not charged.
+
+## Products and stock
+
+- **Products**: name, copy, label facts (origin, variety, ingredients, storage), customs code and origin, variants with price, sale price, weight, barcode, unit cost, shelf location; photos.
+- **Inventory**: on hand, held for unpaid orders, available, value at cost; adjust with a reason. Every change is in the ledger with who made it.
+- **Purchasing** (from Inventory): create a purchase order for a supplier, mark it ordered, **Receive into stock** when it arrives. Receiving adds the units and records the unit cost, once.
+- **Low stock**: when a sale takes a product to its alert level, one email a day goes to the notification address.
+
+## Traceability and recall
+
+- **Lots**: create each lot with its product, supplier, grove, mill and dates. Publishing a lot makes it visible to customers who enter its number.
+- **Food traceability → Trace a lot**: every order that received it, with customer contact details, and an export. It is only as complete as the lot numbers recorded on order lines when packing.
+- A recall is a legal process. The list tells you who to contact; your food-safety adviser and the authority tell you what you must do.
+
+## Customers and wholesale
+
+- **Customers**: accounts with spend, average order, last order; segments (repeat, VIP, wholesale, marketing consent); tags and staff notes. Notes are never shown to the customer but are part of their data if they ask for a copy.
+- **Wholesale**: approve an existing account with a company name and a discount. It applies automatically when they are signed in and never combines with a code. They are emailed on approval.
+- **Erase personal data** (administrators): removes the person's details, notes and tags; orders are kept for the legal retention period, detached from the account.
+
+## Money and reports
+
+- **Payments**: every payment and refund for a period.
+- **Analytics & reports**: sales by day, product, country, payment method; first-time and returning; export.
+- **Accounting & VAT**: VAT by destination and rate; export for the accountant. Working figures, not a VAT return.
+- **Shipping rates & VAT**: zones (any country codes), weight bands, free-shipping thresholds, VAT rate per country. Checkout offers exactly the countries that have a zone with an active rate.
+
+## Staff and security
+
+- **Staff & permissions**: create accounts, set roles. Roles: super administrator, administrator, operations manager, warehouse manager, shipping manager, customer support, accountant, marketing manager, read-only analyst (plus manager and staff, kept for older accounts). The screen shows what each can do.
+- **Security**: your two-factor sign-in, signed-in devices (end a session to sign it out), failed sign-ins, security events.
+- **Audit log**: every staff action.
+- **Offboarding**: deactivate the account under Staff. It is signed out everywhere at once.
+
+## Settings
+
+- **System settings**: legal name, address, VAT number (printed on invoices); shipping origin, label printer (thermal 4×6 or A4), packaging weight, rate suggestion; notification recipients.
+- **Integrations**: what is configured. Keys are set where the site is hosted, never in this panel.
+- **Website content**: journal articles, announcement band.
+
+## What the panel cannot do
+
+See "Known software gaps" in `launch-checklist.md`.
