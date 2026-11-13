@@ -93,7 +93,7 @@ describe("whether the assistant answers at all", () => {
     await refused(saveAssistantSettings(boss, { customerEnabled: true, monthlyBudgetDollars: "" }), "BAD_INPUT");
     await refused(saveAssistantSettings(boss, { customerEnabled: true, monthlyBudgetDollars: "lots" }), "BAD_INPUT");
     await saveAssistantSettings(boss, { customerEnabled: true, monthlyBudgetDollars: "49,50", extraInstructions: "We are closed on 25 December." });
-    expect((await db.setting.findUniqueOrThrow({ where: { key: "assistant" } })).value).toEqual({ customerEnabled: true, monthlyBudgetCents: 4950, extraInstructions: "We are closed on 25 December." });
+    expect((await db.setting.findUniqueOrThrow({ where: { key: "assistant" } })).value).toEqual({ customerEnabled: true, staffEnabled: false, monthlyBudgetCents: 4950, extraInstructions: "We are closed on 25 December." });
     expect(costMicros("claude-opus-5-5", { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(24_000_000); // $4 in, $20 out
     expect(costMicros("a-model-not-in-the-table", USAGE)).toBeGreaterThan(costMicros("claude-opus-5-5", USAGE)); // unknown models are costed high, never low
   });

@@ -38,6 +38,7 @@ export default async function AssistantPage({ searchParams }: PageProps<"/admin/
         <form action={saveAssistant} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Check label="Show the assistant on the shop" name="customerEnabled" defaultChecked={data.settings.customerEnabled} disabled={!mayChange} />
+            <Check label="Let staff use the staff assistant" name="staffEnabled" defaultChecked={data.settings.staffEnabled} disabled={!mayChange} />
             <Field label="Monthly budget (US dollars)" name="monthlyBudgetDollars" inputMode="decimal" defaultValue={data.settings.monthlyBudgetCents ? (data.settings.monthlyBudgetCents / 100).toFixed(2) : ""} placeholder="50" disabled={!mayChange} hint="The provider bills in dollars. Counted across the calendar month." />
           </div>
           <TextArea
@@ -110,6 +111,28 @@ export default async function AssistantPage({ searchParams }: PageProps<"/admin/
           </Table>
         </Card>
       </div>
+
+      <Card
+        title="Staff assistant: every proposal"
+        description={`The staff assistant cannot change money, stock or an order; it can only propose, and a person approves. This is every proposal it has made, to anyone. This month: ${data.staff.conversations} conversation(s), estimated cost $${(data.staff.spentMicros / 1_000_000).toFixed(2)}. ${data.staff.state.available ? "It is answering staff." : "It is not answering staff."}`}
+      >
+        <Table head={["When", "Ref", "Made to", "What", "State", "Outcome"]} empty={data.staff.proposals.length === 0 ? "No proposal has been made." : undefined}>
+          {data.staff.proposals.map((proposal) => (
+            <tr key={proposal.id}>
+              <td className="whitespace-nowrap">
+                <Link href={`/admin/assistant/${proposal.conversationId}`} className={cellLink}>
+                  {dateTime(proposal.createdAt)}
+                </Link>
+              </td>
+              <td className="whitespace-nowrap">{proposal.reference}</td>
+              <td>{proposal.madeTo}</td>
+              <td className="min-w-[18rem]">{proposal.summary}</td>
+              <td className="whitespace-nowrap">{proposal.status}</td>
+              <td>{proposal.result ?? "—"}</td>
+            </tr>
+          ))}
+        </Table>
+      </Card>
 
       <Card title="Its standing instructions" description="Exactly what the model is told before every conversation. These are part of the application and are changed by a developer, so that a rule such as “never invent a laboratory value” cannot be edited away from this screen.">
         <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap border border-ink/10 bg-stone-300/20 p-4 font-sans text-[0.875rem] leading-relaxed">{data.instructions}</pre>

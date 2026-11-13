@@ -1,11 +1,18 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { Prisma, PrismaClient } from "@/generated/prisma/client";
 
 /**
  * One Prisma client per process. In development the instance is parked on
  * globalThis so hot reloads do not open a new connection pool each time.
+ *
+ * A parked client knows only the tables that existed when it was made. After
+ * a migration the regenerated client code is reloaded but the parked
+ * instance is not, and every query on a new table fails with "cannot read
+ * properties of undefined". So the instance is kept only while its list of
+ * tables matches the generated client's; otherwise it is replaced.
  */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; prismaModels?: string };
+const MODELS = Object.keys(Prisma.ModelName).sort().join(",");
 
 function createClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
@@ -14,7 +21,14 @@ function createClient(): PrismaClient {
 }
 
 export function getPrisma(): PrismaClient {
-  if (!globalForPrisma.prisma) globalForPrisma.prisma = createClient();
+  if (globalForPrisma.prisma && globalForPrisma.prismaModels !== MODELS) {
+    void globalForPrisma.prisma.$disconnect().catch(() => undefined);
+    globalForPrisma.prisma = undefined;
+  }
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createClient();
+    globalForPrisma.prismaModels = MODELS;
+  }
   return globalForPrisma.prisma;
 }
 

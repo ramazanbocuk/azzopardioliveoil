@@ -238,3 +238,28 @@ export async function textOf(ctx: Ctx, entity: Entity, id: string): Promise<Fiel
   if (!loading) cache.set(entity, (loading = publishedTranslations(ctx.db, entity, language)));
   return (await loading).get(id) ?? {};
 }
+
+/** A record found by its address name, with its English text, for whoever is about to translate it. */
+export async function findTranslatable(ctx: Ctx, entityName: string, slug: string, languageName: string) {
+  requireAdmin(ctx, "VIEW", "content");
+  const { entity } = target(entityName, languageName);
+  const record = (await sources(ctx.db, entity)).find((row) => row.slug === slug.trim().toLowerCase());
+  if (!record) throw new AppError("NOT_FOUND", `No ${entity} with the address name "${slug}".`);
+  const current = await getTranslation(ctx, entity, record.id, languageName);
+  return { id: record.id, title: record.title, english: record.fields, draft: current.draft, state: current.state, stateText: STATE_LABEL[current.state], fields: FIELDS[entity] };
+}
+
+/**
+ * Adds wording to a draft without touching the rest of it. Regulated fields
+ * (food-label wording) are refused: those are written by a person. Like
+ * every draft, nothing here reaches customers until a manager publishes it.
+ */
+export async function mergeTranslationDraft(ctx: Ctx, entityName: string, slug: string, languageName: string, changes: Fields) {
+  const found = await findTranslatable(ctx, entityName, slug, languageName);
+  const regulated = found.fields.filter((field) => field.regulated && changes[field.key] !== undefined).map((field) => field.label);
+  if (regulated.length > 0) throw new AppError("BAD_INPUT", `These fields are food-label wording and must be written by a person: ${regulated.join(", ")}.`);
+  const unknown = Object.keys(changes).filter((key) => !found.fields.some((field) => field.key === key));
+  if (unknown.length > 0) throw new AppError("BAD_INPUT", `Unknown field: ${unknown.join(", ")}.`);
+  await saveTranslationDraft(ctx, entityName, found.id, languageName, { ...found.draft, ...changes });
+  return { id: found.id, title: found.title, saved: Object.keys(changes) };
+}

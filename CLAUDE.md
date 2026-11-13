@@ -8,7 +8,7 @@ A bespoke ecommerce platform for Azzopardi (premium olive oil): one Next.js 16 a
 
 The master brief is being built in phases. `docs/platform-audit.md` has the audit, the architecture decisions and the phase plan. Phase 3 (languages) is built: `docs/internationalisation.md`. Phase 4 (producers, varieties, lab results per batch) is built: `docs/product-intelligence.md`. Phase 5 (several shipments per order, backorders, stock holds) is built: `docs/fulfilment.md`. Phase 6 (UPS adapter, tracking events, delivery problems) is built without a carrier account: `docs/shipping.md`.
 
-Phase 7 (customer assistant, knowledge base, support requests) is built but has never called the real model: `docs/assistant.md`.
+Phase 7 (customer assistant, knowledge base, support requests) is built but has never called the real model: `docs/assistant.md`. Phase 8 (staff assistant: read, draft, propose; approval queue) is built, with the same caveat; same document.
 
 ## Commands
 
@@ -29,6 +29,8 @@ Phase 7 (customer assistant, knowledge base, support requests) is built but has 
 - A laboratory value reaches customers only through `publicLabResults` (verified, published batch). Do not read `LabResult` directly in storefront code.
 - An optional number in a zod schema is `z.union([...]).optional()`, not a union containing `z.undefined()`: the latter makes the key required.
 - The model never touches the database. It can only call the tools in `src/server/ai/customerTools.ts`; each validates its input with zod, reads through the same services as the shop, and returns gaps as words ("not recorded"), never as empty fields the model could fill. No tool writes an order, a cart, a payment or a product.
+- A staff-assistant tool calls an admin service with the staff member's own `ctx`, never `ctx.db` for anything that service guards. A tool that changes money, stock or an order does not exist: add a kind to `src/server/ai/proposals.ts` instead, with the same level and area as the panel's button, and let a person approve it. Never add a tool or a proposal kind for deleting, prices, tax, staff, roles, settings, addresses, payment details or publishing.
+- A propose tool checks the role before it looks anything up, so a refusal reveals nothing.
 - Tools of one model turn run one after another, not in parallel (two calls in one turn once created two support requests).
 - Tests replace the model with `setModelProvider(script)`. They prove what the application does around the model, not how the model words an answer.
 - Report what is unproven. Carrier adapters (DHL, FedEx, bpost, UPS) have never called a carrier. Non-English text has not had a native review.

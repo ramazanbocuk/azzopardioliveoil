@@ -330,5 +330,3 @@ const requestHumanHelp: Tool = {
 export const supportReference = (sequence: number) => `S-${String(sequence).padStart(5, "0")}`;
 
 export const CUSTOMER_TOOLS: Tool[] = [searchProducts, getProduct, showProducts, proposeAddToCart, getShippingOptions, searchKnowledge, getMyOrders, requestHumanHelp];
-export const customerToolSpecs = (): ToolSpec[] => CUSTOMER_TOOLS.map((tool) => tool.spec);
-export const findCustomerTool = (name: string) => CUSTOMER_TOOLS.find((tool) => tool.spec.name === name);

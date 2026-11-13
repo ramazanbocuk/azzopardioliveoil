@@ -1,4 +1,6 @@
 import { purgeOldConversations } from "./ai/assistant";
+import { expireProposals } from "./ai/proposals";
+import { purgeOldStaffConversations } from "./ai/staffAssistant";
 import { afterShipment } from "./stock";
 import type { OutboxJob } from "@/generated/prisma/client";
 import { refreshTracking } from "./fulfilment";
@@ -258,6 +260,7 @@ export async function runScheduledWork(db: Db, options: Options = {}) {
   const jobs = await processJobs(db, options);
   const purged = await purgeExpired(db, options.now);
   const tracking = await refreshTracking(db, options.now);
-  const conversations = await purgeOldConversations(db, options.now);
-  return { releasedOrders: released, jobs, purged: { ...purged, conversations }, tracking };
+  const conversations = (await purgeOldConversations(db, options.now)) + (await purgeOldStaffConversations(db, options.now));
+  const proposals = await expireProposals(db, options.now);
+  return { releasedOrders: released, jobs, purged: { ...purged, conversations, proposals }, tracking };
 }

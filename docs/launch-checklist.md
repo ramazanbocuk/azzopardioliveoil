@@ -35,6 +35,7 @@ The software cannot do these for you. Each is needed before taking real orders.
 - [ ] One real end-to-end purchase with a live card, then refund it from the admin
 - [ ] One refund made in the Stripe Dashboard (test mode), checked to appear on the order within a minute
 - [ ] One real message through each channel
+- [ ] Staff assistant, before switching it on: the privacy policy and record of processing cover customer and order details being sent to Anthropic; the six test questions in `assistant.md` asked by an administrator and by a support account, and the answers checked
 - [ ] Customer assistant, before switching it on: the privacy policy names Anthropic as a processor and says conversations are kept (90 days for guests); a first session of real questions in each language read by a person; the test questions in `assistant.md` asked and the answers checked
 - [ ] One practice database restore
 - [ ] First administrator created; seed password removed; staff accounts created with the right roles
@@ -47,6 +48,7 @@ The software cannot do these for you. Each is needed before taking real orders.
 Measured against the full enterprise brief. "Not proven" means written and tested against documentation, never against the real service.
 
 **Not proven**
+- Staff assistant: never run against the real model either. Permissions, proposals and approval are tested with a scripted model; what a real model chooses to propose or say is not. No automated evaluation against the real model exists yet.
 - Customer assistant: never run against the real model (no API key). The tools, limits, budget and records are tested with a scripted model; the wording of real answers, real token costs and the fallback model are not. See `assistant.md`.
 - DHL Express, FedEx and bpost adapters: no carrier account exists, so none has called a carrier. Label format names and the bpost national box must be confirmed on a first test booking. See `shipping.md`.
 - Stripe live mode, delayed payment methods, and email to addresses other than your own (needs a verified domain).

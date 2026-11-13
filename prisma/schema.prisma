@@ -1237,10 +1237,12 @@ model AiConversation {
   messages        AiMessage[]
   toolCalls       AiToolCall[]
   supportRequests SupportRequest[]
+  proposals       AiProposal[]
 
   @@index([channel, updatedAt])
   @@index([customerId])
   @@index([guestKeyHash])
+  @@index([adminUserId])
 }
 
 /// One turn. `content` holds the exact blocks exchanged with the model, so a conversation can be continued without altering what was said.
@@ -1284,6 +1286,34 @@ model AiToolCall {
 
   @@index([conversationId, createdAt])
   @@index([name, createdAt])
+}
+
+/// Something the staff assistant suggested doing. Nothing happens until a
+/// person with the right role approves it; then the same service the admin
+/// panel uses is run, as that person.
+model AiProposal {
+  id             String         @id @default(cuid())
+  sequence       Int            @unique @default(autoincrement())
+  conversationId String
+  /// The staff member the assistant was talking to. Only they can approve or reject it.
+  adminUserId    String
+  /// refund, cancel_units, stock_adjustment or support_status.
+  kind           String
+  params         Json
+  /// What will happen, written by the server from the database, not by the model.
+  summary        String
+  /// PENDING, EXECUTING, EXECUTED, REJECTED, FAILED or EXPIRED.
+  status         String         @default("PENDING")
+  result         String?
+  decidedById    String?
+  decidedAt      DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, status])
+  @@index([conversationId])
+  @@index([status, createdAt])
 }
 
 /// A question for a person: created by the assistant when it hands over, or by staff.

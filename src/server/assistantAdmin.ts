@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireAdmin } from "./auth";
-import { assistantSettings, customerAssistantState } from "./ai/assistant";
+import { assistantSettings, assistantState, customerAssistantState } from "./ai/assistant";
+import { viewProposal } from "./ai/proposals";
 import { CUSTOMER_TOOLS, supportReference } from "./ai/customerTools";
 import { CUSTOMER_INSTRUCTIONS } from "./ai/prompt";
 import type { Ctx } from "./context";
@@ -30,15 +31,23 @@ export async function assistantOverview(ctx: Ctx, now = new Date()) {
     customerAssistantState(ctx.db, now),
     assistantSettings(ctx.db),
     ctx.db.aiConversation.count({ where: { channel: "customer", createdAt: { gte: since } } }),
-    ctx.db.aiMessage.count({ where: { role: "user", createdAt: { gte: since } } }),
-    ctx.db.aiToolCall.count({ where: { createdAt: { gte: since } } }),
+    ctx.db.aiMessage.count({ where: { role: "user", createdAt: { gte: since }, conversation: { channel: "customer" } } }),
+    ctx.db.aiToolCall.count({ where: { createdAt: { gte: since }, conversation: { channel: "customer" } } }),
     ctx.db.supportRequest.count({ where: { source: "assistant", createdAt: { gte: since } } }),
     ctx.db.aiConversation.count({ where: { rating: 1, createdAt: { gte: since } } }),
     ctx.db.aiConversation.count({ where: { rating: -1, createdAt: { gte: since } } }),
     ctx.db.aiConversation.findMany({ where: { channel: "customer" }, orderBy: { updatedAt: "desc" }, take: 40, include: { messages: { where: { role: "user" }, orderBy: { createdAt: "asc" }, take: 1, select: { text: true } }, _count: { select: { messages: true, toolCalls: true } } } }),
     ctx.db.aiMessage.findMany({ where: { role: "error" }, orderBy: { createdAt: "desc" }, take: 15, select: { id: true, conversationId: true, error: true, createdAt: true } }),
-    ctx.db.aiToolCall.groupBy({ by: ["name", "ok"], where: { createdAt: { gte: since } }, _count: true }),
+    ctx.db.aiToolCall.groupBy({ by: ["name", "ok"], where: { createdAt: { gte: since }, conversation: { channel: "customer" } }, _count: true }),
   ]);
+  // The staff assistant: who asked it for what, and what was approved. Every proposal, whoever it was made to.
+  const [staffState, staffConversations, staffCost, proposalRows] = await Promise.all([
+    assistantState(ctx.db, "staff", now),
+    ctx.db.aiConversation.count({ where: { channel: "staff", createdAt: { gte: since } } }),
+    ctx.db.aiMessage.aggregate({ where: { createdAt: { gte: since }, conversation: { channel: "staff" } }, _sum: { costMicros: true } }),
+    ctx.db.aiProposal.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
+  ]);
+  const people = new Map((await ctx.db.adminUser.findMany({ where: { id: { in: [...new Set(proposalRows.map((row) => row.adminUserId))] } }, select: { id: true, name: true } })).map((user) => [user.id, user.name]));
   const costs = await ctx.db.aiMessage.groupBy({ by: ["conversationId"], where: { conversationId: { in: recent.map((conversation) => conversation.id) } }, _sum: { costMicros: true } });
   const costOf = new Map(costs.map((row) => [row.conversationId, row._sum.costMicros ?? 0]));
   const usage = new Map<string, { name: string; ok: number; failed: number }>();
@@ -54,6 +63,12 @@ export async function assistantOverview(ctx: Ctx, now = new Date()) {
     recent: recent.map((conversation) => ({ id: conversation.id, startedAt: conversation.createdAt, updatedAt: conversation.updatedAt, locale: conversation.locale, status: conversation.status, rating: conversation.rating, signedIn: !!conversation.customerId, opening: conversation.messages[0]?.text.slice(0, 140) ?? "", turns: conversation._count.messages, toolCalls: conversation._count.toolCalls, costMicros: costOf.get(conversation.id) ?? 0 })),
     errors,
     toolUsage: [...usage.values()].sort((a, b) => b.ok + b.failed - (a.ok + a.failed)),
+    staff: {
+      state: staffState,
+      conversations: staffConversations,
+      spentMicros: staffCost._sum.costMicros ?? 0,
+      proposals: proposalRows.map((row) => ({ ...viewProposal(row, now), conversationId: row.conversationId, madeTo: people.get(row.adminUserId) ?? "Former staff" })),
+    },
     // What the assistant has been told and what it is able to do, shown to staff exactly as the model receives it.
     instructions: CUSTOMER_INSTRUCTIONS,
     tools: CUSTOMER_TOOLS.map((tool) => ({ name: tool.spec.name, description: tool.spec.description })),
@@ -62,6 +77,7 @@ export async function assistantOverview(ctx: Ctx, now = new Date()) {
 
 const settingsInput = z.object({
   customerEnabled: z.boolean().default(false),
+  staffEnabled: z.boolean().default(false),
   /** Typed in US dollars, because that is what the provider bills in. */
   monthlyBudgetDollars: z.string().trim().regex(/^\d{1,5}([.,]\d{1,2})?$/, "Enter the budget in dollars, such as 50 or 49.50.").or(z.literal("")),
   extraInstructions: z.string().trim().max(2000, "Keep the note under 2000 characters.").default(""),
@@ -72,10 +88,10 @@ export async function saveAssistantSettings(ctx: Ctx, input: unknown) {
   requireAdmin(ctx, "ADMINISTRATOR", "assistant");
   const data = parse(settingsInput, input);
   const monthlyBudgetCents = data.monthlyBudgetDollars ? Math.round(Number(data.monthlyBudgetDollars.replace(",", ".")) * 100) : 0;
-  if (data.customerEnabled && monthlyBudgetCents <= 0) throw new AppError("BAD_INPUT", "Set a monthly budget before switching the assistant on. Without one it will not answer.", "monthlyBudgetDollars");
-  const value = { customerEnabled: data.customerEnabled, monthlyBudgetCents, extraInstructions: data.extraInstructions || null };
+  if ((data.customerEnabled || data.staffEnabled) && monthlyBudgetCents <= 0) throw new AppError("BAD_INPUT", "Set a monthly budget before switching an assistant on. Without one it will not answer.", "monthlyBudgetDollars");
+  const value = { customerEnabled: data.customerEnabled, staffEnabled: data.staffEnabled, monthlyBudgetCents, extraInstructions: data.extraInstructions || null };
   await ctx.db.setting.upsert({ where: { key: "assistant" }, create: { key: "assistant", value }, update: { value } });
-  await audit(ctx, "assistant.settings", "Setting", "assistant", { customerEnabled: value.customerEnabled, monthlyBudgetCents, hasNote: !!value.extraInstructions });
+  await audit(ctx, "assistant.settings", "Setting", "assistant", { customerEnabled: value.customerEnabled, staffEnabled: value.staffEnabled, monthlyBudgetCents, hasNote: !!value.extraInstructions });
 }
 
 /** One conversation as it happened: what was said, which tools ran with what, and what each model call cost. */
