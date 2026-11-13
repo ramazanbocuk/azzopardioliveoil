@@ -37,14 +37,15 @@ export function Bottle({ ml, lot, className, style, title }: BottleProps) {
       {/* Label */}
       <rect x="48" y="292" width="104" height="168" fill="#f4efe4" />
       <rect x="54" y="298" width="92" height="156" fill="none" stroke="#1a1c16" strokeOpacity="0.35" strokeWidth="0.6" />
-      <text x="100" y="334" textAnchor="middle" fontSize="13.5" letterSpacing="2.2" fill="#1f2716" style={{ fontFamily: "var(--serif)" }}>
+      <image href="/brand/emblem.png" x="84" y="303" width="32" height="32" />
+      <text x="100" y="354" textAnchor="middle" fontSize="13.5" letterSpacing="2.2" fill="#1f2716" style={{ fontFamily: "var(--serif)" }}>
         AZZOPARDI
       </text>
-      <line x1="84" y1="346" x2="116" y2="346" stroke="#b08d4a" strokeWidth="0.8" />
-      <text x="100" y="366" textAnchor="middle" fontSize="7.5" fontStyle="italic" fill="#1f2716" style={{ fontFamily: "var(--serif)" }}>
+      <line x1="84" y1="363" x2="116" y2="363" stroke="#b08d4a" strokeWidth="0.8" />
+      <text x="100" y="380" textAnchor="middle" fontSize="7.5" fontStyle="italic" fill="#1f2716" style={{ fontFamily: "var(--serif)" }}>
         Extra Virgin Olive Oil
       </text>
-      <text x="100" y="380" textAnchor="middle" fontSize="5.2" letterSpacing="1.4" fill="#6b6558" style={{ fontFamily: "var(--sans)" }}>
+      <text x="100" y="393" textAnchor="middle" fontSize="5.2" letterSpacing="1.4" fill="#6b6558" style={{ fontFamily: "var(--sans)" }}>
         NUMBERED LOT
       </text>
       <line x1="60" y1="420" x2="140" y2="420" stroke="#1a1c16" strokeOpacity="0.35" strokeWidth="0.6" strokeDasharray="2 2" />

@@ -1,3 +1,4 @@
+import { Emblem } from "@/components/brand/Logo";
 import { Link } from "@/components/ui/Link";
 import { ButtonLink } from "@/components/ui/Button";
 import { GroveScene } from "@/components/ui/GroveScene";
@@ -211,7 +212,10 @@ export function Traceability() {
 
         <Reveal className="lg:col-span-5 lg:col-start-8" y={48}>
           <div className="mx-auto max-w-sm -rotate-2 bg-ivory p-7 text-ink shadow-[0_30px_60px_-30px_rgb(0_0_0/0.55)] sm:p-9">
-            <p className="font-serif text-[1.125rem] uppercase tracking-[0.2em]">Azzopardi</p>
+            <p className="flex items-center gap-2.5 font-serif text-[1.125rem] uppercase tracking-[0.2em]">
+              <Emblem className="h-9" />
+              Azzopardi
+            </p>
             <p className="text-ticket mt-1 text-stone-700">Lot ticket</p>
             <p className="mt-8 font-mono text-[clamp(2.25rem,4vw,3.25rem)] leading-none tracking-tight">AZ-0000</p>
             <dl className="text-ticket mt-8 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 border-t border-dashed border-ink/40 pt-5">

@@ -1,3 +1,4 @@
+import { Logo } from "@/components/brand/Logo";
 import { Link } from "@/components/ui/Link";
 import { getI18n } from "@/i18n/server";
 import { getShippingCountries } from "@/server/storefrontData";
@@ -46,7 +47,8 @@ export async function Footer() {
       <div className="container-page relative z-10 pb-10 pt-section-sm">
         <div className="grid gap-x-8 gap-y-14 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            <p className="text-h2 max-w-[14ch]">{f.tagline}</p>
+            <Logo tone="gold" className="h-28 sm:h-32" />
+            <p className="text-h2 mt-10 max-w-[14ch]">{f.tagline}</p>
             <LocaleSelector placement="footer" countries={countries.map((country) => country.code)} />
           </div>
           <nav aria-label={f.label} className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-3 lg:col-span-7">

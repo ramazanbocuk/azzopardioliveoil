@@ -108,7 +108,7 @@ export function Header({ countries }: { countries: string[] }) {
           </button>
 
           <Link href="/" className="justify-self-center" onClick={() => setOpen(false)}>
-            <Wordmark />
+            <Wordmark mono={open} />
             <span className="sr-only">, {m.common.home}</span>
           </Link>
 
