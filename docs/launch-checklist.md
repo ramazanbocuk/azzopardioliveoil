@@ -66,4 +66,5 @@ Measured against the full enterprise brief. "Not proven" means written and teste
 - Everything under "Legal and tax" above, FAVV/AFSCA registration, packaging obligations, customs advice per destination, an EORI number for exports.
 - *Languages:* the five non-English languages have had no native-speaker review; the home, story, FAQ and legal pages are English only; product text is English until translated in Admin → Translations. See `docs/internationalisation.md`.
 - *Product data:* no producer, variety, harvest batch or laboratory report has been entered; the product page shows dashes and "no verified results" until they are. No health claim may be added without food-law advice. See `docs/product-intelligence.md`.
+- *Carriers:* bpost, DHL Express, UPS and FedEx are written from documentation and none has made a real call; the first label for each must be booked in the carrier's test environment. Tracking is polled, not pushed. No pickups, return labels or insurance.
 - *Fulfilment:* backorders are off for every product until switched on; stock is counted per size, not per lot; shipment notifications are email only. See `docs/fulfilment.md`.

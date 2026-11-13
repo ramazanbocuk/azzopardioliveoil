@@ -369,6 +369,19 @@ type Shipment {
   carrier: String!
   deliveredAt: String
 
+  """
+  The carrier's own estimate, when it gave one. Never calculated by the shop.
+  """
+  estimatedDeliveryAt: String
+
+  """
+  The latest tracking events, newest first. Empty when the carrier has reported nothing.
+  """
+  events: [TrackingEvent!]!
+
+  """True while the carrier reports a problem with delivery."""
+  hasProblem: Boolean!
+
   """What is in this shipment."""
   items: [ShipmentLine!]!
   shippedAt: String
@@ -392,6 +405,16 @@ type ShippingOption {
   id: ID!
   name: String!
   priceCents: Int!
+}
+
+"""
+Something the carrier reported about a parcel, or that staff recorded for it.
+"""
+type TrackingEvent {
+  at: String!
+  description: String!
+  kind: String!
+  location: String
 }
 
 """A purchasable size of a product."""

@@ -723,6 +723,9 @@ model Shipment {
   /// The carrier's tracking history, as last read: [{ at, description, location }].
   trackingEvents      Json?
   trackingCheckedAt   DateTime?
+  /// Set while the carrier reports a problem with delivery (wrong address, refused, held at customs…). Cleared when the parcel moves again or is delivered.
+  exceptionAt         DateTime?
+  exceptionNote       String?
   cancelledAt         DateTime?
   adminUserId         String?
   shippedAt           DateTime?
@@ -732,6 +735,7 @@ model Shipment {
   parcels             Parcel[]
   items               ShipmentItem[]
   labels              ShipmentLabel[]
+  events              TrackingEvent[]
 
   @@index([orderId])
 }
@@ -1192,4 +1196,26 @@ model Backorder {
 
   @@index([variantId, closedAt, createdAt])
   @@index([orderId])
+}
+
+/// One thing a carrier reported about a parcel, or that staff recorded by hand for a shipment without carrier tracking.
+/// Rows replace the JSON kept on Shipment.trackingEvents, which is no longer written.
+model TrackingEvent {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  occurredAt  DateTime
+  description String
+  location    String?
+  /// The carrier's own code for the event, when it gives one.
+  code        String?
+  /// INFO, OUT_FOR_DELIVERY, EXCEPTION, DELIVERED or RETURNED.
+  kind        String   @default("INFO")
+  /// "carrier" when read from the carrier's API, "manual" when typed by staff.
+  source      String   @default("carrier")
+  adminUserId String?
+  createdAt   DateTime @default(now())
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, occurredAt, description])
+  @@index([shipmentId, occurredAt])
 }

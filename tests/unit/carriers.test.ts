@@ -3,6 +3,7 @@ import { bpostOrderXml, createBpost, splitStreet, xml } from "@/server/shipping/
 import { CarrierError, type CarrierTransport, type ShipmentRequest, type ShippingCarrier } from "@/server/shipping/carriers";
 import { createDhlExpress, dhlDateTime } from "@/server/shipping/dhl";
 import { createFedex } from "@/server/shipping/fedex";
+import { createUps } from "@/server/shipping/ups";
 
 /**
  * These tests pin the requests each adapter sends and how it reads the
@@ -198,5 +199,103 @@ describe("bpost", () => {
     expect(tracking).toMatchObject({ status: "DELIVERED", deliveredAt: new Date("2026-11-14T09:15:00Z") });
     expect(tracking.events).toHaveLength(2);
     expect(calls[0].url).toBe("https://api.parcel.bpost.cloud/services/trackedmail/item/3232/trackingInfo");
+  });
+});
+
+describe("UPS", () => {
+  const env = { UPS_CLIENT_ID: "id", UPS_CLIENT_SECRET: "secret", UPS_ACCOUNT_NUMBER: "A1B2C3" };
+  const token = JSON.stringify({ access_token: "tok", expires_in: "14399", token_type: "Bearer" });
+  const GIF = Buffer.from("GIF89a test label").toString("base64");
+
+  it("is not built without all three credentials, and uses the test environment unless told otherwise", () => {
+    expect(createUps({ UPS_CLIENT_ID: "id" }, fake([]).transport)).toEqual({ missing: ["UPS_CLIENT_SECRET", "UPS_ACCOUNT_NUMBER"] });
+    expect(carrier(createUps(env, fake([]).transport)).environment).toBe("test");
+    expect(carrier(createUps({ ...env, UPS_ENV: "production" }, fake([]).transport)).environment).toBe("production");
+  });
+
+  it("signs in once with the account number, then asks for the account's own prices", async () => {
+    const rates = JSON.stringify({ RateResponse: { RatedShipment: [
+      { Service: { Code: "11" }, TotalCharges: { CurrencyCode: "EUR", MonetaryValue: "19.80" }, NegotiatedRateCharges: { TotalCharge: { CurrencyCode: "EUR", MonetaryValue: "12.45" } }, TimeInTransit: { ServiceSummary: { EstimatedArrival: { Arrival: { Date: "20261117", Time: "233000" } } } } },
+      { Service: { Code: "65" }, TotalCharges: { CurrencyCode: "EUR", MonetaryValue: "31.10" } },
+      { Service: { Code: "07" }, TotalCharges: { CurrencyCode: "EUR", MonetaryValue: "0" } },
+    ] } });
+    const { transport, calls } = fake([token, rates, rates]);
+    const ups = carrier(createUps(env, transport));
+    const quotes = await ups.rates!(request({ recipient: abroad, customs: true }));
+    await ups.rates!(request());
+
+    expect(quotes).toEqual([
+      { carrier: "ups", carrierName: "UPS", service: "11", serviceName: "UPS Standard", priceCents: 1245, currency: "EUR", estimatedDelivery: new Date("2026-11-17T23:30:00Z") },
+      { carrier: "ups", carrierName: "UPS", service: "65", serviceName: "UPS Express Saver", priceCents: 3110, currency: "EUR", estimatedDelivery: null },
+    ]); // the negotiated price where UPS gives one; a zero price is not an offer
+    expect(calls.map((call) => [call.method, call.url])).toEqual([["POST", "https://wwwcie.ups.com/security/v1/oauth/token"], ["POST", "https://wwwcie.ups.com/api/rating/v2409/Shoptimeintransit"], ["POST", "https://wwwcie.ups.com/api/rating/v2409/Shoptimeintransit"]]);
+    expect(calls[0].headers).toMatchObject({ authorization: `Basic ${Buffer.from("id:secret").toString("base64")}`, "x-merchant-id": "A1B2C3", "content-type": "application/x-www-form-urlencoded" });
+    expect(calls[0].body).toBe("grant_type=client_credentials");
+    expect(calls[1].headers).toMatchObject({ authorization: "Bearer tok", transactionSrc: "azzopardi" });
+    expect(calls[1].headers.transId).toMatch(/^[0-9a-f]{32}$/);
+    expect(calls[1].headers.transId).not.toBe(calls[2].headers.transId);
+    const sent = JSON.parse(calls[1].body!).RateRequest.Shipment;
+    expect(sent.Shipper).toMatchObject({ ShipperNumber: "A1B2C3", Address: { City: "Brussels", PostalCode: "1000", CountryCode: "BE" } });
+    expect(sent.ShipmentRatingOptions).toEqual({ NegotiatedRatesIndicator: "Y" });
+    expect(sent.Package).toEqual([{ PackagingType: { Code: "02" }, Dimensions: { UnitOfMeasurement: { Code: "CM" }, Length: "30", Width: "20", Height: "15" }, PackageWeight: { UnitOfMeasurement: { Code: "KGS" }, Weight: "1.25" } }]);
+  });
+
+  it("books a shipment, reads one label per box, and adds a commercial invoice only when the parcel leaves the EU", async () => {
+    const shipped = JSON.stringify({ ShipmentResponse: { ShipmentResults: { ShipmentIdentificationNumber: "1Z999AA10123456784", ShipmentCharges: { TotalCharges: { CurrencyCode: "EUR", MonetaryValue: "25.00" } }, NegotiatedRateCharges: { TotalCharge: { CurrencyCode: "EUR", MonetaryValue: "17.30" } }, PackageResults: [{ TrackingNumber: "1Z999AA10123456784", ShippingLabel: { ImageFormat: { Code: "GIF" }, GraphicImage: GIF } }, { TrackingNumber: "1Z999AA10123456795", ShippingLabel: { ImageFormat: { Code: "GIF" }, GraphicImage: GIF } }] } } });
+    const { transport, calls } = fake([token, shipped, shipped, JSON.stringify({ VoidShipmentResponse: { SummaryResult: { Status: { Code: "1", Description: "Voided" } } } })]);
+    const ups = carrier(createUps(env, transport));
+    const two = [{ weightGrams: 1250 }, { weightGrams: 900 }];
+    const booked = await ups.book(request({ recipient: abroad, customs: true, boxes: two }), "65");
+
+    expect(booked).toMatchObject({ carrierRef: "1Z999AA10123456784", trackingNumber: "1Z999AA10123456784", trackingUrl: "https://www.ups.com/track?tracknum=1Z999AA10123456784", boxTrackingNumbers: ["1Z999AA10123456784", "1Z999AA10123456795"], costCents: 1730, estimatedDelivery: null });
+    expect(booked.labels.map((label) => [label.mime, label.data.toString(), label.trackingNumber])).toEqual([["image/gif", "GIF89a test label", "1Z999AA10123456784"], ["image/gif", "GIF89a test label", "1Z999AA10123456795"]]);
+    expect(calls[1].url).toBe("https://wwwcie.ups.com/api/shipments/v2409/ship");
+    const sent = JSON.parse(calls[1].body!).ShipmentRequest;
+    expect(sent.LabelSpecification).toEqual({ LabelImageFormat: { Code: "GIF" }, LabelStockSize: { Height: "6", Width: "4" } });
+    expect(sent.Shipment).toMatchObject({ Service: { Code: "65" }, Shipper: { ShipperNumber: "A1B2C3", Name: "Azzopardi BV", AttentionName: "Azzopardi Olive Oil" }, ShipTo: { Name: "Sam Smith", Address: { CountryCode: "GB" } }, PaymentInformation: { ShipmentCharge: [{ Type: "01", BillShipper: { AccountNumber: "A1B2C3" } }] } });
+    expect(sent.Shipment.Package).toHaveLength(2);
+    expect(sent.Shipment.ShipmentServiceOptions.InternationalForms).toMatchObject({ FormType: "01", ReasonForExport: "SALE", CurrencyCode: "EUR", InvoiceDate: "20261113", Product: [{ Description: "Extra Virgin Olive Oil 500 ml", Unit: { Number: "2", UnitOfMeasurement: { Code: "PCS" }, Value: "18" }, CommodityCode: "150920", OriginCountryCode: "IT" }] });
+
+    await ups.book(request(), "11"); // within the EU: no customs paperwork is sent
+    expect(JSON.parse(calls[2].body!).ShipmentRequest.Shipment.ShipmentServiceOptions).toBeUndefined();
+
+    await ups.cancel!({ carrierRef: "1Z999AA10123456784", trackingNumber: "1Z999AA10123456784", recipientCountryCode: "GB" });
+    expect([calls[3].method, calls[3].url, calls[3].body]).toEqual(["DELETE", "https://wwwcie.ups.com/api/shipments/v2409/void/cancel/1Z999AA10123456784", undefined]);
+  });
+
+  it("reads tracking in UTC, and tells a passing problem from a final outcome", async () => {
+    const activity = (type: string, description: string, gmtDate: string, gmtTime: string, city = "Brussels") => ({ date: gmtDate, time: gmtTime, gmtDate, gmtTime, location: { address: { city, countryCode: "BE" } }, status: { type, description, code: type } });
+    const answer = (currentType: string, currentText: string, activities: object[], extra: object = {}) => JSON.stringify({ trackResponse: { shipment: [{ package: [{ trackingNumber: "1Z", currentStatus: { type: currentType, description: currentText }, activity: activities, ...extra }] }] } });
+    const label = activity("M", "Shipper created a label, UPS has not received the package yet. ", "20261113", "090000");
+    const pickup = activity("P", "Pickup Scan", "20261113", "170000");
+    const exception = activity("X", "The receiver was not available. A second attempt will be made.", "20261116", "101500", "London");
+    const out = activity("O", "Out For Delivery Today", "20261117", "070000", "London");
+    const done = activity("D", "DELIVERED ", "20261117", "113000", "London");
+    const { transport, calls } = fake([token, answer("M", "Label created", [label]), answer("X", "The receiver was not available.", [exception, pickup, label]), answer("D", "Delivered", [done, out, exception, pickup, label], { deliveryDate: [{ type: "DEL", date: "20261117" }], deliveryTime: { type: "DEL", endTime: "113000" } }), answer("RS", "Returned to shipper", [activity("RS", "Returning to sender", "20261120", "080000")]), JSON.stringify({ trackResponse: { shipment: [{ warnings: [{ code: "TW0001", message: "Tracking Information Not Found" }] }] } })]);
+    const ups = carrier(createUps(env, transport));
+
+    expect(await ups.track("1Z")).toMatchObject({ status: null, problem: null, events: [{ kind: "INFO", code: "M" }] }); // a label is not a moving parcel
+    const stuck = await ups.track("1Z");
+    expect(stuck).toMatchObject({ status: "IN_TRANSIT", deliveredAt: null, problem: "The receiver was not available." });
+    expect(stuck.events.map((event) => [event.at.toISOString(), event.kind, event.location])).toEqual([["2026-11-13T09:00:00.000Z", "INFO", "Brussels, BE"], ["2026-11-13T17:00:00.000Z", "INFO", "Brussels, BE"], ["2026-11-16T10:15:00.000Z", "EXCEPTION", "London, BE"]]);
+    expect(await ups.track("1Z")).toMatchObject({ status: "DELIVERED", deliveredAt: new Date("2026-11-17T11:30:00Z"), problem: null });
+    expect(await ups.track("1Z")).toMatchObject({ status: "RETURNED", events: [{ kind: "RETURNED" }] });
+    await expect(ups.track("1Z")).rejects.toThrow("UPS: Tracking Information Not Found");
+    expect(calls[1].url).toBe("https://wwwcie.ups.com/api/track/v1/details/1Z?locale=en_US&returnSignature=false");
+    expect(calls[1].method).toBe("GET");
+  });
+
+  it("passes UPS's own errors on, and proves its credentials without booking anything", async () => {
+    const refusedBooking = fake([token, { status: 400, body: JSON.stringify({ response: { errors: [{ code: "120100", message: "Missing or invalid shipper number" }] } }) }]);
+    await expect(carrier(createUps(env, refusedBooking.transport)).book(request(), "11")).rejects.toThrow("UPS: 120100: Missing or invalid shipper number");
+
+    const badSecret = fake([{ status: 401, body: JSON.stringify({ response: { errors: [{ code: "10401", message: "ClientId is Invalid" }] } }) }]);
+    await expect(carrier(createUps(env, badSecret.transport)).ping!()).rejects.toThrow("UPS: 10401: ClientId is Invalid");
+    const good = fake([token]);
+    await carrier(createUps(env, good.transport)).ping!();
+    expect(good.calls).toHaveLength(1); // one sign-in, nothing booked
+
+    const empty = fake([token, JSON.stringify({ ShipmentResponse: { ShipmentResults: { ShipmentIdentificationNumber: "1Z" } } })]);
+    await expect(carrier(createUps(env, empty.transport)).book(request(), "11")).rejects.toBeInstanceOf(CarrierError); // a booking with no label is not a booking
   });
 });

@@ -4,7 +4,7 @@ Date: 2026-11-13. Audited at commit `b943d1b` on `main`.
 
 This answers Phase 1 (audit) and outlines Phase 2 (architecture) of the master brief. The owner approved it on 2026-11-13.
 
-**Progress:** Phase 3, internationalisation, is built (2026-11-14); see `docs/internationalisation.md` for what it covers and what it does not. Phase 4, product intelligence, is built (2026-11-14); see `docs/product-intelligence.md`. Phase 5, the order and fulfilment engine, is built (2026-11-15); see `docs/fulfilment.md`. Phases 6 to 10 are not started. The tables below describe the state before Phase 3.
+**Progress:** Phase 3, internationalisation, is built (2026-11-14); see `docs/internationalisation.md` for what it covers and what it does not. Phase 4, product intelligence, is built (2026-11-14); see `docs/product-intelligence.md`. Phase 5, the order and fulfilment engine, is built (2026-11-15); see `docs/fulfilment.md`. Phase 6, shipping integrations, is built as far as it can be without a carrier account (2026-11-15); see `docs/shipping.md`. Phases 7 to 10 are not started. The tables below describe the state before Phase 3.
 
 ## 1. What exists today
 
@@ -99,7 +99,7 @@ Brand copy for the new positioning runs alongside Phase 3, since every page is b
 | 4. Admin AI, second shipments | Fails: no assistant. The underlying query exists |
 | 5. Partial fulfilment | **Passes** since Phase 5 as an integration test: five products, two shipments, two tracking numbers, an email per shipment in the customer's language, both shipments under one order. With hand-entered tracking; a real carrier label is test 7 |
 | 6. Refund permission | Dashboard half passes (tested). AI half not applicable yet |
-| 7. Real carrier label | Cannot be run: no carrier account |
+| 7. Real carrier label | **Still cannot be run: no carrier account.** Four adapters (bpost, DHL, UPS, FedEx) are written and unit-tested against documented responses; none has called a carrier |
 
 ## 6. What only the owner can provide
 

@@ -201,6 +201,9 @@ export const it: Messages = {
     checkoutNote: "Una parte di questo ordine non è disponibile. Sarà spedita più tardi in un pacco separato, senza costi di spedizione aggiuntivi.",
     productBackorder: "Al momento non disponibile. Puoi ordinarlo ora; lo spediamo appena arriva.",
     orderAhead: "Ordinabile",
+    problem: "Il corriere segnala un problema con questo pacco. Ce ne stiamo occupando e ti scriveremo se servirà qualcosa da parte tua.",
+    estimate: "Consegna stimata: {date} (stima del corriere)",
+    latest: "Ultimi aggiornamenti",
     status: {
       PENDING: "In preparazione",
       LABEL_CREATED: "Imballato, in attesa del corriere",

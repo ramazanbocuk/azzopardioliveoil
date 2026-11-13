@@ -113,6 +113,26 @@ export function OrderTimeline({ order }: { order: OrderFieldsFragment }) {
                   </li>
                 ))}
               </ul>
+              {shipment.hasProblem && (
+                <p role="status" className="text-small mt-3 border-l-2 border-terracotta-700 pl-3 text-terracotta-700">
+                  {f.problem}
+                </p>
+              )}
+              {!shipment.deliveredAt && shipment.estimatedDeliveryAt && <p className="text-small mt-3 text-stone-700">{fill(f.estimate, { date: day(shipment.estimatedDeliveryAt) })}</p>}
+              {shipment.events.length > 0 && (
+                <details className="mt-3">
+                  <summary className="text-small cursor-pointer underline underline-offset-4">{f.latest}</summary>
+                  {/* Carrier wording is shown as the carrier wrote it, which is not always the reader's language. */}
+                  <ol className="text-small mt-2 space-y-1 text-stone-700">
+                    {shipment.events.map((event, eventIndex) => (
+                      <li key={`${event.at}-${eventIndex}`}>
+                        {when(event.at)} · {event.description}
+                        {event.location ? ` · ${event.location}` : ""}
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
               <p className="mt-3">
                 {shipment.carrier}
                 {" · "}

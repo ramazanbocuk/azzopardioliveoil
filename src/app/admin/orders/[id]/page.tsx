@@ -9,7 +9,8 @@ import { DISPUTE_LABEL } from "@/server/paymentSync";
 import { FULFILMENT_LABEL, ORDER_STATUS_LABEL, PAYMENT_ALLOWS_FULFILMENT } from "@/server/orderStatus";
 import { openBackorder, outstanding, readyToShip } from "@/server/stock";
 import { can } from "@/server/permissions";
-import { cancelUnits, addNote, bookCarrierLabel, releaseShipmentAttempt, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
+import { EVENT_KINDS, EVENT_KIND_LABEL } from "@/server/tracking";
+import { addTrackingEvent, setTrackingNumber, cancelUnits, addNote, bookCarrierLabel, releaseShipmentAttempt, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
 
 export const metadata = { title: "Order" };
 
@@ -279,15 +280,52 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                   </p>
                 )}
                 {shipment.costCents !== null && <p className="text-small mt-2 text-stone-700">Carrier charge {money(shipment.costCents)}</p>}
-                {Array.isArray(shipment.trackingEvents) && shipment.trackingEvents.length > 0 && (
+                {shipment.exceptionAt && (
+                  <p role="alert" className="mt-3 border-l-2 border-terracotta-700 bg-terracotta-500/10 px-3 py-2 text-terracotta-700">
+                    Delivery problem since {dateTime(shipment.exceptionAt)}: {shipment.exceptionNote}. The customer has not been told automatically.
+                  </p>
+                )}
+                {shipment.events.length > 0 && (
                   <ol className="text-small mt-3 space-y-1 border-t border-ink/10 pt-3 text-stone-700">
-                    {(shipment.trackingEvents as { at: string; description: string; location: string | null }[]).slice(-6).map((event, eventIndex) => (
-                      <li key={eventIndex}>
-                        {dateTime(new Date(event.at))} · {event.description}
+                    {shipment.events.slice(-8).map((event) => (
+                      <li key={event.id}>
+                        {dateTime(event.occurredAt)} · {event.description}
                         {event.location ? ` · ${event.location}` : ""}
+                        {event.source === "manual" ? " · entered by staff" : ""}
                       </li>
                     ))}
                   </ol>
+                )}
+                {!shipment.cancelledAt && (
+                  <details className="mt-3 border-t border-ink/10 pt-3">
+                    <summary className="text-small cursor-pointer underline underline-offset-4">Record tracking by hand</summary>
+                    <p className="text-small mt-2 text-stone-700">For a shipment sent without a carrier connection, or when you learn something the carrier’s system has not reported. It is stored as entered by you and shown to the customer.</p>
+                    <form action={addTrackingEvent.bind(null, order.id, shipment.id)} className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
+                      <label className="block">
+                        <span className="text-small font-medium">What happened</span>
+                        <select name="kind" defaultValue="INFO" className="mt-1.5 h-10 w-full border border-ink/25 bg-white px-3">
+                          {EVENT_KINDS.map((kind) => (
+                            <option key={kind} value={kind}>
+                              {EVENT_KIND_LABEL[kind]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Field label="In a few words" name="description" required maxLength={300} placeholder="Arrived at the Brussels depot" />
+                      <Field label="Place (optional)" name="location" maxLength={120} />
+                      <Field label="When (empty = now)" name="occurredAt" type="datetime-local" />
+                      <div>
+                        <Submit variant="secondary">Record event</Submit>
+                      </div>
+                    </form>
+                    {shipment.source !== "carrier" && (
+                      <form action={setTrackingNumber.bind(null, order.id, shipment.id)} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                        <Field label="Tracking number" name="trackingNumber" required defaultValue={shipment.trackingNumber ?? ""} />
+                        <Field label="Tracking link (optional)" name="trackingUrl" type="url" defaultValue={shipment.trackingUrl ?? ""} placeholder="https://…" />
+                        <Submit variant="secondary">Save number</Submit>
+                      </form>
+                    )}
+                  </details>
                 )}
                 {!shipment.cancelledAt && shipment.status === "LABEL_CREATED" && (
                   <form action={cancelShipment.bind(null, order.id, shipment.id)} className="mt-3">

@@ -2,6 +2,7 @@ import { createBpost } from "./bpost";
 import { CarrierNotConnected, defaultCarrierTransport, type CarrierTransport, type Env, type ShippingCarrier } from "./carriers";
 import { createDhlExpress } from "./dhl";
 import { createFedex } from "./fedex";
+import { createUps } from "./ups";
 
 /**
  * Which carriers exist and which are connected. A carrier is connected when
@@ -12,10 +13,11 @@ import { createFedex } from "./fedex";
 const FACTORIES = [
   { key: "bpost", name: "bpost", create: createBpost },
   { key: "dhl", name: "DHL Express", create: createDhlExpress },
+  { key: "ups", name: "UPS", create: createUps },
   { key: "fedex", name: "FedEx", create: createFedex },
 ] as const;
 
-export type CarrierState = { key: string; name: string; connected: boolean; missing: string[]; environment: string | null; hasRates: boolean; canCancel: boolean };
+export type CarrierState = { key: string; name: string; connected: boolean; missing: string[]; environment: string | null; hasRates: boolean; canCancel: boolean; canTest: boolean };
 
 let override: ShippingCarrier[] | null = null;
 let cached: { env: Env; carriers: ShippingCarrier[]; states: CarrierState[] } | null = null;
@@ -31,10 +33,10 @@ function load(env: Env, transport: CarrierTransport) {
   const states: CarrierState[] = [];
   for (const factory of FACTORIES) {
     const result = factory.create(env, transport);
-    if ("missing" in result) states.push({ key: factory.key, name: factory.name, connected: false, missing: result.missing, environment: null, hasRates: false, canCancel: false });
+    if ("missing" in result) states.push({ key: factory.key, name: factory.name, connected: false, missing: result.missing, environment: null, hasRates: false, canCancel: false, canTest: false });
     else {
       carriers.push(result);
-      states.push({ key: result.key, name: result.name, connected: true, missing: [], environment: result.environment, hasRates: result.rates !== null, canCancel: result.cancel !== null });
+      states.push({ key: result.key, name: result.name, connected: true, missing: [], environment: result.environment, hasRates: result.rates !== null, canCancel: result.cancel !== null, canTest: !!result.ping });
     }
   }
   cached = { env, carriers, states };
@@ -46,7 +48,7 @@ export function connectedCarriers(env: Env = process.env, transport: CarrierTran
 }
 
 export function carrierStates(env: Env = process.env): CarrierState[] {
-  if (override) return override.map((carrier) => ({ key: carrier.key, name: carrier.name, connected: true, missing: [], environment: carrier.environment, hasRates: carrier.rates !== null, canCancel: carrier.cancel !== null }));
+  if (override) return override.map((carrier) => ({ key: carrier.key, name: carrier.name, connected: true, missing: [], environment: carrier.environment, hasRates: carrier.rates !== null, canCancel: carrier.cancel !== null, canTest: !!carrier.ping }));
   return load(env, defaultCarrierTransport).states;
 }
 

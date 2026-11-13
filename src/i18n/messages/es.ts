@@ -201,6 +201,9 @@ export const es: Messages = {
     checkoutNote: "Parte de este pedido no está en existencia. Se enviará más adelante en un paquete aparte, sin gastos de envío adicionales.",
     productBackorder: "Sin existencias por el momento. Puede pedirlo ahora y lo enviamos en cuanto llegue.",
     orderAhead: "Disponible por encargo",
+    problem: "El transportista informa de un problema con este paquete. Lo estamos revisando y le escribiremos si necesitamos algo de usted.",
+    estimate: "Entrega estimada: {date} (estimación del transportista)",
+    latest: "Últimas novedades",
     status: {
       PENDING: "En preparación",
       LABEL_CREATED: "Embalado, a la espera del transportista",

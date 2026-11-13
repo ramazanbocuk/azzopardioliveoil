@@ -125,6 +125,11 @@ const handlers: Record<string, Handler> = {
     await sendEmail(staffAlertEmail(to, { subject: `${payload.subject}: ${order.number}`, heading: payload.subject, lines: [`Order ${order.number}`, ...(payload.lines ?? [])], path: `/admin/orders/${order.id}` }), job.dedupeKey, env, transport);
   },
 
+  // The same alert under a name that fits delivery problems and anything else that is not about money.
+  async "notify.owner.alert"(db, job, options) {
+    await handlers["notify.owner.payment_alert"](db, job, options);
+  },
+
   async "notify.owner.low_stock"(db, job, { env, transport }) {
     const to = (await notificationSettings(db)).emailRecipient;
     if (!to) throw new Skip("No email recipient is set in Settings.");
