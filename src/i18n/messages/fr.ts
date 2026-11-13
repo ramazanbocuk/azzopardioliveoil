@@ -201,6 +201,9 @@ export const fr: Messages = {
     checkoutNote: "Une partie de cette commande n’est pas en stock. Elle sera expédiée plus tard dans un colis séparé, sans frais de livraison supplémentaires.",
     productBackorder: "Pas en stock pour le moment. Vous pouvez commander dès maintenant ; nous expédions dès son arrivée.",
     orderAhead: "Disponible à la commande",
+    problem: "Le transporteur signale un problème avec ce colis. Nous nous en occupons et vous écrirons si nous avons besoin de vous.",
+    estimate: "Livraison estimée : {date} (estimation du transporteur)",
+    latest: "Dernières mises à jour",
     status: {
       PENDING: "En préparation",
       LABEL_CREATED: "Emballé, en attente du transporteur",

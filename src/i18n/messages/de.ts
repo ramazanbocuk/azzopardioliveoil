@@ -201,6 +201,9 @@ export const de: Messages = {
     checkoutNote: "Ein Teil dieser Bestellung ist nicht auf Lager. Er wird später in einem separaten Paket ohne zusätzliche Versandkosten verschickt.",
     productBackorder: "Derzeit nicht auf Lager. Sie können jetzt bestellen; wir versenden, sobald die Ware eintrifft.",
     orderAhead: "Bestellbar",
+    problem: "Der Zusteller meldet ein Problem mit diesem Paket. Wir kümmern uns darum und schreiben Ihnen, falls wir etwas von Ihnen benötigen.",
+    estimate: "Voraussichtliche Zustellung: {date} (Schätzung des Zustellers)",
+    latest: "Letzte Meldungen",
     status: {
       PENDING: "Wird vorbereitet",
       LABEL_CREATED: "Verpackt, wartet auf den Zusteller",

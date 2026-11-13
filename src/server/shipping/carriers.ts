@@ -13,6 +13,7 @@
  *   DHL Express   MyDHL API v3 (REST)          written from the official reference, NOT yet run against DHL
  *   FedEx         Ship/Rate/Track REST APIs     written from the official reference, NOT yet run against FedEx
  *   bpost         Shipping Manager API v5 (XML) written from integration manual v3.3.35, NOT yet run against bpost
+ *   UPS           OAuth + Rating/Shipping/Tracking REST written from UPS's published OpenAPI files, NOT yet run against UPS
  * Each needs a business account and API credentials. The first real call for
  * each carrier must be made in that carrier's test environment.
  */
@@ -79,8 +80,20 @@ export type BookedShipment = {
 };
 
 export type TrackingStatus = "IN_TRANSIT" | "DELIVERED" | "RETURNED" | "FAILED";
-export type TrackingEvent = { at: Date; description: string; location?: string | null };
-export type Tracking = { status: TrackingStatus | null; deliveredAt: Date | null; events: TrackingEvent[] };
+export type TrackingEventKind = "INFO" | "OUT_FOR_DELIVERY" | "EXCEPTION" | "DELIVERED" | "RETURNED";
+export type TrackingEvent = { at: Date; description: string; location?: string | null; /** The carrier's own code for the event. */ code?: string | null; kind?: TrackingEventKind };
+export type Tracking = {
+  status: TrackingStatus | null;
+  deliveredAt: Date | null;
+  events: TrackingEvent[];
+  /**
+   * What the carrier says is wrong right now, in its own words: an address
+   * query, a refused parcel, a customs hold. Null or absent when the parcel
+   * is moving normally. A problem is not necessarily final; FAILED and
+   * RETURNED are.
+   */
+  problem?: string | null;
+};
 
 export type CarrierService = { code: string; name: string };
 
@@ -100,6 +113,8 @@ export interface ShippingCarrier {
   /** Cancels a booking. Null when the carrier offers no cancellation API. */
   cancel: ((booking: { carrierRef: string; trackingNumber: string; recipientCountryCode: string }) => Promise<void>) | null;
   track(trackingNumber: string): Promise<Tracking>;
+  /** Proves the credentials work without booking anything. Absent when the carrier offers no harmless call. */
+  ping?(): Promise<void>;
 }
 
 export class CarrierNotConnected extends Error {
@@ -126,7 +141,7 @@ export class CarrierError extends Error {
 }
 
 export type HttpResponse = { ok: boolean; status: number; text(): Promise<string> };
-export type CarrierTransport = (url: string, init: { method: "GET" | "POST" | "PUT"; headers: Record<string, string>; body?: string }) => Promise<HttpResponse>;
+export type CarrierTransport = (url: string, init: { method: "GET" | "POST" | "PUT" | "DELETE"; headers: Record<string, string>; body?: string }) => Promise<HttpResponse>;
 
 export const defaultCarrierTransport: CarrierTransport = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
 

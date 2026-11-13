@@ -274,7 +274,8 @@ describe("carrier fulfilment", () => {
     const shipmentId = await bookLabel(admins, orderId, { carrier: "testcarrier", service: "STD", boxes: BOX });
 
     expect(await refreshTracking(db)).toEqual({ checked: 1, delivered: 0 });
-    expect(await db.shipment.findUniqueOrThrow({ where: { id: shipmentId } })).toMatchObject({ status: "IN_TRANSIT", trackingEvents: [{ description: "Picked up", location: "Brussels" }] });
+    expect((await db.shipment.findUniqueOrThrow({ where: { id: shipmentId } })).status).toBe("IN_TRANSIT");
+    expect(await db.trackingEvent.findMany({ where: { shipmentId } })).toMatchObject([{ description: "Picked up", location: "Brussels", source: "carrier" }]);
     expect(await refreshTracking(db)).toEqual({ checked: 0, delivered: 0 }); // checked moments ago: not asked again yet
 
     seen.tracking = { status: "DELIVERED", deliveredAt: new Date("2026-11-17T10:00:00Z"), events: [...seen.tracking.events, { at: new Date("2026-11-17T10:00:00Z"), description: "Delivered" }] };

@@ -232,7 +232,7 @@ export async function releaseExpiredReservations(db: Db, now = new Date()): Prom
 const orderInclude = {
   items: { include: { backorder: true } },
   events: { where: { isInternal: false }, orderBy: { createdAt: "asc" } },
-  shipments: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" }, include: { items: { include: { orderItem: { select: { sku: true, productName: true, variantLabel: true } } } } } },
+  shipments: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" }, include: { items: { include: { orderItem: { select: { sku: true, productName: true, variantLabel: true } } } }, events: { orderBy: { occurredAt: "desc" }, take: 8 } } },
 } as const;
 
 /** Guest lookup. Number and email must both match; the answer is the same for "wrong number" and "wrong email". */

@@ -3,7 +3,7 @@ import { publicLabResults, type PublicLabResult } from "@/server/provenance";
 import { toLocale } from "@/i18n/config";
 import { textOf } from "@/server/translations";
 import SchemaBuilder from "@pothos/core";
-import type { Backorder, Batch, BatchDocument, Category, Customer, Order, OrderEvent, OrderItem, Product, Review, Shipment, ShipmentItem, Variant } from "@/generated/prisma/client";
+import type { Backorder, Batch, BatchDocument, Category, Customer, Order, OrderEvent, OrderItem, Product, Review, Shipment, ShipmentItem, TrackingEvent, Variant } from "@/generated/prisma/client";
 import { chooseLanguage, deleteOwnAccount, login, logout, register, requestPasswordReset, requireCustomer, resetPassword } from "@/server/auth";
 import { exportCustomerData } from "@/server/privacy";
 import { addItem, applyDiscount, findCart, removeDiscount, removeItem, setQuantity, summarise, type CartSummary } from "@/server/cart";
@@ -30,7 +30,7 @@ const day = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : nul
 
 type OrderLine = OrderItem & { backorder?: Backorder | null };
 type ShippedLine = ShipmentItem & { orderItem: Pick<OrderItem, "sku" | "productName" | "variantLabel"> };
-type Parcel = Shipment & { items?: ShippedLine[] };
+type Parcel = Shipment & { items?: ShippedLine[]; events?: TrackingEvent[] };
 type FullOrder = Order & { items: OrderLine[]; events: OrderEvent[]; shipments?: Parcel[]; accessToken?: string };
 type LotDocument = Omit<BatchDocument, "data">;
 type FullLot = Batch & { product: Product; documents: LotDocument[] };
@@ -242,10 +242,23 @@ const OrderEventType = builder.objectRef<OrderEvent>("OrderEvent").implement({
   fields: (t) => ({ kind: t.exposeString("kind"), message: t.exposeString("message"), at: t.string({ resolve: (event) => iso(event.createdAt) }) }),
 });
 
+const TrackingEventType = builder.objectRef<TrackingEvent>("TrackingEvent").implement({
+  description: "Something the carrier reported about a parcel, or that staff recorded for it.",
+  fields: (t) => ({
+    at: t.string({ resolve: (event) => iso(event.occurredAt) }),
+    description: t.exposeString("description"),
+    location: t.exposeString("location", { nullable: true }),
+    kind: t.exposeString("kind"),
+  }),
+});
+
 const ShipmentType = builder.objectRef<Parcel>("Shipment").implement({
   description: "One parcel, or set of parcels sent together, with its own tracking. An order can have several.",
   fields: (t) => ({
     items: t.field({ type: [ShippedLineType], description: "What is in this shipment.", resolve: (shipment) => shipment.items ?? [] }),
+    events: t.field({ type: [TrackingEventType], description: "The latest tracking events, newest first. Empty when the carrier has reported nothing.", resolve: (shipment) => shipment.events ?? [] }),
+    hasProblem: t.boolean({ description: "True while the carrier reports a problem with delivery.", resolve: (shipment) => !!shipment.exceptionAt || shipment.status === "FAILED" || shipment.status === "RETURNED" }),
+    estimatedDeliveryAt: t.string({ nullable: true, description: "The carrier's own estimate, when it gave one. Never calculated by the shop.", resolve: (shipment) => (shipment.estimatedDeliveryAt ? iso(shipment.estimatedDeliveryAt) : null) }),
     carrier: t.exposeString("carrier"),
     status: t.exposeString("status"),
     trackingNumber: t.exposeString("trackingNumber", { nullable: true }),

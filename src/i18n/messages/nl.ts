@@ -201,6 +201,9 @@ export const nl: Messages = {
     checkoutNote: "Een deel van deze bestelling is niet op voorraad. Het wordt later in een apart pakket verzonden, zonder extra verzendkosten.",
     productBackorder: "Momenteel niet op voorraad. U kunt nu bestellen; we verzenden zodra de voorraad er is.",
     orderAhead: "Te bestellen",
+    problem: "De vervoerder meldt een probleem met dit pakket. We zoeken het uit en schrijven u als we iets van u nodig hebben.",
+    estimate: "Verwachte levering: {date} (schatting van de vervoerder)",
+    latest: "Laatste meldingen",
     status: {
       PENDING: "Wordt voorbereid",
       LABEL_CREATED: "Ingepakt, wacht op de vervoerder",

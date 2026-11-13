@@ -1,5 +1,6 @@
 import { openBackorder, readyToShip } from "./stock";
-import type { Backorder, Order, OrderItem, Prisma } from "@/generated/prisma/client";
+import { applyTracking } from "./tracking";
+import type { Backorder, Order, OrderItem } from "@/generated/prisma/client";
 import { audit, createShipment, timeline } from "./admin";
 import { requireAdmin } from "./auth";
 import type { Ctx } from "./context";
@@ -295,20 +296,8 @@ export async function refreshTracking(db: Db, now = new Date(), limit = 20): Pro
     try {
       const tracking = await carrier.track(shipment.trackingNumber!);
       checked += 1;
-      const events = tracking.events.map((event) => ({ at: event.at.toISOString(), description: event.description, location: event.location ?? null })) as Prisma.InputJsonValue;
-      await db.$transaction(async (tx) => {
-        const status = tracking.status ?? shipment.status;
-        await tx.shipment.update({ where: { id: shipment.id }, data: { trackingEvents: events, trackingCheckedAt: now, status, deliveredAt: status === "DELIVERED" ? (tracking.deliveredAt ?? now) : null } });
-        if (status !== "DELIVERED" || shipment.status === "DELIVERED") return;
-        delivered += 1;
-        // The order is delivered once every unit has left and none of its parcels is still travelling.
-        const open = await tx.shipment.count({ where: { orderId: shipment.orderId, cancelledAt: null, status: { notIn: ["DELIVERED", "CANCELLED"] } } });
-        const moved = open === 0 ? await tx.order.updateMany({ where: { id: shipment.orderId, fulfilmentStatus: "SHIPPED", cancelledAt: null }, data: { fulfilmentStatus: "DELIVERED" } }) : { count: 0 };
-        if (moved.count === 1) {
-          await syncOrderStatus(tx, shipment.orderId);
-          await tx.orderEvent.create({ data: { orderId: shipment.orderId, kind: "delivered", message: `Delivered, according to ${shipment.carrier}.` } });
-        }
-      });
+      const result = await db.$transaction((tx) => applyTracking(tx, shipment, tracking, now));
+      if (result.delivered) delivered += 1;
     } catch (error) {
       if (!(error instanceof CarrierError)) throw error;
       await db.shipment.update({ where: { id: shipment.id }, data: { trackingCheckedAt: now } });

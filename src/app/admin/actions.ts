@@ -6,6 +6,7 @@ import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
 import * as provenance from "@/server/provenance";
 import * as stock from "@/server/stock";
+import * as tracking from "@/server/tracking";
 import * as translations from "@/server/translations";
 import * as fulfilment from "@/server/fulfilment";
 import * as twoFactor from "@/server/twoFactor";
@@ -502,4 +503,22 @@ export async function cancelUnits(orderId: string, form: FormData) {
     await stock.cancelOutstanding(ctx, text(form, "orderItemId"), Math.round(Number(text(form, "quantity"))));
     updateTag("catalog");
   }, "Units taken off the order. No money has been returned: issue a refund if one is owed.");
+}
+
+// ── Tracking by hand, and testing a carrier ──
+
+export async function addTrackingEvent(orderId: string, shipmentId: string, form: FormData) {
+  await run(`/admin/orders/${orderId}`, async (ctx) => {
+    await tracking.addTrackingEvent(ctx, shipmentId, formData(form));
+  }, "Tracking event recorded.");
+}
+
+export async function setTrackingNumber(orderId: string, shipmentId: string, form: FormData) {
+  await run(`/admin/orders/${orderId}`, async (ctx) => {
+    await tracking.setTrackingNumber(ctx, shipmentId, formData(form));
+  }, "Tracking number saved. The customer sees it on their order; no email is sent for this.");
+}
+
+export async function testCarrier(key: string) {
+  await run("/admin/fulfilment", async (ctx) => `/admin/fulfilment?ok=${encodeURIComponent(await tracking.testCarrier(ctx, key))}`);
 }

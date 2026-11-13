@@ -148,6 +148,14 @@ export const OrderFields = graphql(`
       trackingUrl
       shippedAt
       deliveredAt
+      estimatedDeliveryAt
+      hasProblem
+      events {
+        at
+        description
+        location
+        kind
+      }
       items {
         sku
         productName

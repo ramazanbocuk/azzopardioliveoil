@@ -206,6 +206,9 @@ export const en = {
     checkoutNote: "Part of this order is not in stock. It will be sent later in a separate parcel, at no extra shipping cost.",
     productBackorder: "Not in stock at the moment. You can order it now and we send it when it arrives.",
     orderAhead: "Available to order",
+    problem: "The carrier reports a problem with this parcel. We are looking into it and will write to you if anything is needed from you.",
+    estimate: "Estimated delivery: {date} (the carrier’s estimate)",
+    latest: "Latest updates",
     status: {
       PENDING: "Being prepared",
       LABEL_CREATED: "Packed, waiting for the carrier",

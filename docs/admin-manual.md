@@ -56,6 +56,7 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 
 - **Payments**: every payment and refund for a period, and the list of disputes. A refund made directly in Stripe appears on the order by itself, marked "at the payment provider", and the customer gets the refund email. Stock is never put back automatically. If a bank bounces a refund, it is marked failed, the order goes back to paid, and the shop is emailed.
 - **Several shipments per order**: on the order page choose the quantities (and lot) for this parcel; repeat when the rest is ready. Each shipment has its own tracking, packing slip and customer email. See `docs/fulfilment.md`.
+- **Tracking**: with a carrier connected, events arrive by themselves. Without one, open the shipment on the order page and use "Record tracking by hand" to add the tracking number and what you learn. Parcels with a problem, late or without a number are listed under Shipping & fulfilment. See `docs/shipping.md`.
 - **Backorders**: off unless switched on per product. The Backorders screen lists what is owed and to whom; arriving stock is set aside for those orders automatically.
 - **Taking units off an order**: managers only; it does not refund. Issue the refund afterwards.
 - **Producers, Countries & regions, Olive varieties**: the reference lists. A producer is named on the shop only when marked public.

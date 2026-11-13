@@ -84,6 +84,10 @@ export async function dashboard(ctx: Ctx) {
     db.order.count({ where: { ...paid, cancelledAt: null, fulfilmentStatus: "PARTIALLY_SHIPPED" } }),
     db.backorder.findMany({ where: { closedAt: null }, select: { orderId: true, quantity: true, filledQuantity: true, cancelledQuantity: true } }),
   ]);
+  const [parcelsInTransit, parcelProblems] = await Promise.all([
+    db.shipment.count({ where: { cancelledAt: null, status: { in: ["LABEL_CREATED", "IN_TRANSIT"] } } }),
+    db.shipment.count({ where: { cancelledAt: null, OR: [{ exceptionAt: { not: null }, status: { not: "DELIVERED" } }, { status: { in: ["FAILED", "RETURNED"] } }] } }),
+  ]);
 
   const revenue = total._sum.totalCents ?? 0;
   return {
@@ -102,6 +106,8 @@ export async function dashboard(ctx: Ctx) {
     openCarts: cartsWithItems,
     awaitingFulfilment: awaiting,
     partlyShipped,
+    parcelsInTransit,
+    parcelProblems,
     backorderedUnits: backorders.reduce((sum, row) => sum + row.quantity - row.filledQuantity - row.cancelledQuantity, 0),
     backorderedOrders: new Set(backorders.map((row) => row.orderId)).size,
   };
@@ -115,7 +121,7 @@ const orderDetail = {
   notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } },
   payments: { include: { refunds: { orderBy: { createdAt: "asc" } }, disputes: { orderBy: { createdAt: "asc" } } } },
   // Label bytes stay in the database until someone prints one; the page only needs to know they exist.
-  shipments: { orderBy: { createdAt: "asc" }, include: { parcels: true, items: true, labels: { select: { id: true, position: true }, orderBy: { position: "asc" } } } },
+  shipments: { orderBy: { createdAt: "asc" }, include: { parcels: true, items: true, events: { orderBy: { occurredAt: "asc" } }, labels: { select: { id: true, position: true }, orderBy: { position: "asc" } } } },
   returns: true,
   customer: true,
 } as const;

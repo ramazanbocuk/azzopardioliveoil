@@ -3,6 +3,9 @@ import { SelectAll } from "@/components/admin/SelectAll";
 import { Badge, Card, Flash, LinkButton, Page, Stat, Submit, Table, cellLink, dateTime, money } from "@/components/admin/ui";
 import { adminCtx } from "@/server/adminSession";
 import { fulfilmentBoard } from "@/server/fulfilment";
+import { shipmentWatchlist } from "@/server/tracking";
+import { can } from "@/server/permissions";
+import { testCarrier } from "../actions";
 import { FULFILMENT_LABEL } from "@/server/orderStatus";
 import { connectedCarriers } from "@/server/shipping/registry";
 import { bulkBookLabels } from "../actions";
@@ -14,7 +17,8 @@ const kilos = (grams: number) => `${(grams / 1000).toLocaleString("en-GB", { max
 export default async function FulfilmentPage({ searchParams }: PageProps<"/admin/fulfilment">) {
   const ctx = await adminCtx();
   if (!ctx.admin) return null;
-  const [board, params] = await Promise.all([fulfilmentBoard(ctx), searchParams]);
+  const [board, watch, params] = await Promise.all([fulfilmentBoard(ctx), shipmentWatchlist(ctx), searchParams]);
+  const mayTest = can(ctx.admin.role, "ADMINISTRATOR", "integrations");
   const connected = board.carriers.filter((carrier) => carrier.connected);
   const services = connectedCarriers().flatMap((carrier) => carrier.services.map((service) => ({ value: `${carrier.key}|${service.code}`, label: `${carrier.name} — ${service.name}` })));
 
@@ -27,8 +31,35 @@ export default async function FulfilmentPage({ searchParams }: PageProps<"/admin
         <Stat label="Carriers connected" value={`${connected.length} of ${board.carriers.length}`} />
       </div>
 
+      <Card
+        title="Parcels that need attention"
+        description={`${watch.inTransit} on their way, ${watch.awaitingCollection} waiting for the carrier. Listed here: a problem the carrier reports, a delivery estimate that has passed, a label not collected after ${2} days, no tracking update for more than 4 days, and shipments sent without a tracking number. Customers are not told about a problem automatically.`}
+      >
+        <Table head={["Order", "Customer", "Carrier", "Sent", "Last update", "Why"]} empty={watch.attention.length === 0 ? "No parcel needs attention." : undefined}>
+          {watch.attention.map((row) => (
+            <tr key={row.id}>
+              <td>
+                <Link href={`/admin/orders/${row.orderId}`} className={cellLink}>
+                  {row.number}
+                </Link>
+              </td>
+              <td>
+                {row.customer} <span className="text-stone-700">({row.country})</span>
+              </td>
+              <td>
+                {row.carrier}
+                <span className="block font-mono text-[0.75rem] text-stone-700">{row.trackingNumber ?? "no number"}</span>
+              </td>
+              <td className="whitespace-nowrap">{dateTime(row.sentAt)}</td>
+              <td>{row.lastEvent ? `${dateTime(row.lastEvent.at)} · ${row.lastEvent.description}` : "—"}</td>
+              <td className={row.problem ? "text-terracotta-700" : undefined}>{row.reasons.join("; ")}</td>
+            </tr>
+          ))}
+        </Table>
+      </Card>
+
       <Card title="Carriers" description="A carrier is connected when its credentials are in the server environment. Until then labels cannot be booked with it, and shipments are recorded by hand.">
-        <Table head={["Carrier", "State", "Environment", "Live rates", "Cancel by API", "Missing"]}>
+        <Table head={["Carrier", "State", "Environment", "Live rates", "Cancel by API", "Missing", ""]}>
           {board.carriers.map((carrier) => (
             <tr key={carrier.key}>
               <td>{carrier.name}</td>
@@ -39,6 +70,13 @@ export default async function FulfilmentPage({ searchParams }: PageProps<"/admin
               <td>{carrier.connected ? (carrier.hasRates ? "Yes" : "No — contract prices") : "—"}</td>
               <td>{carrier.connected ? (carrier.canCancel ? "Yes" : "No") : "—"}</td>
               <td className="font-mono text-[0.75rem] text-stone-700">{carrier.missing.join(", ")}</td>
+              <td>
+                {mayTest && carrier.connected && carrier.canTest && (
+                  <form action={testCarrier.bind(null, carrier.key)}>
+                    <Submit variant="secondary">Test sign-in</Submit>
+                  </form>
+                )}
+              </td>
             </tr>
           ))}
         </Table>

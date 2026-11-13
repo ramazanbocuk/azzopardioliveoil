@@ -85,6 +85,10 @@ export function createFedex(env: Env, transport: CarrierTransport, now: () => nu
     environment,
     services: Object.entries(SERVICE_NAMES).map(([code, name]) => ({ code, name })),
 
+    async ping() {
+      await bearer();
+    },
+
     async rates(request) {
       type Response = { output?: { rateReplyDetails?: { serviceType: string; serviceName?: string; ratedShipmentDetails?: { rateType?: string; totalNetCharge?: number; currency?: string; shipmentRateDetail?: { currency?: string } }[]; commit?: { dateDetail?: { dayFormat?: string } } }[] } };
       const result = await call<Response>("POST", "/rate/v1/rates/quotes", {

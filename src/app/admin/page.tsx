@@ -44,6 +44,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
         <Stat label="Average order" value={money(stats.averageOrderCents)} />
         <Stat label="Orders today" value={String(stats.ordersToday)} note={`${stats.awaitingFulfilment} waiting to be packed`} />
         <Stat label="Partly shipped" value={String(stats.partlyShipped)} note="Orders with a parcel sent and more to follow" />
+        <Stat label="Parcels on their way" value={String(stats.parcelsInTransit)} note={stats.parcelProblems ? `${stats.parcelProblems} with a delivery problem: see Shipping & fulfilment` : "None with a reported problem"} />
         <Stat label="On backorder" value={`${stats.backorderedUnits} unit${stats.backorderedUnits === 1 ? "" : "s"}`} note={`Paid for and waiting for stock, on ${stats.backorderedOrders} order${stats.backorderedOrders === 1 ? "" : "s"}`} />
       </div>
 
