@@ -1,3 +1,4 @@
+import { holdStock, releaseHolds } from "./stock";
 import { toLocale } from "@/i18n/config";
 import { z } from "zod";
 import { WHOLESALE_CODE, activeDiscount, findCart, summarise, toLines } from "./cart";
@@ -104,11 +105,12 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
   const accessToken = newToken();
 
   const order = await ctx.db.$transaction(async (tx) => {
+    // Hold what is on the shelf. Where the owner allows it, the rest of a line becomes a backorder; otherwise the order is refused.
+    const holds = new Map<string, { held: number; backorder: number }>();
     for (const item of cart.items) {
-      const reserved = await tx.$executeRaw`
-        UPDATE "Variant" SET "reserved" = "reserved" + ${item.quantity}
-        WHERE "id" = ${item.variantId} AND "isActive" AND "stock" - "reserved" >= ${item.quantity}`;
-      if (reserved !== 1) throw new AppError("OUT_OF_STOCK", `${item.variant.product.name} ${item.variant.label} does not have enough stock.`);
+      const hold = await holdStock(tx, { id: item.variantId, allowBackorder: item.variant.product.allowBackorder }, item.quantity);
+      if (!hold) throw new AppError("OUT_OF_STOCK", `${item.variant.product.name} ${item.variant.label} does not have enough stock.`);
+      holds.set(item.variantId, hold);
     }
 
     // Trade terms are not a counted code: there is no usage limit to consume.
@@ -166,6 +168,7 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
             variantLabel: item.variant.label,
             unitPriceCents: item.variant.priceCents,
             quantity: item.quantity,
+            backorderQuantity: holds.get(item.variantId)?.backorder ?? 0,
             lineTotalCents: item.variant.priceCents * item.quantity,
             taxRateBps: tax?.rateBps ?? null,
             taxCents: breakdown.lineTaxCents[index],
@@ -176,6 +179,16 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
         },
         events: { create: { kind: "placed", message: "Order placed, awaiting payment." } },
       },
+    });
+
+    // A record of each hold, so staff can see which order is holding which bottles and until when.
+    const placed = await tx.orderItem.findMany({ where: { orderId: created.id }, select: { id: true, variantId: true } });
+    const expiresAt = created.reservedUntil ?? new Date();
+    await tx.stockReservation.createMany({
+      data: placed.flatMap((line) => {
+        const held = line.variantId ? (holds.get(line.variantId)?.held ?? 0) : 0;
+        return line.variantId && held > 0 ? [{ orderId: created.id, orderItemId: line.id, variantId: line.variantId, quantity: held, expiresAt }] : [];
+      }),
     });
 
     await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
@@ -201,9 +214,7 @@ export async function releaseExpiredReservations(db: Db, now = new Date()): Prom
       // Re-check inside the transaction: a webhook may have paid it meanwhile.
       const claimed = await tx.order.updateMany({ where: { id: order.id, paymentStatus: { in: ["UNPAID", "FAILED"] }, cancelledAt: null }, data: { status: "CANCELLED", cancelledAt: now, reservedUntil: null } });
       if (claimed.count !== 1) return;
-      for (const item of order.items) {
-        if (item.variantId) await tx.$executeRaw`UPDATE "Variant" SET "reserved" = GREATEST("reserved" - ${item.quantity}, 0) WHERE "id" = ${item.variantId}`;
-      }
+      await releaseHolds(tx, order.id);
       if (order.discountCode) await tx.$executeRaw`UPDATE "Discount" SET "usedCount" = GREATEST("usedCount" - 1, 0) WHERE "code" = ${order.discountCode}`;
       await tx.orderEvent.create({ data: { orderId: order.id, kind: "cancelled", message: "Order cancelled: payment was not completed in time." } });
       released += 1;
@@ -213,7 +224,16 @@ export async function releaseExpiredReservations(db: Db, now = new Date()): Prom
 }
 
 // Customers never see staff-only timeline entries.
-const orderInclude = { items: true, events: { where: { isInternal: false }, orderBy: { createdAt: "asc" } }, shipments: true } as const;
+/**
+ * What a customer sees of their order: the lines with what is still owed,
+ * the public timeline, and every parcel with its own contents and tracking.
+ * A cancelled booking is not a parcel and is left out.
+ */
+const orderInclude = {
+  items: { include: { backorder: true } },
+  events: { where: { isInternal: false }, orderBy: { createdAt: "asc" } },
+  shipments: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" }, include: { items: { include: { orderItem: { select: { sku: true, productName: true, variantLabel: true } } } } } },
+} as const;
 
 /** Guest lookup. Number and email must both match; the answer is the same for "wrong number" and "wrong email". */
 export async function findOrderForGuest(ctx: Ctx, number: string, email: string) {

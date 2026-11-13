@@ -22,7 +22,7 @@ function SizeFromUrl({ onSize }: { onSize: (ml: number) => void }) {
 export function ProductView({ product, category, freeShippingFrom }: { product: Product; category: Category; freeShippingFrom: number | null }) {
   const { m, fill, money } = useI18n();
   const t = m.product;
-  const firstAvailable = product.variants.find((v) => v.inStock) ?? product.variants[0];
+  const firstAvailable = product.variants.find((v) => v.inStock) ?? product.variants.find((v) => v.backorder) ?? product.variants[0];
   const [ml, setMl] = useState(firstAvailable.ml);
   const [qty, setQty] = useState(1);
   const variant = product.variants.find((v) => v.ml === ml) ?? firstAvailable;
@@ -82,15 +82,22 @@ export function ProductView({ product, category, freeShippingFrom }: { product: 
               legend={t.size}
               value={String(ml)}
               onChange={(value) => setMl(Number(value))}
-              options={product.variants.map((v) => ({ value: String(v.ml), label: `${v.ml} ml`, disabled: !v.inStock }))}
+              options={product.variants.map((v) => ({ value: String(v.ml), label: `${v.ml} ml`, disabled: !v.inStock && !v.backorder }))}
             />
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <QuantityStepper value={qty} onChange={setQty} />
-            <AddToCart sku={variant.sku} qty={qty} disabled={!variant.inStock} className="flex-1" />
+            <AddToCart sku={variant.sku} qty={qty} disabled={!variant.inStock && !variant.backorder} className="flex-1" />
             <FavouriteButton sku={variant.sku} label={label} className="size-13 border border-ink/30" />
           </div>
+
+          {variant.backorder && (
+            <p role="status" className="text-small mt-4 border-l-2 border-gold-700 pl-3 text-ink/85">
+              {m.fulfil.productBackorder}
+              {product.backorderNote ? ` ${product.backorderNote}` : ""}
+            </p>
+          )}
 
           <ul className="text-small mt-6 space-y-1.5 text-ink/80">
             <li>{t.sentTracked}</li>

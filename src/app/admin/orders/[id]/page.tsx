@@ -7,7 +7,9 @@ import { carrierStates } from "@/server/shipping/registry";
 import { adminCtx } from "@/server/adminSession";
 import { DISPUTE_LABEL } from "@/server/paymentSync";
 import { FULFILMENT_LABEL, ORDER_STATUS_LABEL, PAYMENT_ALLOWS_FULFILMENT } from "@/server/orderStatus";
-import { addNote, bookCarrierLabel, releaseShipmentAttempt, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
+import { openBackorder, outstanding, readyToShip } from "@/server/stock";
+import { can } from "@/server/permissions";
+import { cancelUnits, addNote, bookCarrierLabel, releaseShipmentAttempt, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
 
 export const metadata = { title: "Order" };
 
@@ -46,7 +48,11 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
   const refundable = order.payments.filter((p) => p.status === "PAID" || p.status === "PARTIALLY_REFUNDED").reduce((sum, p) => sum + p.amountCents, 0) - refunded;
 
   const moneyHeld = !order.cancelledAt && PAYMENT_ALLOWS_FULFILMENT.includes(order.paymentStatus);
-  const remaining = order.items.map((item) => ({ item, left: item.quantity - item.shippedQuantity })).filter((row) => row.left > 0);
+  // "left" is what can go in a parcel today: units still on backorder are not on the shelf for this order.
+  const remaining = order.items.map((item) => ({ item, left: readyToShip(item) })).filter((row) => row.left > 0);
+  const waitingUnits = order.items.reduce((sum, item) => sum + openBackorder(item.backorder), 0);
+  const removable = moneyHeld ? order.items.filter((item) => outstanding(item) > 0) : [];
+  const mayRemove = can(ctx.admin.role, "MANAGER", "orders");
   const canShip = moneyHeld && remaining.length > 0;
   const remainingGrams = remaining.reduce((sum, row) => sum + row.item.weightGrams * row.left, 0);
   const goodsTax = order.taxCents === null ? null : order.taxCents - (order.shippingTaxCents ?? 0);
@@ -116,9 +122,28 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
       </dl>
 
       <div className="grid gap-8 xl:grid-cols-3">
-        <div className="space-y-8 xl:col-span-2">
-          <Card title="Items" description="Record the lot each line is packed from. It then appears on the customer’s order and invoice.">
-            <Table head={["Product", "Qty", "Shipped", "Unit", "Line", "VAT", "Lot"]}>
+        <div className="min-w-0 space-y-8 xl:col-span-2">
+          <Card title="Stock and dispatch" description="For each line: what was ordered, what is on the shelf now, what is held while payment is awaited, what has gone, what can go today, what is still waiting for stock, and what was taken off the order.">
+            <Table head={["Product", "Ordered", "On shelf", "Held", "Shipped", "Can ship", "Backorder", "Removed"]}>
+              {order.items.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    {item.productName} {item.variantLabel}
+                  </td>
+                  <td className="tabular-nums">{item.quantity}</td>
+                  <td className="tabular-nums">{item.variantId ? (order.availability[item.variantId] ?? "—") : "—"}</td>
+                  <td className="tabular-nums">{item.reservations.reduce((sum, hold) => sum + hold.quantity, 0)}</td>
+                  <td className="tabular-nums">{item.shippedQuantity}</td>
+                  <td className="tabular-nums">{moneyHeld ? readyToShip(item) : 0}</td>
+                  <td className="tabular-nums">{openBackorder(item.backorder) > 0 ? <strong className="text-terracotta-700">{openBackorder(item.backorder)}</strong> : 0}</td>
+                  <td className="tabular-nums">{item.cancelledQuantity}</td>
+                </tr>
+              ))}
+            </Table>
+          </Card>
+
+          <Card title="Items" description="Prices as charged. The lot of each parcel is recorded when it is packed; the lot shown here is the first one used for the line.">
+            <Table head={["Product", "Qty", "Unit", "Line", "VAT", "First lot"]}>
               {order.items.map((item) => (
                 <tr key={item.id}>
                   <td>
@@ -126,7 +151,6 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                     <span className="block font-mono text-[0.75rem] text-stone-700">{item.sku}</span>
                   </td>
                   <td className="tabular-nums">{item.quantity}</td>
-                  <td className="tabular-nums">{item.shippedQuantity}</td>
                   <td className="tabular-nums">{money(item.unitPriceCents)}</td>
                   <td className="tabular-nums">{money(item.lineTotalCents)}</td>
                   <td className="whitespace-nowrap tabular-nums">
@@ -185,6 +209,11 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
           </Card>
 
           <Card title="Fulfilment">
+            {moneyHeld && waitingUnits > 0 && (
+              <p role="status" className="mb-5 border-l-2 border-terracotta-700 bg-terracotta-500/10 px-4 py-3 text-terracotta-700">
+                {waitingUnits} unit{waitingUnits === 1 ? " is" : "s are"} paid for but not in stock. {remaining.length > 0 ? "Ship what is ready now; the rest follows as its own shipment when stock arrives." : "Nothing can ship until stock arrives."} Arriving stock is set aside for this order automatically, oldest order first.
+              </p>
+            )}
             {!moneyHeld && !order.cancelledAt && order.paymentStatus !== "REFUNDED" && (
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <p className="text-stone-700">
@@ -234,7 +263,12 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                   · sent {dateTime(shipment.shippedAt)}
                   {shipment.deliveredAt ? ` · delivered ${dateTime(shipment.deliveredAt)}` : ""}
                 </p>
-                {shipment.items.length > 0 && <p className="mt-2">{shipment.items.map((line) => `${line.quantity} × ${itemName(line.orderItemId)}`).join(", ")}</p>}
+                {shipment.items.length > 0 && <p className="mt-2">{shipment.items.map((line) => `${line.quantity} × ${itemName(line.orderItemId)}${line.lotNumber ? ` (lot ${line.lotNumber})` : ""}`).join(", ")}</p>}
+                <p className="mt-3">
+                  <LinkButton href={`/admin/orders/${order.id}/packing-slip?shipment=${shipment.id}`} target="_blank">
+                    Packing slip for this shipment
+                  </LinkButton>
+                </p>
                 {shipment.labels.length > 0 && (
                   <p className="mt-3 flex flex-wrap gap-2">
                     {shipment.labels.map((label) => (
@@ -367,7 +401,10 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                 <h3 className="font-medium">{order.shipments.length ? "Record another shipment by hand" : "Record a shipment by hand"}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {remaining.map(({ item, left }) => (
-                    <Field key={item.id} label={`${item.productName} ${item.variantLabel} — units in this shipment (${left} left)`} name={`qty:${item.id}`} type="number" min={0} max={left} defaultValue={left} required />
+                    <div key={item.id} className="grid grid-cols-[1fr_8rem] gap-3">
+                      <Field label={`${item.productName} ${item.variantLabel} — units in this shipment (${left} can go)`} name={`qty:${item.id}`} type="number" min={0} max={left} defaultValue={left} required />
+                      <Field label="Lot" name={`lot:${item.id}`} defaultValue={item.lotNumber ?? ""} placeholder="AZ-0001" />
+                    </div>
                   ))}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-4">
@@ -396,6 +433,25 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
             )}
             {(order.cancelledAt || order.fulfilmentStatus === "DELIVERED" || (order.paymentStatus === "REFUNDED" && order.shipments.length === 0)) && <p className="text-stone-700">Nothing to do.</p>}
           </Card>
+
+          {mayRemove && removable.length > 0 && (
+            <Card title="Take units off the order" description="For units that will not be supplied. Units still waiting for stock are cancelled first; any others go back on sale. This does not return money: issue the refund below afterwards.">
+              <form action={cancelUnits.bind(null, order.id)} className="grid gap-4 sm:grid-cols-[1fr_8rem_auto] sm:items-end">
+                <label className="block">
+                  <span className="text-small font-medium">Line</span>
+                  <select name="orderItemId" required className="mt-1.5 h-10 w-full border border-ink/25 bg-white px-3">
+                    {removable.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.productName} {item.variantLabel} — {outstanding(item)} not shipped
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Field label="Units" name="quantity" type="number" min={1} defaultValue={1} required />
+                <Submit variant="danger">Take off the order</Submit>
+              </form>
+            </Card>
+          )}
 
           {refundable > 0 && (
             <Card title="Refund" description="Administrators only. The refund is sent through the payment provider first and recorded only if that succeeds.">

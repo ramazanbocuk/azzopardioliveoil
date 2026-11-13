@@ -1,3 +1,4 @@
+import { afterShipment } from "./stock";
 import type { OutboxJob } from "@/generated/prisma/client";
 import { refreshTracking } from "./fulfilment";
 import { releaseExpiredReservations } from "./checkout";
@@ -71,10 +72,18 @@ const handlers: Record<string, Handler> = {
   },
 
   async "notify.customer.shipped"(db, job, { env, transport }) {
-    const order = await paidOrder(db, job);
-    // An order can leave in several shipments; each email is about the one that triggered it.
-    const shipmentId = (job.payload as { shipmentId?: string }).shipmentId;
-    await sendEmail(customerShippedEmail(order, order.shipments.find((shipment) => shipment.id === shipmentId) ?? order.shipments[0] ?? null), job.dedupeKey, env, transport);
+    // An order can leave in several shipments; each email is about the one that triggered it: its contents, its tracking, and what is still owed after it.
+    const { orderId, shipmentId } = job.payload as { orderId?: string; shipmentId?: string };
+    const order = orderId ? await db.order.findUnique({ where: { id: orderId }, include: { items: { include: { backorder: true } }, shipments: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" }, include: { items: true } } } }) : null;
+    if (!order) throw new Skip("The order no longer exists.");
+    const shipment = order.shipments.find((candidate) => candidate.id === shipmentId);
+    if (!shipment) throw new Skip("The shipment was cancelled before its email was sent.");
+    const after = afterShipment(order.items, order.shipments, shipment.id);
+    const lines = shipment.items.flatMap((line) => {
+      const item = order.items.find((candidate) => candidate.id === line.orderItemId);
+      return item ? [{ name: `${item.productName} ${item.variantLabel}`, quantity: line.quantity, lotNumber: line.lotNumber }] : [];
+    });
+    await sendEmail(customerShippedEmail(order, shipment, { lines, toFollow: after.toFollow, first: after.first }), job.dedupeKey, env, transport);
   },
 
   async "email.newsletter.confirm"(db, job, { env, transport }) {

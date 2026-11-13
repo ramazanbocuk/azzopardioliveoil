@@ -44,7 +44,10 @@ async function makeOrder(status: "PENDING_PAYMENT" | "PAID", quantity = 2) {
       items: { create: [{ variantId: variant.id, sku: "t-500", productName: "Test Oil", variantLabel: "500 ml", unitPriceCents: 1800, quantity, lineTotalCents: 1800 * quantity }] },
       payments: paid ? { create: [{ provider: "STRIPE", providerRef: `cs_${Math.random().toString(36).slice(2)}`, status: "PAID", amountCents: 1800 * quantity + 695 }] } : undefined,
     },
+    include: { items: true },
   });
+  // As checkout does: every hold has a record saying whose it is.
+  if (!paid) await db.stockReservation.create({ data: { orderId: order.id, orderItemId: order.items[0].id, variantId: variant.id, quantity, expiresAt: new Date(Date.now() + 40 * 60_000) } });
   return order.id;
 }
 

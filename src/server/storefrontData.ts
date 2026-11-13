@@ -62,6 +62,7 @@ export async function getCatalogData(language = "en"): Promise<{ categories: Cat
       categorySlug: p.category.slug,
       blurb: text?.blurb ?? p.blurb,
       description: (text?.description ?? p.description).split(/\n{2,}/).filter(Boolean),
+      backorderNote: p.allowBackorder ? (text?.backorderNote ?? p.backorderNote) : null,
       languages: productLanguages.get(p.id) ?? ["en"],
       translated: language === "en" || !!text,
       lot: lot?.lotNumber ?? null,
@@ -82,7 +83,7 @@ export async function getCatalogData(language = "en"): Promise<{ categories: Cat
         packaging: text?.packaging ?? p.packaging,
       },
       lab: (lot ? (lab.get(lot.id) ?? []) : []).map(({ testedAt, ...result }) => ({ ...result, tested: day(testedAt) })),
-      variants: p.variants.map((v) => ({ sku: v.sku, ml: v.volumeMl, label: v.label, priceCents: v.priceCents, scale: bottleScale(v.volumeMl), inStock: v.stock - v.reserved > 0 })),
+      variants: p.variants.map((v) => ({ sku: v.sku, ml: v.volumeMl, label: v.label, priceCents: v.priceCents, scale: bottleScale(v.volumeMl), inStock: v.stock - v.reserved > 0, backorder: p.allowBackorder && v.stock - v.reserved <= 0 })),
       facts: {
         origin: text?.origin ?? p.origin,
         cultivar: text?.cultivar ?? p.cultivar,

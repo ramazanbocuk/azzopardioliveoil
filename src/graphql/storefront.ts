@@ -1,8 +1,9 @@
+import { openBackorder, outstanding } from "@/server/stock";
 import { publicLabResults, type PublicLabResult } from "@/server/provenance";
 import { toLocale } from "@/i18n/config";
 import { textOf } from "@/server/translations";
 import SchemaBuilder from "@pothos/core";
-import type { Batch, BatchDocument, Category, Customer, Order, OrderEvent, OrderItem, Product, Review, Shipment, Variant } from "@/generated/prisma/client";
+import type { Backorder, Batch, BatchDocument, Category, Customer, Order, OrderEvent, OrderItem, Product, Review, Shipment, ShipmentItem, Variant } from "@/generated/prisma/client";
 import { chooseLanguage, deleteOwnAccount, login, logout, register, requestPasswordReset, requireCustomer, resetPassword } from "@/server/auth";
 import { exportCustomerData } from "@/server/privacy";
 import { addItem, applyDiscount, findCart, removeDiscount, removeItem, setQuantity, summarise, type CartSummary } from "@/server/cart";
@@ -27,7 +28,10 @@ const builder = new SchemaBuilder<{ Context: Ctx; DefaultFieldNullability: false
 const iso = (date: Date) => date.toISOString();
 const day = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : null);
 
-type FullOrder = Order & { items: OrderItem[]; events: OrderEvent[]; shipments?: Shipment[]; accessToken?: string };
+type OrderLine = OrderItem & { backorder?: Backorder | null };
+type ShippedLine = ShipmentItem & { orderItem: Pick<OrderItem, "sku" | "productName" | "variantLabel"> };
+type Parcel = Shipment & { items?: ShippedLine[] };
+type FullOrder = Order & { items: OrderLine[]; events: OrderEvent[]; shipments?: Parcel[]; accessToken?: string };
 type LotDocument = Omit<BatchDocument, "data">;
 type FullLot = Batch & { product: Product; documents: LotDocument[] };
 type CartLine = CartSummary["lines"][number];
@@ -176,7 +180,8 @@ const CartLineType = builder.objectRef<CartLine>("CartLine").implement({
     quantity: t.exposeInt("quantity"),
     unitPriceCents: t.exposeInt("unitPriceCents"),
     lineTotalCents: t.exposeInt("lineTotalCents"),
-    enoughStock: t.boolean({ resolve: (line) => line.available >= line.quantity }),
+    enoughStock: t.boolean({ description: "False when the quantity cannot be ordered: more than is in stock, on a product that is not open to backorders.", resolve: (line) => line.available >= line.quantity || line.allowBackorder }),
+    backorderQuantity: t.exposeInt("backorderQuantity", { description: "Units of this line that are not in stock now and would be sent when they arrive." }),
     variant: t.field({ type: VariantType, resolve: (line) => line.variant }),
     product: t.field({ type: ProductType, resolve: (line) => line.product }),
   }),
@@ -206,7 +211,7 @@ const ShippingOptionType = builder.objectRef<ShippingOption>("ShippingOption").i
 
 // ── Orders ──
 
-const OrderItemType = builder.objectRef<OrderItem>("OrderItem").implement({
+const OrderItemType = builder.objectRef<OrderLine>("OrderItem").implement({
   fields: (t) => ({
     sku: t.exposeString("sku"),
     productName: t.exposeString("productName"),
@@ -215,6 +220,21 @@ const OrderItemType = builder.objectRef<OrderItem>("OrderItem").implement({
     unitPriceCents: t.exposeInt("unitPriceCents"),
     quantity: t.exposeInt("quantity"),
     lineTotalCents: t.exposeInt("lineTotalCents"),
+    shippedQuantity: t.exposeInt("shippedQuantity", { description: "Units already sent, across all shipments." }),
+    cancelledQuantity: t.exposeInt("cancelledQuantity", { description: "Units taken off the order because they will not be supplied." }),
+    toFollow: t.int({ description: "Units not yet sent.", resolve: (item) => outstanding(item) }),
+    awaitingStock: t.int({ description: "Of the units not yet sent, how many are waiting for stock to arrive.", resolve: (item) => openBackorder(item.backorder) }),
+  }),
+});
+
+const ShippedLineType = builder.objectRef<ShippedLine>("ShipmentLine").implement({
+  description: "One order line's share of one shipment.",
+  fields: (t) => ({
+    sku: t.string({ resolve: (line) => line.orderItem.sku }),
+    productName: t.string({ resolve: (line) => line.orderItem.productName }),
+    variantLabel: t.string({ resolve: (line) => line.orderItem.variantLabel }),
+    quantity: t.exposeInt("quantity"),
+    lotNumber: t.exposeString("lotNumber", { nullable: true }),
   }),
 });
 
@@ -222,8 +242,10 @@ const OrderEventType = builder.objectRef<OrderEvent>("OrderEvent").implement({
   fields: (t) => ({ kind: t.exposeString("kind"), message: t.exposeString("message"), at: t.string({ resolve: (event) => iso(event.createdAt) }) }),
 });
 
-const ShipmentType = builder.objectRef<Shipment>("Shipment").implement({
+const ShipmentType = builder.objectRef<Parcel>("Shipment").implement({
+  description: "One parcel, or set of parcels sent together, with its own tracking. An order can have several.",
   fields: (t) => ({
+    items: t.field({ type: [ShippedLineType], description: "What is in this shipment.", resolve: (shipment) => shipment.items ?? [] }),
     carrier: t.exposeString("carrier"),
     status: t.exposeString("status"),
     trackingNumber: t.exposeString("trackingNumber", { nullable: true }),

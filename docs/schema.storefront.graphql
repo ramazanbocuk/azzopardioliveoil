@@ -39,6 +39,14 @@ type Cart {
 }
 
 type CartLine {
+  """
+  Units of this line that are not in stock now and would be sent when they arrive.
+  """
+  backorderQuantity: Int!
+
+  """
+  False when the quantity cannot be ordered: more than is in stock, on a product that is not open to backorders.
+  """
   enoughStock: Boolean!
   lineTotalCents: Int!
   product: Product!
@@ -233,11 +241,22 @@ type OrderEvent {
 }
 
 type OrderItem {
+  """Of the units not yet sent, how many are waiting for stock to arrive."""
+  awaitingStock: Int!
+
+  """Units taken off the order because they will not be supplied."""
+  cancelledQuantity: Int!
   lineTotalCents: Int!
   lotNumber: String
   productName: String!
   quantity: Int!
+
+  """Units already sent, across all shipments."""
+  shippedQuantity: Int!
   sku: String!
+
+  """Units not yet sent."""
+  toFollow: Int!
   unitPriceCents: Int!
   variantLabel: String!
 }
@@ -343,13 +362,28 @@ input ReviewInput {
   title: String
 }
 
+"""
+One parcel, or set of parcels sent together, with its own tracking. An order can have several.
+"""
 type Shipment {
   carrier: String!
   deliveredAt: String
+
+  """What is in this shipment."""
+  items: [ShipmentLine!]!
   shippedAt: String
   status: String!
   trackingNumber: String
   trackingUrl: String
+}
+
+"""One order line's share of one shipment."""
+type ShipmentLine {
+  lotNumber: String
+  productName: String!
+  quantity: Int!
+  sku: String!
+  variantLabel: String!
 }
 
 type ShippingOption {

@@ -1,4 +1,5 @@
-import type { Order, OrderItem, Prisma } from "@/generated/prisma/client";
+import { openBackorder, readyToShip } from "./stock";
+import type { Backorder, Order, OrderItem, Prisma } from "@/generated/prisma/client";
 import { audit, createShipment, timeline } from "./admin";
 import { requireAdmin } from "./auth";
 import type { Ctx } from "./context";
@@ -32,15 +33,17 @@ export function senderFrom(settings: ShippingSettings): Party {
 }
 
 type Line = { orderItemId: string; quantity: number };
-type FullOrder = Order & { items: OrderItem[] };
+type Item = OrderItem & { backorder: Backorder | null };
+type FullOrder = Order & { items: Item[] };
 
 function linesToShip(order: FullOrder, wanted?: Line[] | null): { item: OrderItem; quantity: number }[] {
-  const lines = wanted?.filter((line) => line.quantity > 0) ?? order.items.map((item) => ({ orderItemId: item.id, quantity: item.quantity - item.shippedQuantity }));
+  // Only units that are in stock for this order can go in a parcel; units still on backorder stay behind.
+  const lines = wanted?.filter((line) => line.quantity > 0) ?? order.items.map((item) => ({ orderItemId: item.id, quantity: readyToShip(item) }));
   const result = lines
     .map((line) => ({ item: order.items.find((item) => item.id === line.orderItemId), quantity: line.quantity }))
-    .filter((line): line is { item: OrderItem; quantity: number } => !!line.item && line.quantity > 0);
-  for (const line of result) if (line.quantity > line.item.quantity - line.item.shippedQuantity) throw new AppError("BAD_INPUT", `${line.item.productName} ${line.item.variantLabel}: only ${line.item.quantity - line.item.shippedQuantity} left to ship.`);
-  if (result.length === 0) throw new AppError("BAD_INPUT", "Everything on this order has already been shipped.");
+    .filter((line): line is { item: Item; quantity: number } => !!line.item && line.quantity > 0);
+  for (const line of result) if (line.quantity > readyToShip(line.item)) throw new AppError("BAD_INPUT", `${line.item.productName} ${line.item.variantLabel}: ${readyToShip(line.item)} can be shipped now.`);
+  if (result.length === 0) throw new AppError("BAD_INPUT", order.items.some((item) => openBackorder(item.backorder) > 0) ? "Nothing on this order is in stock to ship yet. The rest is waiting on backorder." : "Everything on this order has already been shipped.");
   return result;
 }
 
@@ -74,7 +77,7 @@ export function buildShipmentRequest(order: FullOrder, sender: Party, boxes: Box
 }
 
 async function shippableOrder(ctx: Ctx, orderId: string): Promise<FullOrder> {
-  const order = await ctx.db.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  const order = await ctx.db.order.findUnique({ where: { id: orderId }, include: { items: { include: { backorder: true } } } });
   if (!order) throw new AppError("NOT_FOUND", "Order not found.");
   if (order.cancelledAt || !PAYMENT_ALLOWS_FULFILMENT.includes(order.paymentStatus)) throw new AppError("BAD_INPUT", "Only a paid order can be shipped.");
   return order;
@@ -211,12 +214,12 @@ export async function bulkBookLabels(ctx: Ctx, orderIds: string[], input: { carr
   if (ids.length === 0) throw new AppError("BAD_INPUT", "Select at least one order.");
   if (!input.carrier || !input.service) throw new AppError("BAD_INPUT", "Choose a carrier and service.");
   const packaging = (await shippingSettings(ctx.db)).packagingGrams ?? 0;
-  const orders = await ctx.db.order.findMany({ where: { id: { in: ids } }, include: { items: true } });
+  const orders = await ctx.db.order.findMany({ where: { id: { in: ids } }, include: { items: { include: { backorder: true } } } });
   const booked: { number: string; shipmentId: string }[] = [];
   const failed: { number: string; reason: string }[] = [];
   for (const order of orders) {
     const number = order.number ?? order.id;
-    const goods = order.items.reduce((sum, item) => sum + item.weightGrams * Math.max(0, item.quantity - item.shippedQuantity), 0);
+    const goods = order.items.reduce((sum, item) => sum + item.weightGrams * readyToShip(item), 0);
     try {
       if (goods <= 0) throw new AppError("BAD_INPUT", "The products on this order have no weight recorded, so the box cannot be weighed automatically.");
       booked.push({ number, shipmentId: await bookLabel(ctx, order.id, { carrier: input.carrier, service: input.service, boxes: [{ weightGrams: goods + packaging }] }) });
@@ -318,7 +321,7 @@ export async function refreshTracking(db: Db, now = new Date(), limit = 20): Pro
 export async function fulfilmentBoard(ctx: Ctx) {
   requireAdmin(ctx, "VIEW", "shipping");
   const [waiting, shipments, settings] = await Promise.all([
-    ctx.db.order.findMany({ where: { cancelledAt: null, paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT }, fulfilmentStatus: { in: ["UNFULFILLED", "PROCESSING", "READY", "PARTIALLY_SHIPPED"] } }, orderBy: { paidAt: "asc" }, take: 100, include: { items: true } }),
+    ctx.db.order.findMany({ where: { cancelledAt: null, paymentStatus: { in: PAYMENT_ALLOWS_FULFILMENT }, fulfilmentStatus: { in: ["UNFULFILLED", "PROCESSING", "READY", "PARTIALLY_SHIPPED"] } }, orderBy: { paidAt: "asc" }, take: 100, include: { items: { include: { backorder: true } } } }),
     ctx.db.shipment.findMany({ orderBy: { createdAt: "desc" }, take: 30, include: { order: { select: { id: true, number: true, shipCountryCode: true, shipFirstName: true, shipLastName: true } }, parcels: true, _count: { select: { labels: true } } } }),
     shippingSettings(ctx.db),
   ]);
@@ -332,8 +335,9 @@ export async function fulfilmentBoard(ctx: Ctx) {
     carriers: carrierStates(),
     senderComplete,
     waiting: waiting.map((order) => {
-      const left = order.items.map((item) => ({ item, quantity: item.quantity - item.shippedQuantity })).filter((line) => line.quantity > 0);
-      return { order, units: left.reduce((sum, line) => sum + line.quantity, 0), weightGrams: left.reduce((sum, line) => sum + line.item.weightGrams * line.quantity, 0), needsCustoms: !EU.has(order.shipCountryCode) };
+      const left = order.items.map((item) => ({ item, quantity: readyToShip(item) })).filter((line) => line.quantity > 0);
+      const backordered = order.items.reduce((sum, item) => sum + openBackorder(item.backorder), 0);
+      return { order, backordered, units: left.reduce((sum, line) => sum + line.quantity, 0), weightGrams: left.reduce((sum, line) => sum + line.item.weightGrams * line.quantity, 0), needsCustoms: !EU.has(order.shipCountryCode) };
     }),
     shipments,
   };

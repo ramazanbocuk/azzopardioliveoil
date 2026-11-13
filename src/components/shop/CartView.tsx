@@ -70,6 +70,9 @@ export function CartView() {
                         {line.variant.label} · {fill(c.each, { price: money(line.unitPriceCents) })}
                       </p>
                       {!line.enoughStock && <p className="text-small mt-2 text-terracotta-700">{c.notEnough}</p>}
+                      {line.enoughStock && line.backorderQuantity > 0 && (
+                        <p className="text-small mt-2 text-ink/80">{line.backorderQuantity >= line.quantity ? m.fulfil.cartAll : fill(m.fulfil.cartPart, { now: line.quantity - line.backorderQuantity, later: line.backorderQuantity })}</p>
+                      )}
                     </div>
                     <p className="text-lead shrink-0 tabular-nums">{money(line.lineTotalCents)}</p>
                   </div>

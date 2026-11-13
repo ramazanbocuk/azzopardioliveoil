@@ -63,33 +63,93 @@ export function OrderSummary({ order }: { order: OrderFieldsFragment }) {
 }
 
 export function OrderTimeline({ order }: { order: OrderFieldsFragment }) {
-  const { m, date, server } = useI18n();
+  const { m, fill, date, server } = useI18n();
+  const f = m.fulfil;
   const when = (iso: string) => date(iso, { dateStyle: "medium", timeStyle: "short" });
+  const day = (iso: string) => date(iso, { dateStyle: "long" });
+  const shipmentStatus = (value: string) => (f.status as Record<string, string>)[value] ?? value;
+  const eventText = (event: { kind: string; message: string }) => (f.events as Record<string, string>)[event.kind] ?? server(event.message);
+
+  const toCome = order.items.filter((item) => item.toFollow > 0);
+  const removed = order.items.filter((item) => item.cancelledQuantity > 0);
+  // One more shipment is expected for as long as anything is still owed.
+  const total = order.shipments.length + (toCome.length > 0 ? 1 : 0);
+  const name = (line: { productName: string; variantLabel: string }) => `${line.productName} ${line.variantLabel}`;
+
   return (
     <div>
       <ol>
         {order.events.map((event, index) => (
-          <li key={`${event.kind}-${event.at}`} className="relative flex gap-5 pb-7 last:pb-0">
+          <li key={`${event.kind}-${event.at}-${index}`} className="relative flex gap-5 pb-7 last:pb-0">
             {index < order.events.length - 1 && <span aria-hidden="true" className="absolute left-[7px] top-4 h-full w-px bg-ink/20" />}
             <span aria-hidden="true" className="relative mt-1 block size-[15px] shrink-0 rounded-full border border-olive-700 bg-olive-700" />
             <span>
-              {server(event.message)}
+              {eventText(event)}
               <span className="text-small block text-stone-700">{when(event.at)}</span>
             </span>
           </li>
         ))}
       </ol>
-      {order.shipments.map((shipment) => (
-        <p key={shipment.trackingNumber ?? shipment.carrier} className="mt-6 border-t border-ink/20 pt-5">
-          {shipment.carrier}
-          {shipment.trackingNumber ? ` · ${shipment.trackingNumber}` : ""}
-          {shipment.trackingUrl && (
-            <a href={shipment.trackingUrl} rel="noreferrer" className="ml-3 underline underline-offset-4">
-              {m.order.trackWithCarrier}
-            </a>
+
+      {(order.shipments.length > 0 || removed.length > 0 || (toCome.length > 0 && toCome.some((item) => item.awaitingStock > 0))) && (
+        <section aria-label={f.shipments} className="mt-8 border-t border-ink/20 pt-6">
+          <h4 className="text-label text-stone-700">{f.shipments}</h4>
+          {total > 1 && <p className="text-small mt-3 max-w-[52ch] text-ink/80">{f.partialNote}</p>}
+
+          {order.shipments.map((shipment, index) => (
+            <article key={`${shipment.trackingNumber ?? "shipment"}-${index}`} className="mt-5 border border-ink/15 p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                <h5 className="font-medium">{fill(f.shipmentOf, { index: index + 1, total })}</h5>
+                <p className="text-label">{shipmentStatus(shipment.status)}</p>
+              </div>
+              <p className="text-small mt-2 text-stone-700">
+                {shipment.deliveredAt ? fill(f.deliveredOn, { date: day(shipment.deliveredAt) }) : shipment.shippedAt ? fill(f.sent, { date: day(shipment.shippedAt) }) : ""}
+              </p>
+              <ul className="mt-3 space-y-1">
+                {shipment.items.map((line) => (
+                  <li key={line.sku}>
+                    {line.quantity} × {name(line)}
+                    {line.lotNumber ? <span className="text-small text-stone-700"> · {fill(m.order.lot, { lot: line.lotNumber })}</span> : null}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3">
+                {shipment.carrier}
+                {" · "}
+                {shipment.trackingNumber ?? f.noTracking}
+                {shipment.trackingUrl && (
+                  <a href={shipment.trackingUrl} rel="noreferrer" className="ml-3 underline underline-offset-4">
+                    {m.order.trackWithCarrier}
+                  </a>
+                )}
+              </p>
+            </article>
+          ))}
+
+          {toCome.length > 0 && (
+            <div className="mt-5 border border-dashed border-ink/30 p-5">
+              <h5 className="font-medium">{order.shipments.length > 0 ? `${fill(f.shipmentOf, { index: total, total })} — ${f.toCome}` : f.toCome}</h5>
+              <ul className="mt-3 space-y-1">
+                {toCome.flatMap((item) => {
+                  const ready = item.toFollow - item.awaitingStock;
+                  return [
+                    ...(ready > 0 ? [<li key={`${item.sku}-ready`}>{fill(f.preparing, { count: ready, name: name(item) })}</li>] : []),
+                    ...(item.awaitingStock > 0 ? [<li key={`${item.sku}-waiting`}>{fill(f.awaitingStock, { count: item.awaitingStock, name: name(item) })}</li>] : []),
+                  ];
+                })}
+              </ul>
+            </div>
           )}
-        </p>
-      ))}
+
+          {removed.length > 0 && (
+            <ul className="text-small mt-4 space-y-1 text-stone-700">
+              {removed.map((item) => (
+                <li key={`${item.sku}-removed`}>{fill(f.removed, { count: item.cancelledQuantity, name: name(item) })}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

@@ -21,6 +21,7 @@ const NAV = [
   { href: "/admin/inventory", label: "Inventory" },
   { href: "/admin/customers", label: "Customers" },
   { href: "/admin/fulfilment", label: "Shipping & fulfilment" },
+  { href: "/admin/backorders", label: "Backorders" },
   { href: "/admin/payments", label: "Payments" },
   { href: "/admin/discounts", label: "Discounts & coupons" },
   { href: "/admin/marketing", label: "Marketing" },

@@ -9,6 +9,7 @@ import { ROLE_ORDER, can } from "./permissions";
 import { ORDER_STATUSES, PAYMENT_ALLOWS_FULFILMENT, fulfilmentFromQuantities, syncOrderStatus } from "./orderStatus";
 import { getPaymentProvider } from "./payments";
 import { recordRefund } from "./paymentSync";
+import { allocateBackorders, openBackorder, readyToShip, releaseHolds } from "./stock";
 import { eraseCustomerData } from "./privacy";
 
 /**
@@ -79,6 +80,10 @@ export async function dashboard(ctx: Ctx) {
     db.order.count({ where: { ...paid, cancelledAt: null, fulfilmentStatus: { in: ["UNFULFILLED", "PROCESSING", "READY", "PARTIALLY_SHIPPED"] } } }),
     db.cart.count({ where: { items: { some: {} } } }),
   ]);
+  const [partlyShipped, backorders] = await Promise.all([
+    db.order.count({ where: { ...paid, cancelledAt: null, fulfilmentStatus: "PARTIALLY_SHIPPED" } }),
+    db.backorder.findMany({ where: { closedAt: null }, select: { orderId: true, quantity: true, filledQuantity: true, cancelledQuantity: true } }),
+  ]);
 
   const revenue = total._sum.totalCents ?? 0;
   return {
@@ -96,13 +101,16 @@ export async function dashboard(ctx: Ctx) {
     abandonedCarts: abandoned,
     openCarts: cartsWithItems,
     awaitingFulfilment: awaiting,
+    partlyShipped,
+    backorderedUnits: backorders.reduce((sum, row) => sum + row.quantity - row.filledQuantity - row.cancelledQuantity, 0),
+    backorderedOrders: new Set(backorders.map((row) => row.orderId)).size,
   };
 }
 
 // ───────────────────────────── Orders ─────────────────────────────
 
 const orderDetail = {
-  items: true,
+  items: { include: { backorder: true, reservations: { where: { status: "HELD" as const } } } },
   events: { orderBy: { createdAt: "asc" }, include: { actor: { select: { name: true } } } },
   notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } },
   payments: { include: { refunds: { orderBy: { createdAt: "asc" } }, disputes: { orderBy: { createdAt: "asc" } } } },
@@ -175,7 +183,10 @@ export async function getOrder(ctx: Ctx, id: string) {
   if (!order) throw new AppError("NOT_FOUND", "Order not found.");
   // Every message queued for this order, sent or not: the customer communication history.
   const messages = await ctx.db.outboxJob.findMany({ where: { payload: { path: ["orderId"], equals: order.id } }, orderBy: { createdAt: "asc" } });
-  return { ...order, messages };
+  // What is on the shelf for each line right now, so staff can see what a new shipment could contain.
+  const variants = await ctx.db.variant.findMany({ where: { id: { in: order.items.flatMap((item) => (item.variantId ? [item.variantId] : [])) } }, select: { id: true, stock: true, reserved: true } });
+  const availability = Object.fromEntries(variants.map((variant) => [variant.id, variant.stock - variant.reserved]));
+  return { ...order, messages, availability };
 }
 
 /** Timeline entry carrying the staff member who caused it. Internal entries never reach the customer's page. */
@@ -238,7 +249,7 @@ const shipInput = z.object({
   trackingNumber: optionalText(80),
   trackingUrl: z.string().trim().url("Enter a full tracking link.").max(500).nullish().or(z.literal("")),
   /** Which lines, and how many units of each, are in this shipment. Omitted = everything not yet sent. */
-  items: z.array(z.object({ orderItemId: z.string().min(1), quantity: z.coerce.number().int().min(0).max(1000) })).nullish(),
+  items: z.array(z.object({ orderItemId: z.string().min(1), quantity: z.coerce.number().int().min(0).max(1000), lotNumber: z.string().trim().toUpperCase().max(32).nullish().transform((value) => value || null) })).nullish(),
   /** The boxes. Omitted = one box weighing what the shipped units weigh. */
   parcels: z.array(parcelInput).max(20).nullish(),
 });
@@ -255,16 +266,29 @@ export async function createShipment(ctx: Ctx, orderId: string, input: unknown, 
   const shipmentId = await ctx.db.$transaction(async (tx) => {
     // Lock the order row so two people cannot ship the same units at once.
     await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
-    const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+    const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: { include: { backorder: true } } } });
     if (!order || order.cancelledAt || !PAYMENT_ALLOWS_FULFILMENT.includes(order.paymentStatus)) throw new AppError("BAD_INPUT", "Only a paid order can be shipped.");
 
-    const wanted = data.items?.filter((line) => line.quantity > 0) ?? order.items.map((item) => ({ orderItemId: item.id, quantity: item.quantity - item.shippedQuantity })).filter((line) => line.quantity > 0);
-    if (wanted.length === 0) throw new AppError("BAD_INPUT", "Everything on this order has already been shipped.");
+    // With no lines named, everything that is in stock for this order goes; units still on backorder stay behind.
+    const wanted: { orderItemId: string; quantity: number; lotNumber: string | null }[] = data.items?.filter((line) => line.quantity > 0) ?? order.items.map((item) => ({ orderItemId: item.id, quantity: readyToShip(item), lotNumber: null })).filter((line) => line.quantity > 0);
+    if (wanted.length === 0) {
+      const waiting = order.items.some((item) => openBackorder(item.backorder) > 0);
+      throw new AppError("BAD_INPUT", waiting ? "Nothing on this order is in stock to ship yet. The rest is waiting on backorder." : "Everything on this order has already been shipped.");
+    }
     let weight = 0;
     for (const line of wanted) {
       const item = order.items.find((candidate) => candidate.id === line.orderItemId);
       if (!item) throw new AppError("BAD_INPUT", "That line is not part of this order.");
-      if (line.quantity > item.quantity - item.shippedQuantity) throw new AppError("BAD_INPUT", `${item.productName} ${item.variantLabel}: only ${item.quantity - item.shippedQuantity} left to ship.`);
+      const ready = readyToShip(item);
+      if (line.quantity > ready) {
+        const waiting = openBackorder(item.backorder);
+        throw new AppError("BAD_INPUT", `${item.productName} ${item.variantLabel}: ${ready} can be shipped now${waiting > 0 ? `; ${waiting} still waiting for stock` : ""}.`);
+      }
+      if (line.lotNumber) {
+        // A lot can be named only if it exists for this product: a typing slip must not create an untraceable bottle.
+        const lot = await tx.batch.findFirst({ where: { lotNumber: line.lotNumber, product: { variants: { some: { id: item.variantId ?? "" } } } }, select: { id: true } });
+        if (!lot) throw new AppError("BAD_INPUT", `${item.productName} ${item.variantLabel}: lot ${line.lotNumber} is not a lot of this product.`);
+      }
       weight += item.weightGrams * line.quantity;
     }
 
@@ -284,12 +308,16 @@ export async function createShipment(ctx: Ctx, orderId: string, input: unknown, 
         estimatedDeliveryAt: booked?.estimatedDelivery ?? null,
         shippedAt: new Date(),
         adminUserId: admin.id,
-        items: { create: wanted.map((line) => ({ orderItemId: line.orderItemId, quantity: line.quantity })) },
+        // Each shipped line keeps its own lot: two parcels of one product can come from two bottlings.
+        items: { create: wanted.map((line) => ({ orderItemId: line.orderItemId, quantity: line.quantity, lotNumber: line.lotNumber ?? order.items.find((item) => item.id === line.orderItemId)?.lotNumber ?? null })) },
         parcels: { create: parcels.map((parcel, index) => ({ weightGrams: parcel.weightGrams, lengthMm: parcel.lengthMm ?? null, widthMm: parcel.widthMm ?? null, heightMm: parcel.heightMm ?? null, trackingNumber: booked?.boxTrackingNumbers[index] ?? null })) },
         labels: booked ? { create: booked.labels.map((label, position) => ({ position, mime: label.mime, data: new Uint8Array(label.data), trackingNumber: label.trackingNumber ?? null })) } : undefined,
       },
     });
-    for (const line of wanted) await tx.orderItem.update({ where: { id: line.orderItemId }, data: { shippedQuantity: { increment: line.quantity } } });
+    for (const line of wanted) {
+      const first = !order.items.find((item) => item.id === line.orderItemId)?.lotNumber && line.lotNumber;
+      await tx.orderItem.update({ where: { id: line.orderItemId }, data: { shippedQuantity: { increment: line.quantity }, ...(first ? { lotNumber: line.lotNumber } : {}) } });
+    }
 
     const items = await tx.orderItem.findMany({ where: { orderId } });
     const fulfilmentStatus = fulfilmentFromQuantities(items, order.fulfilmentStatus);
@@ -328,9 +356,7 @@ export async function cancelUnpaidOrder(ctx: Ctx, orderId: string) {
     const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
     const changed = await tx.order.updateMany({ where: { id: orderId, paymentStatus: { in: ["UNPAID", "FAILED"] }, cancelledAt: null }, data: { status: "CANCELLED", cancelledAt: new Date(), reservedUntil: null } });
     if (!order || changed.count !== 1) throw new AppError("BAD_INPUT", "Only an unpaid order can be cancelled here. Refund a paid order instead.");
-    for (const item of order.items) {
-      if (item.variantId) await tx.$executeRaw`UPDATE "Variant" SET "reserved" = GREATEST("reserved" - ${item.quantity}, 0) WHERE "id" = ${item.variantId}`;
-    }
+    await releaseHolds(tx, orderId);
     if (order.discountCode) await tx.$executeRaw`UPDATE "Discount" SET "usedCount" = GREATEST("usedCount" - 1, 0) WHERE "code" = ${order.discountCode}`;
     await timeline(tx, ctx, orderId, "cancelled", "Order cancelled.");
   });
@@ -379,7 +405,7 @@ const refundInput = z.object({ amountCents: cents.min(1, "Enter an amount."), re
 export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
   const admin = requireAdmin(ctx, "ADMINISTRATOR", "payments");
   const data = parse(refundInput, input);
-  const order = await ctx.db.order.findUnique({ where: { id: orderId }, include: { items: true, payments: { where: { status: { in: ["PAID", "PARTIALLY_REFUNDED"] } }, include: { refunds: true } } } });
+  const order = await ctx.db.order.findUnique({ where: { id: orderId }, include: { items: { include: { backorder: true } }, payments: { where: { status: { in: ["PAID", "PARTIALLY_REFUNDED"] } }, include: { refunds: true } } } });
   const payment = order?.payments[0];
   if (!order || !payment) throw new AppError("BAD_INPUT", "This order has no received payment to refund.");
   // A refund the bank bounced gave nothing back, so it does not use up the refundable amount.
@@ -395,9 +421,12 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
     const recorded = await recordRefund(tx, { paymentId: payment.id, providerRef, amountCents: data.amountCents, reason: data.reason ?? null, adminUserId: admin.id });
     if (data.restock) {
       for (const item of order.items) {
-        if (!item.variantId) continue;
-        await tx.variant.update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } });
-        await tx.inventoryMovement.create({ data: { variantId: item.variantId, delta: item.quantity, reason: "RETURN", orderId, adminUserId: admin.id } });
+        // Only units that actually left stock for this order can come back: not ones still on backorder, nor ones already taken off the order.
+        const taken = item.quantity - item.cancelledQuantity - openBackorder(item.backorder);
+        if (!item.variantId || taken <= 0) continue;
+        await tx.variant.update({ where: { id: item.variantId }, data: { stock: { increment: taken } } });
+        await tx.inventoryMovement.create({ data: { variantId: item.variantId, delta: taken, reason: "RETURN", orderId, adminUserId: admin.id } });
+        await allocateBackorders(tx, item.variantId);
       }
     }
     if (recorded.created) {
@@ -434,6 +463,8 @@ const productInput = z.object({
   hsCode: z.string().trim().regex(/^\d{6,10}$/, "Enter the customs (HS) code as 6 to 10 digits.").nullish().or(z.literal("")).transform((value) => value || null),
   customsDescription: optionalText(200),
   originCountry: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, "Enter the country of origin as a two-letter code, such as IT.").nullish().or(z.literal("")).transform((value) => value || null),
+  allowBackorder: z.boolean().default(false),
+  backorderNote: optionalText(200),
 });
 
 export async function listProducts(ctx: Ctx) {
@@ -498,6 +529,8 @@ export async function adjustStock(ctx: Ctx, variantId: string, delta: number, re
     const changed = await tx.$executeRaw`UPDATE "Variant" SET "stock" = "stock" + ${delta} WHERE "id" = ${variantId} AND "stock" + ${delta} >= "reserved"`;
     if (changed !== 1) throw new AppError("BAD_INPUT", "That would take stock below the units held by unpaid orders.");
     await tx.inventoryMovement.create({ data: { variantId, delta, reason, adminUserId: admin.id, note: note?.slice(0, 500) } });
+    // New stock goes first to customers who have already paid and are waiting.
+    if (delta > 0) await allocateBackorders(tx, variantId);
   });
   await audit(ctx, "inventory.adjust", "Variant", variantId, { delta, reason });
 }

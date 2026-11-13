@@ -42,6 +42,7 @@ export const FIELDS: Record<Entity, FieldSpec[]> = {
     { key: "taste", label: "Taste", long: true, max: 600 },
     { key: "pairings", label: "Food pairings", long: true, max: 600 },
     { key: "packaging", label: "Packaging", max: 300 },
+    { key: "backorderNote", label: "Note about the wait when out of stock", max: 200 },
   ],
   category: [
     { key: "name", label: "Name", max: 120, required: true },

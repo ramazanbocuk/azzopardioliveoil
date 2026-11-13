@@ -51,9 +51,10 @@ async function purchasableVariant(db: Db, sku: string) {
   return variant;
 }
 
-function checkAvailable(variant: { stock: number; reserved: number }, wanted: number) {
+function checkAvailable(variant: { stock: number; reserved: number; product: { allowBackorder: boolean } }, wanted: number) {
   const available = variant.stock - variant.reserved;
-  if (available < wanted) {
+  // A product the owner has opened to backorders may be ordered beyond the shelf; the rest follows when it arrives.
+  if (available < wanted && !variant.product.allowBackorder) {
     throw new AppError("OUT_OF_STOCK", available > 0 ? `Only ${available} left in stock.` : "This size is sold out.", "quantity");
   }
 }
@@ -150,6 +151,9 @@ export async function summarise(db: Db, cart: LoadedCart | null) {
       unitPriceCents: item.variant.priceCents,
       lineTotalCents: item.variant.priceCents * item.quantity,
       available: item.variant.stock - item.variant.reserved,
+      /** Units of this line that are not on the shelf and would be sent later. Zero unless the product allows backorders. */
+      backorderQuantity: item.variant.product.allowBackorder ? Math.max(0, item.quantity - Math.max(0, item.variant.stock - item.variant.reserved)) : 0,
+      allowBackorder: item.variant.product.allowBackorder,
       variant: item.variant,
       product: item.variant.product,
     })),
