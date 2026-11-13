@@ -41,7 +41,13 @@ Generate secrets with `openssl rand -base64 48`. Never put any of these in the r
 
 ## 4. Payment webhook
 
-In Stripe, add an endpoint `https://<your-domain>/api/webhooks/stripe` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` and `checkout.session.expired`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
+In Stripe, add an endpoint `https://<your-domain>/api/webhooks/stripe` for these events:
+
+- Payments: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`
+- Refunds: `refund.created`, `refund.updated`, `refund.failed`
+- Disputes: `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`, `charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated`
+
+Without the refund and dispute events the shop still takes payments, but a refund made in the Stripe Dashboard, a refund the bank bounces, or a dispute will not appear in the admin panel. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
 
 ## 5. Domain and HTTPS
 

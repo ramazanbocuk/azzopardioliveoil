@@ -200,3 +200,152 @@ describe("Stripe webhook", () => {
     expect(await db.auditLog.findFirstOrThrow({ where: { action: "order.paid_without_stock" } })).toBeTruthy();
   });
 });
+
+describe("refunds and disputes made at the provider", () => {
+  const signed = (type: string, object: Record<string, unknown>, created = 1_800_000_000, id = `evt_${Math.random().toString(36).slice(2)}`) => {
+    const payload = JSON.stringify({ id, object: "event", type, created, data: { object } });
+    return { payload, signature: stripe.webhooks.generateTestHeaderString({ payload, secret: WEBHOOK_SECRET }) };
+  };
+  const post = async (event: { payload: string; signature: string }) => {
+    const response = await stripeWebhook(new Request("http://localhost/api/webhooks/stripe", { method: "POST", body: event.payload, headers: { "stripe-signature": event.signature } }));
+    return { status: response.status, result: ((await response.json()) as { result: string }).result };
+  };
+  const refundEvent = (type: string, refund: Record<string, unknown>) => signed(type, { object: "refund", payment_intent: "pi_1", currency: "eur", status: "succeeded", reason: null, ...refund });
+  const disputeEvent = (type: string, dispute: Record<string, unknown>, created?: number) =>
+    signed(type, { object: "dispute", id: "dp_1", payment_intent: "pi_1", currency: "eur", reason: "fraudulent", evidence_details: { due_by: 1_800_600_000 }, ...dispute }, created);
+
+  /** An order paid through a checkout whose payment id is pi_1. */
+  async function paidOrder(withIntent = true) {
+    const { c, number, accessToken, totalCents } = await placeOrder(2);
+    await c.gql(PAY, { n: number, t: accessToken });
+    const paid = sessionEvent("checkout.session.completed", { id: `cs_test_${number}`, amount_total: totalCents, currency: "eur", payment_status: "paid", ...(withIntent ? { payment_intent: "pi_1" } : {}) });
+    expect((await post(paid)).result).toBe("paid");
+    await db.outboxJob.deleteMany();
+    return { number, totalCents, order: await db.order.findFirstOrThrow() };
+  }
+  const state = async () => {
+    const order = await db.order.findFirstOrThrow({ include: { payments: true } });
+    return [order.status, order.paymentStatus, order.payments[0].status];
+  };
+  const jobs = async () => (await db.outboxJob.findMany({ orderBy: { createdAt: "asc" } })).map((job) => job.kind);
+
+  it("remembers the provider's payment id when the order is paid", async () => {
+    await paidOrder();
+    expect((await db.payment.findFirstOrThrow()).intentRef).toBe("pi_1");
+  });
+
+  it("records a refund made in the provider's dashboard, once, and tells the customer", async () => {
+    const { totalCents } = await paidOrder();
+    const part = refundEvent("refund.created", { id: "re_a", amount: 1000, reason: "requested_by_customer" });
+    expect(await post(part)).toEqual({ status: 200, result: "refund-recorded" });
+    expect(await post(part)).toEqual({ status: 200, result: "duplicate" });
+    // The same refund reported again under another event (refund.updated) changes nothing.
+    expect((await post(refundEvent("refund.updated", { id: "re_a", amount: 1000 }))).result).toBe("refund-unchanged");
+
+    expect(await db.refund.findMany()).toMatchObject([{ providerRef: "re_a", amountCents: 1000, adminUserId: null, reason: "requested by customer", failedAt: null }]);
+    expect(await state()).toEqual(["PARTIALLY_REFUNDED", "PARTIALLY_REFUNDED", "PARTIALLY_REFUNDED"]);
+    expect(await jobs()).toEqual(["notify.customer.refund"]);
+    expect(await stockOf("t-500")).toEqual([8, 0]); // stock is a staff decision, never automatic
+
+    expect((await post(refundEvent("refund.created", { id: "re_b", amount: totalCents - 1000 }))).result).toBe("refund-recorded");
+    expect(await state()).toEqual(["REFUNDED", "REFUNDED", "REFUNDED"]);
+    expect((await db.orderEvent.findMany({ where: { kind: "refunded" }, orderBy: { createdAt: "asc" } })).map((event) => event.message)).toEqual(["Partial refund issued.", "Order refunded."]);
+    expect(await db.auditLog.count({ where: { action: "refund.synced" } })).toBe(2);
+  });
+
+  it("keeps one row when staff and the provider report the same refund, in either order", async () => {
+    await paidOrder();
+    const payment = await db.payment.findFirstOrThrow();
+    const boss = await db.adminUser.create({ data: { email: "boss@test.local", name: "Boss", role: "ADMINISTRATOR", passwordHash: "x" } });
+    const { recordRefund } = await import("@/server/paymentSync");
+
+    // Staff first, then the provider's webhook.
+    await db.$transaction((tx) => recordRefund(tx, { paymentId: payment.id, providerRef: "re_staff", amountCents: 500, reason: "Dented cap", adminUserId: boss.id }));
+    expect((await post(refundEvent("refund.created", { id: "re_staff", amount: 500 }))).result).toBe("refund-unchanged");
+    // The webhook first, then the staff action finishing.
+    expect((await post(refundEvent("refund.created", { id: "re_hook", amount: 300 }))).result).toBe("refund-recorded");
+    const late = await db.$transaction((tx) => recordRefund(tx, { paymentId: payment.id, providerRef: "re_hook", amountCents: 300, reason: "Goodwill", adminUserId: boss.id }));
+    expect(late.created).toBe(false);
+
+    expect(await db.refund.findMany({ orderBy: { amountCents: "desc" } })).toMatchObject([
+      { providerRef: "re_staff", amountCents: 500, adminUserId: boss.id, reason: "Dented cap" },
+      { providerRef: "re_hook", amountCents: 300, adminUserId: boss.id, reason: "Goodwill" },
+    ]);
+    expect(await jobs()).toEqual(["notify.customer.refund"]); // only for the one the webhook recorded first
+  });
+
+  it("takes a refund back out of the books when the bank bounces it, and alerts the shop", async () => {
+    await paidOrder();
+    await post(refundEvent("refund.created", { id: "re_a", amount: 1000, status: "pending" }));
+    expect(await state()).toEqual(["PARTIALLY_REFUNDED", "PARTIALLY_REFUNDED", "PARTIALLY_REFUNDED"]);
+
+    expect((await post(refundEvent("refund.failed", { id: "re_a", amount: 1000, status: "failed" }))).result).toBe("refund-failed");
+    expect((await post(refundEvent("refund.updated", { id: "re_a", amount: 1000, status: "failed" }))).result).toBe("refund-unchanged");
+    // A late "succeeded" for a refund already known to have failed does not revive it.
+    expect((await post(refundEvent("refund.updated", { id: "re_a", amount: 1000 }))).result).toBe("refund-unchanged");
+
+    expect((await db.refund.findFirstOrThrow()).failedAt).not.toBeNull();
+    expect(await state()).toEqual(["PAID", "PAID", "PAID"]);
+    expect(await jobs()).toEqual(["notify.customer.refund", "notify.owner.payment_alert"]);
+    expect(await db.orderEvent.findFirstOrThrow({ where: { kind: "refund_failed" } })).toMatchObject({ isInternal: true });
+  });
+
+  it("does not book a refund in another currency, and asks a person to look", async () => {
+    await paidOrder();
+    expect((await post(refundEvent("refund.created", { id: "re_usd", amount: 1200, currency: "usd" }))).result).toBe("currency-mismatch");
+    expect(await db.refund.count()).toBe(0);
+    expect(await state()).toEqual(["PAID", "PAID", "PAID"]);
+    expect(await db.auditLog.findFirstOrThrow({ where: { action: "refund.currency_mismatch" } })).toBeTruthy();
+    expect(await jobs()).toEqual(["notify.owner.payment_alert"]);
+  });
+
+  it("finds the order for a payment recorded before payment ids were stored", async () => {
+    const { number } = await paidOrder(false);
+    expect((await db.payment.findFirstOrThrow()).intentRef).toBeNull();
+    const asked: string[] = [];
+    setPaymentProvider({ ...fakeProvider, findCheckoutRef: async (intent) => (asked.push(intent), intent === "pi_1" ? `cs_test_${number}` : null) });
+
+    expect((await post(refundEvent("refund.created", { id: "re_a", amount: 700 }))).result).toBe("refund-recorded");
+    expect((await db.payment.findFirstOrThrow()).intentRef).toBe("pi_1");
+    expect((await post(refundEvent("refund.created", { id: "re_b", amount: 100 }))).result).toBe("refund-recorded");
+    expect(asked).toEqual(["pi_1"]); // asked once, then remembered
+
+    // Money that never belonged to this shop is acknowledged and ignored.
+    expect(await post(refundEvent("refund.created", { id: "re_x", amount: 100, payment_intent: "pi_other" }))).toEqual({ status: 200, result: "unknown-payment" });
+    expect(await db.refund.count()).toBe(2);
+  });
+
+  it("mirrors a dispute from opening to loss, for staff only", async () => {
+    const { totalCents, order } = await paidOrder();
+    expect((await post(disputeEvent("charge.dispute.created", { amount: totalCents, status: "needs_response" }, 1_800_000_100))).result).toBe("dispute-opened");
+    expect(await db.dispute.findFirstOrThrow()).toMatchObject({ providerRef: "dp_1", amountCents: totalCents, currency: "EUR", status: "needs_response", reason: "fraudulent", closedAt: null, evidenceDueAt: new Date(1_800_600_000_000) });
+    expect(await state()).toEqual(["PAID", "PAID", "PAID"]); // a dispute is not a refund
+
+    expect((await post(disputeEvent("charge.dispute.updated", { amount: totalCents, status: "under_review" }, 1_800_000_300))).result).toBe("dispute-updated");
+    // An older event delivered late must not turn the clock back.
+    expect((await post(disputeEvent("charge.dispute.updated", { amount: totalCents, status: "needs_response" }, 1_800_000_200))).result).toBe("dispute-stale");
+    expect((await db.dispute.findFirstOrThrow()).status).toBe("under_review");
+
+    expect((await post(disputeEvent("charge.dispute.closed", { amount: totalCents, status: "lost" }, 1_800_000_400))).result).toBe("dispute-closed");
+    expect((await post(disputeEvent("charge.dispute.funds_withdrawn", { amount: totalCents, status: "needs_response" }, 1_800_000_500))).result).toBe("dispute-stale");
+    expect(await db.dispute.findMany()).toMatchObject([{ status: "lost", closedAt: new Date(1_800_000_400_000) }]);
+
+    expect(await jobs()).toEqual(["notify.owner.payment_alert", "notify.owner.payment_alert"]);
+    const events = await db.orderEvent.findMany({ where: { orderId: order.id, kind: { startsWith: "dispute" } } });
+    expect(events.map((event) => [event.kind, event.isInternal]).sort()).toEqual([["dispute_closed", true], ["dispute_opened", true]]);
+    expect((await db.auditLog.findMany({ where: { action: { startsWith: "dispute." } } })).map((log) => log.action).sort()).toEqual(["dispute.closed", "dispute.opened"]);
+  });
+
+  it("sends the shop an alert email that names the order", async () => {
+    const { totalCents, number } = await paidOrder();
+    await db.setting.upsert({ where: { key: "notifications" }, create: { key: "notifications", value: { emailRecipient: "owner@test.local" } }, update: { value: { emailRecipient: "owner@test.local" } } });
+    // Applied directly, so the job is still waiting: the webhook route would already have tried to send it.
+    const opened = disputeEvent("charge.dispute.created", { amount: totalCents, status: "needs_response" });
+    await applyPaymentEvent(db, "STRIPE", stripeProvider.parseWebhook(opened.payload, opened.signature));
+    const { processJobs } = await import("@/server/jobs");
+    const bodies: string[] = [];
+    const report = await processJobs(db, { env: { RESEND_API_KEY: "re_test_placeholder", EMAIL_FROM: "shop@test.local" }, transport: async (_url, init) => (bodies.push(init.body), { ok: true, status: 200, text: async () => "" }) });
+    expect(report).toMatchObject({ claimed: 1, done: 1 });
+    expect(JSON.parse(bodies[0])).toMatchObject({ to: ["owner@test.local"], subject: `A payment has been disputed: ${number}` });
+  });
+});

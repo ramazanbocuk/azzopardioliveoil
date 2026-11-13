@@ -8,6 +8,7 @@ import { AppError, parse } from "./errors";
 import { ROLE_ORDER, can } from "./permissions";
 import { ORDER_STATUSES, PAYMENT_ALLOWS_FULFILMENT, fulfilmentFromQuantities, syncOrderStatus } from "./orderStatus";
 import { getPaymentProvider } from "./payments";
+import { recordRefund } from "./paymentSync";
 import { eraseCustomerData } from "./privacy";
 
 /**
@@ -104,7 +105,7 @@ const orderDetail = {
   items: true,
   events: { orderBy: { createdAt: "asc" }, include: { actor: { select: { name: true } } } },
   notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } },
-  payments: { include: { refunds: true } },
+  payments: { include: { refunds: { orderBy: { createdAt: "asc" } }, disputes: { orderBy: { createdAt: "asc" } } } },
   // Label bytes stay in the database until someone prints one; the page only needs to know they exist.
   shipments: { orderBy: { createdAt: "asc" }, include: { parcels: true, items: true, labels: { select: { id: true, position: true }, orderBy: { position: "asc" } } } },
   returns: true,
@@ -381,19 +382,17 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
   const order = await ctx.db.order.findUnique({ where: { id: orderId }, include: { items: true, payments: { where: { status: { in: ["PAID", "PARTIALLY_REFUNDED"] } }, include: { refunds: true } } } });
   const payment = order?.payments[0];
   if (!order || !payment) throw new AppError("BAD_INPUT", "This order has no received payment to refund.");
-  const already = payment.refunds.reduce((sum, refund) => sum + refund.amountCents, 0);
+  // A refund the bank bounced gave nothing back, so it does not use up the refundable amount.
+  const already = payment.refunds.filter((refund) => refund.failedAt === null).reduce((sum, refund) => sum + refund.amountCents, 0);
   if (data.amountCents > payment.amountCents - already) throw new AppError("BAD_INPUT", "The amount is more than what remains refundable.");
 
   const provider = getPaymentProvider();
   if (!provider?.refund) throw new AppError("PAYMENT_UNAVAILABLE", "No payment provider is connected, so a refund cannot be sent.");
   const providerRef = await provider.refund({ providerRef: payment.providerRef, amountCents: data.amountCents, idempotencyKey: `refund:${payment.id}:${already}:${data.amountCents}` });
 
-  const full = already + data.amountCents === payment.amountCents;
   await ctx.db.$transaction(async (tx) => {
-    await tx.refund.create({ data: { paymentId: payment.id, amountCents: data.amountCents, reason: data.reason, providerRef, adminUserId: admin.id } });
-    await tx.payment.update({ where: { id: payment.id }, data: { status: full ? "REFUNDED" : "PARTIALLY_REFUNDED" } });
-    await tx.order.update({ where: { id: orderId }, data: { paymentStatus: full ? "REFUNDED" : "PARTIALLY_REFUNDED" } });
-    await syncOrderStatus(tx, orderId);
+    // The provider also reports this refund by webhook; whichever arrives first writes the row, the other finds it.
+    const recorded = await recordRefund(tx, { paymentId: payment.id, providerRef, amountCents: data.amountCents, reason: data.reason ?? null, adminUserId: admin.id });
     if (data.restock) {
       for (const item of order.items) {
         if (!item.variantId) continue;
@@ -401,8 +400,10 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
         await tx.inventoryMovement.create({ data: { variantId: item.variantId, delta: item.quantity, reason: "RETURN", orderId, adminUserId: admin.id } });
       }
     }
-    await timeline(tx, ctx, orderId, "refunded", full ? "Order refunded." : "Partial refund issued.");
-    await tx.outboxJob.createMany({ data: [{ kind: "notify.customer.refund", dedupeKey: `notify.customer.refund:${payment.id}:${already}:${data.amountCents}`, payload: { orderId, amountCents: data.amountCents, full } }], skipDuplicates: true });
+    if (recorded.created) {
+      await timeline(tx, ctx, orderId, "refunded", recorded.full ? "Order refunded." : "Partial refund issued.");
+      await tx.outboxJob.createMany({ data: [{ kind: "notify.customer.refund", dedupeKey: `notify.customer.refund:${providerRef}`, payload: { orderId, amountCents: data.amountCents, full: recorded.full } }], skipDuplicates: true });
+    }
   });
   await audit(ctx, "order.refund", "Order", orderId, { amountCents: data.amountCents, restock: data.restock, providerRef });
 }

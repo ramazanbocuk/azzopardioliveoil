@@ -5,6 +5,7 @@ import { AppError } from "@/server/errors";
 import { compareRates, openAttempts, type RateComparison } from "@/server/fulfilment";
 import { carrierStates } from "@/server/shipping/registry";
 import { adminCtx } from "@/server/adminSession";
+import { DISPUTE_LABEL } from "@/server/paymentSync";
 import { FULFILMENT_LABEL, ORDER_STATUS_LABEL, PAYMENT_ALLOWS_FULFILMENT } from "@/server/orderStatus";
 import { addNote, bookCarrierLabel, releaseShipmentAttempt, cancelOrder, cancelShipment, deliver, markReady, refund, returnStatus, setLot, ship, startPacking } from "../../actions";
 
@@ -19,6 +20,7 @@ const MESSAGE_LABEL: Record<string, string> = {
   "notify.owner.whatsapp": "New-order WhatsApp to the shop",
   "notify.owner.sms": "New-order SMS to the shop",
   "notify.customer.refund": "Refund email to the customer",
+  "notify.owner.payment_alert": "Refund or dispute alert to the shop",
   "notify.owner.label_failed": "Failed-label alert to the shop",
 };
 
@@ -39,7 +41,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
   if (!ctx.admin) return null;
   const [{ id }, flash] = await Promise.all([params, searchParams]);
   const order = await getOrder(ctx, id);
-  const refunded = order.payments.flatMap((p) => p.refunds).reduce((sum, r) => sum + r.amountCents, 0);
+  const refunded = order.payments.flatMap((p) => p.refunds).filter((r) => !r.failedAt).reduce((sum, r) => sum + r.amountCents, 0);
+  const openDisputes = order.payments.flatMap((p) => p.disputes).filter((d) => !d.closedAt);
   const refundable = order.payments.filter((p) => p.status === "PAID" || p.status === "PARTIALLY_REFUNDED").reduce((sum, p) => sum + p.amountCents, 0) - refunded;
 
   const moneyHeld = !order.cancelledAt && PAYMENT_ALLOWS_FULFILMENT.includes(order.paymentStatus);
@@ -93,6 +96,12 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
       }
     >
       <Flash params={flash} />
+      {openDisputes.length > 0 && (
+        <p role="alert" className="border-l-2 border-terracotta-700 bg-terracotta-500/10 px-4 py-3 text-terracotta-700">
+          The cardholder has disputed this payment with their bank. Do not ship until it is settled, and answer the dispute at the payment provider
+          {openDisputes[0].evidenceDueAt ? ` by ${dateTime(openDisputes[0].evidenceDueAt)}` : ""}. It cannot be answered from here.
+        </p>
+      )}
       <dl className="flex flex-wrap gap-x-8 gap-y-3">
         {[
           ["Order", <Badge key="s" tone={order.status}>{ORDER_STATUS_LABEL[order.status]}</Badge>],
@@ -486,8 +495,16 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
                 <Badge>{payment.status}</Badge>
                 {payment.refunds.map((r) => (
                   <p key={r.id} className="text-small mt-1 text-stone-700">
-                    Refunded {money(r.amountCents)} on {dateTime(r.createdAt)}
+                    {r.failedAt ? "Refund failed, customer not refunded: " : "Refunded "}
+                    {money(r.amountCents)} on {dateTime(r.createdAt)}
+                    {r.adminUserId ? "" : " (at the payment provider)"}
                     {r.reason ? ` — ${r.reason}` : ""}
+                  </p>
+                ))}
+                {payment.disputes.map((d) => (
+                  <p key={d.id} className="text-small mt-1 text-stone-700">
+                    Dispute over {money(d.amountCents)}: {DISPUTE_LABEL[d.status] ?? d.status.replaceAll("_", " ")}
+                    {!d.closedAt && d.evidenceDueAt ? `, answer by ${dateTime(d.evidenceDueAt)}` : ""}
                   </p>
                 ))}
               </div>

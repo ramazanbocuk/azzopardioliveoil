@@ -614,14 +614,18 @@ model Payment {
   amountCents Int
   currency    String          @default("EUR") @db.Char(3)
   method      String?
+  /// The provider's id for the money itself (Stripe PaymentIntent). Refunds and disputes refer to this, not to the checkout.
+  intentRef   String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  refunds Refund[]
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds  Refund[]
+  disputes Dispute[]
 
   @@unique([provider, providerRef])
   @@index([orderId])
+  @@index([intentRef])
 }
 
 model Refund {
@@ -629,12 +633,38 @@ model Refund {
   paymentId   String
   amountCents Int
   reason      String?
-  providerRef String?
+  /// The provider's refund id. Unique, so a refund reported twice (by staff and by the provider) is one row.
+  providerRef String?   @unique
+  /// Null when the refund was made outside this admin panel, e.g. in the Stripe Dashboard.
   adminUserId String?
-  createdAt   DateTime @default(now())
-  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /// Set when the provider reports that the refund did not reach the customer. Failed refunds count for nothing.
+  failedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  payment     Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   @@index([paymentId])
+}
+
+/// A cardholder contesting a payment with their bank (chargeback). Mirrors the provider; it is answered in the provider's dashboard.
+model Dispute {
+  id            String    @id @default(cuid())
+  paymentId     String
+  providerRef   String    @unique
+  amountCents   Int
+  currency      String    @db.Char(3)
+  reason        String?
+  /// The provider's own status word, e.g. needs_response, under_review, won, lost.
+  status        String
+  evidenceDueAt DateTime?
+  /// When the provider produced the newest event applied here; older events arriving late are ignored.
+  providerAt    DateTime
+  closedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  payment       Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([status])
 }
 
 /// Every verified webhook is recorded once; a repeat delivery is a no-op.

@@ -54,7 +54,8 @@ To send many at once: tick the orders on Shipping & fulfilment, choose a carrier
 
 ## Money and reports
 
-- **Payments**: every payment and refund for a period.
+- **Payments**: every payment and refund for a period, and the list of disputes. A refund made directly in Stripe appears on the order by itself, marked "at the payment provider", and the customer gets the refund email. Stock is never put back automatically. If a bank bounces a refund, it is marked failed, the order goes back to paid, and the shop is emailed.
+- **Disputes** (chargebacks): when a cardholder contests a payment, the order shows a warning, the shop is emailed with the deadline, and the dispute is listed under Payments. Answer it in the Stripe Dashboard; it cannot be answered here. Do not ship a disputed order.
 - **Analytics & reports**: sales by day, product, country, payment method; first-time and returning; export.
 - **Accounting & VAT**: VAT by destination and rate; export for the accountant. Working figures, not a VAT return.
 - **Shipping rates & VAT**: zones (any country codes), weight bands, free-shipping thresholds, VAT rate per country. Checkout offers exactly the countries that have a zone with an active rate.

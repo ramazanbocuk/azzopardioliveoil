@@ -106,6 +106,16 @@ const handlers: Record<string, Handler> = {
     await sendEmail(staffAlertEmail(to, { subject: `Label not booked for ${order.number}`, heading: "A shipping label could not be booked", lines, path: `/admin/orders/${order.id}` }), job.dedupeKey, env, transport);
   },
 
+  // A refund that bounced, a refund that needs a person, or a dispute: the wording is fixed when the event is recorded.
+  async "notify.owner.payment_alert"(db, job, { env, transport }) {
+    const to = (await notificationSettings(db)).emailRecipient;
+    if (!to) throw new Skip("No email recipient is set in Settings.");
+    const payload = job.payload as { orderId?: string; subject?: string; lines?: string[] };
+    const order = payload.orderId ? await db.order.findUnique({ where: { id: payload.orderId }, select: { id: true, number: true } }) : null;
+    if (!order || !payload.subject) throw new Skip("The order no longer exists.");
+    await sendEmail(staffAlertEmail(to, { subject: `${payload.subject}: ${order.number}`, heading: payload.subject, lines: [`Order ${order.number}`, ...(payload.lines ?? [])], path: `/admin/orders/${order.id}` }), job.dedupeKey, env, transport);
+  },
+
   async "notify.owner.low_stock"(db, job, { env, transport }) {
     const to = (await notificationSettings(db)).emailRecipient;
     if (!to) throw new Skip("No email recipient is set in Settings.");

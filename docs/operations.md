@@ -9,6 +9,7 @@
 | Configuration | Lines starting `[config]` at start-up list missing or test-mode integrations. | Built |
 | Notifications | Admin → Notifications shows sent, waiting, skipped and failed messages. Check "failed" daily at first. | Built |
 | Payments | Compare Stripe's dashboard with Admin → Orders weekly. Audit log entries `payment.amount_mismatch` or `order.paid_without_stock` need a person to look. | Built |
+| Refunds and disputes at Stripe | Mirrored from Stripe's webhooks. Audit log entries `refund.currency_mismatch` and `refund.failed`, and any open dispute under Admin → Payments, need a person. | Built; not yet seen with a real Stripe refund |
 | Stock | Dashboard → Inventory alerts. | Built |
 
 No error-tracking service (such as Sentry) is installed. Adding one means allowing its address in the content security policy in `next.config.ts`.

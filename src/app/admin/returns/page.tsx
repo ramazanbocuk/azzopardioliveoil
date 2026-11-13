@@ -17,7 +17,7 @@ export default async function ReturnsPage({ searchParams }: PageProps<"/admin/re
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Open returns" value={String(data.open)} />
         <Stat label="Returns on record" value={String(data.returns.length)} />
-        <Stat label="Refunds issued" value={money(data.refunds.reduce((sum, refund) => sum + refund.amountCents, 0))} note={`${data.refunds.length} most recent`} />
+        <Stat label="Refunds issued" value={money(data.refunds.filter((refund) => !refund.failedAt).reduce((sum, refund) => sum + refund.amountCents, 0))} note={`${data.refunds.length} most recent`} />
       </div>
 
       <Card title="Return requests" description="Customers request a return from their account once an order is delivered. Approving does not move money: issue the refund from the order page when the goods are back.">
@@ -55,7 +55,7 @@ export default async function ReturnsPage({ searchParams }: PageProps<"/admin/re
         </Table>
       </Card>
 
-      <Card title="Refunds" description="Each refund was sent through the payment provider first and recorded only once the provider accepted it.">
+      <Card title="Refunds" description="Refunds sent from an order page, and refunds made directly at the payment provider, which reports them here. A refund the bank bounced is marked as failed and counts for nothing.">
         <Table head={["Issued", "Order", "Amount", "Reason", "By", "Provider reference"]} empty={data.refunds.length === 0 ? "No refund has been issued." : undefined}>
           {data.refunds.map((refund) => (
             <tr key={refund.id}>
@@ -65,7 +65,10 @@ export default async function ReturnsPage({ searchParams }: PageProps<"/admin/re
                   {refund.payment.order.number}
                 </Link>
               </td>
-              <td className="tabular-nums">{money(refund.amountCents)}</td>
+              <td className="tabular-nums">
+                {money(refund.amountCents)}
+                {refund.failedAt && <span className="text-small block text-terracotta-700">Failed: not refunded</span>}
+              </td>
               <td>{refund.reason ?? "—"}</td>
               <td>{refund.by}</td>
               <td className="font-mono text-[0.75rem] text-stone-700">{refund.providerRef ?? "—"}</td>
