@@ -3,8 +3,8 @@ import type { Messages } from "./en";
 /** Dutch. Written by the development team, not yet checked by a native-speaking editor. */
 export const nl: Messages = {
   meta: {
-    title: "Azzopardi — Extra vierge olijfolie",
-    description: "Extra vierge olijfolie, per lot gebotteld en verzonden vanuit België.",
+    title: "Azzopardi — Extra vierge olijfolie met hoog polyfenolgehalte",
+    description: "Extra vierge olijfolie met een hoog polyfenolgehalte, lot per lot gekozen door een familiebedrijf.",
   },
   common: {
     skip: "Naar de inhoud",
@@ -40,7 +40,7 @@ export const nl: Messages = {
   },
   footer: {
     label: "Voettekst",
-    tagline: "Met zorg gekozen olijfolie, genummerd per lot.",
+    tagline: "Olijfolie met een hoog polyfenolgehalte, met zorg gekozen en genummerd per lot.",
     shopTitle: "Winkel",
     shopAll: "Alle producten",
     evoo: "Extra vierge olijfolie",
@@ -112,7 +112,7 @@ export const nl: Messages = {
     added: "Toegevoegd",
     saveFavourite: "{name} bewaren bij favorieten",
     removeFavourite: "{name} verwijderen uit favorieten",
-    sentTracked: "Verzonden vanuit België, met tracking.",
+    sentTracked: "Verzonden met tracking.",
     freeFrom: "Gratis standaardverzending vanaf {amount}.",
     harvest: "Oogst",
     origin: "Herkomst",
@@ -131,7 +131,7 @@ export const nl: Messages = {
     storage: "Bewaren",
     howToStore: "Bewaaradvies",
     shippingReturns: "Verzending & retour",
-    shippingText: "Bestellingen worden vanuit België verzonden met tracking. Tarieven, bestemmingen en retourvoorwaarden staan op de {link}.",
+    shippingText: "Bestellingen worden verzonden met tracking. Tarieven, bestemmingen en retourvoorwaarden staan op de {link}.",
     shippingLink: "pagina over verzending en retour",
     dashTitle: "Waarom sommige velden een streepje tonen",
     dashText: "Herkomst, oogst, ingrediënten, voedingswaarden en bewaaradvies worden per lot door de beheerder ingevuld. Ze worden nooit automatisch aangevuld; een streepje betekent dat de informatie nog niet is ingevoerd.",

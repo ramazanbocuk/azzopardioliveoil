@@ -123,9 +123,9 @@ export const navigation = [
 export const processSteps = [
   { title: "Sourced", body: "Each oil comes from a named producer. We record who made it, where, and from which olives." },
   { title: "Tasted", body: "A lot is tasted before it is taken on. If it does not taste right, nothing else about it matters." },
-  { title: "Measured", body: "We ask for a laboratory report on each lot. What it found appears on the bottle’s page once the report has been checked." },
+  { title: "Measured", body: "We ask for a laboratory report on each lot, polyphenol content first. What it found appears on the bottle’s page once the report has been checked." },
   { title: "Numbered", body: "Each lot receives a number. That number follows the bottle to your door." },
-  { title: "Sent", body: "Orders are packed in Belgium and sent with tracking." },
+  { title: "Sent", body: "Your order is sent with tracking, and its lot number travels with it." },
 ] as const;
 
 export type JournalEntry = {
@@ -204,6 +204,7 @@ export const faq: { group: string; items: { q: string; a: string }[] }[] = [
       { q: "What is a lot number?", a: "Each lot is given a number. It links your bottle to what has been recorded for that lot: producer, harvest, mill and any analysis on file." },
       { q: "Where do the oils come from?", a: "From producers around the Mediterranean. The country, region and producer recorded for each oil are shown on its page; a dash means it has not been recorded yet." },
       { q: "Where can I find it?", a: "On the label of every bottle, and on your order confirmation." },
+      { q: "How do I know an oil is high in polyphenols?", a: "By its laboratory report. The polyphenol content measured for a lot is shown on the oil’s page, with the laboratory’s name and the date of the test, once the report has been checked. If no figure is shown, none has been verified yet." },
       { q: "How should I store the oil?", a: "Storage guidance is printed on each bottle and shown on the product page once it has been entered for that lot." },
     ],
   },
@@ -218,7 +219,7 @@ export const faq: { group: string; items: { q: string; a: string }[] }[] = [
   {
     group: "Shipping & returns",
     items: [
-      { q: "Where do you ship?", a: "We send orders from Belgium. The list of destinations and their rates is shown on the shipping page and at checkout." },
+      { q: "Where do you ship?", a: "The list of destinations and their rates is shown on the shipping page and at checkout." },
       { q: "How do I track my order?", a: "You will receive a tracking link by email when your order ships. You can also use the order tracking page with your order number and email address." },
       { q: "Can I return a bottle?", a: "See the shipping and returns page for the conditions that apply. Returns are requested from your account or by contacting us." },
     ],

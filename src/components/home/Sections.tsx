@@ -20,10 +20,10 @@ export function Intro() {
         </Reveal>
         <div className="lg:col-span-9">
           <SplitHeading id="intro-title" className="text-h1 max-w-[19ch]">
-            Extra virgin olive oils from producers around the Mediterranean, chosen lot by lot and sent to your door from Belgium.
+            High-polyphenol extra virgin olive oils from producers around the Mediterranean, chosen lot by lot by a family business.
           </SplitHeading>
           <Reveal delay={0.15} className="mt-10 grid gap-8 sm:grid-cols-2 lg:max-w-[52rem]">
-            <p className="text-lead text-ink/80">We would rather tell you exactly where a bottle comes from than tell you it is the best. So each one carries a number.</p>
+            <p className="text-lead text-ink/80">We look for oils high in polyphenols, and we would rather show you the laboratory’s figure than ask you to take our word. So each bottle carries a number.</p>
             <div>
               <p className="text-ink/80">The number leads to a producer, a harvest and a mill. What we can show you, we publish. What we cannot show you, we do not say.</p>
               <ButtonLink href="/our-story" variant="text" arrow className="mt-5">
@@ -57,7 +57,7 @@ export function Heritage() {
             </SplitHeading>
             <Reveal delay={0.1} className="mt-8 max-w-[44ch] space-y-5 text-ink/80">
               <p>The olive grows right around the Mediterranean, and no one shore has the best of it. Each country has its own varieties, its own ground and its own way of working.</p>
-              <p>We do not grow or press the oil ourselves. Our part is to choose: taste each lot, ask for its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it.</p>
+              <p>We are a husband and wife, and we do not grow or press the oil ourselves. Our part is to choose. We look for oils high in polyphenols, taste each lot, ask for its laboratory report, and offer only what we would put on our own table. The producer’s name stays on it.</p>
               <ButtonLink href="/our-story" variant="secondary" arrow className="!mt-9">
                 Read the story
               </ButtonLink>
@@ -120,7 +120,7 @@ export function Groves() {
 }
 
 const principles = [
-  { title: "Chosen by tasting and by measurement", body: "An oil is taken on for how it tastes and for what its laboratory report says. Not for where it is from, and not for what it costs." },
+  { title: "High in polyphenols, by measurement", body: "We look for oils high in polyphenols, and we ask a laboratory rather than take anyone’s word for it. Then the oil has to taste right." },
   { title: "One lot, one number", body: "Each lot is kept apart under its own number, with its producer’s name. Lots are not blended to hide a weak one." },
   { title: "Say only what we can show", body: "Certificates, analyses and awards appear on a bottle’s page only when the documents exist." },
 ];

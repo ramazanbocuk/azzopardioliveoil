@@ -3,8 +3,8 @@ import type { Messages } from "./en";
 /** German. Written by the development team, not yet checked by a native-speaking editor. */
 export const de: Messages = {
   meta: {
-    title: "Azzopardi — Natives Olivenöl extra",
-    description: "Natives Olivenöl extra, nach Charge abgefüllt und aus Belgien versandt.",
+    title: "Azzopardi — Natives Olivenöl extra mit hohem Polyphenolgehalt",
+    description: "Natives Olivenöl extra mit hohem Polyphenolgehalt, Charge für Charge ausgewählt von einem Familienbetrieb.",
   },
   common: {
     skip: "Zum Inhalt springen",
@@ -40,7 +40,7 @@ export const de: Messages = {
   },
   footer: {
     label: "Fußzeile",
-    tagline: "Mit Sorgfalt ausgewähltes Olivenöl, nach Charge nummeriert.",
+    tagline: "Olivenöl mit hohem Polyphenolgehalt, mit Sorgfalt ausgewählt und nach Charge nummeriert.",
     shopTitle: "Shop",
     shopAll: "Alle Produkte",
     evoo: "Natives Olivenöl extra",
@@ -112,7 +112,7 @@ export const de: Messages = {
     added: "Im Warenkorb",
     saveFavourite: "{name} zu den Favoriten hinzufügen",
     removeFavourite: "{name} aus den Favoriten entfernen",
-    sentTracked: "Versand aus Belgien, mit Sendungsverfolgung.",
+    sentTracked: "Versand mit Sendungsverfolgung.",
     freeFrom: "Kostenloser Standardversand ab {amount}.",
     harvest: "Ernte",
     origin: "Herkunft",
@@ -131,7 +131,7 @@ export const de: Messages = {
     storage: "Lagerung",
     howToStore: "Aufbewahrung",
     shippingReturns: "Versand & Rücksendung",
-    shippingText: "Bestellungen werden aus Belgien mit Sendungsverfolgung verschickt. Tarife, Zielländer und Rückgabebedingungen finden Sie auf der {link}.",
+    shippingText: "Bestellungen werden mit Sendungsverfolgung verschickt. Tarife, Zielländer und Rückgabebedingungen finden Sie auf der {link}.",
     shippingLink: "Seite zu Versand und Rücksendung",
     dashTitle: "Warum manche Felder einen Strich zeigen",
     dashText: "Herkunft, Ernte, Zutaten, Nährwerte und Lagerung werden je Charge von der Verwaltung erfasst. Sie werden nie automatisch ausgefüllt; ein Strich bedeutet, dass die Angabe noch nicht eingetragen wurde.",

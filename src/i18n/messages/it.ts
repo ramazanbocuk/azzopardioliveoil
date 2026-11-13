@@ -3,8 +3,8 @@ import type { Messages } from "./en";
 /** Italian. Written by the development team, not yet checked by a native-speaking editor. */
 export const it: Messages = {
   meta: {
-    title: "Azzopardi — Olio extravergine di oliva",
-    description: "Olio extravergine di oliva, imbottigliato per lotto e spedito dal Belgio.",
+    title: "Azzopardi — Olio extravergine di oliva ricco di polifenoli",
+    description: "Olio extravergine di oliva ricco di polifenoli, scelto lotto per lotto da un’azienda familiare.",
   },
   common: {
     skip: "Vai al contenuto",
@@ -40,7 +40,7 @@ export const it: Messages = {
   },
   footer: {
     label: "Piè di pagina",
-    tagline: "Olio di oliva scelto con cura, numerato per lotto.",
+    tagline: "Olio di oliva ricco di polifenoli, scelto con cura e numerato per lotto.",
     shopTitle: "Negozio",
     shopAll: "Tutti i prodotti",
     evoo: "Olio extravergine di oliva",
@@ -112,7 +112,7 @@ export const it: Messages = {
     added: "Aggiunto al carrello",
     saveFavourite: "Aggiungi {name} ai preferiti",
     removeFavourite: "Rimuovi {name} dai preferiti",
-    sentTracked: "Spedito dal Belgio, con tracciamento.",
+    sentTracked: "Spedito con tracciamento.",
     freeFrom: "Spedizione standard gratuita da {amount}.",
     harvest: "Raccolta",
     origin: "Origine",
@@ -131,7 +131,7 @@ export const it: Messages = {
     storage: "Conservazione",
     howToStore: "Come conservare",
     shippingReturns: "Spedizioni e resi",
-    shippingText: "Gli ordini sono spediti dal Belgio con tracciamento. Tariffe, destinazioni e condizioni di reso si trovano nella {link}.",
+    shippingText: "Gli ordini sono spediti con tracciamento. Tariffe, destinazioni e condizioni di reso si trovano nella {link}.",
     shippingLink: "pagina spedizioni e resi",
     dashTitle: "Perché alcuni campi mostrano un trattino",
     dashText: "Origine, raccolta, ingredienti, valori nutrizionali e conservazione sono registrati per lotto dall’amministratore. Non vengono mai compilati automaticamente: un trattino indica che l’informazione non è ancora stata inserita.",

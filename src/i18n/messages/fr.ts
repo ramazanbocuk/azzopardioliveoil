@@ -3,8 +3,8 @@ import type { Messages } from "./en";
 /** French. Written by the development team, not yet checked by a native-speaking editor. */
 export const fr: Messages = {
   meta: {
-    title: "Azzopardi — Huile d’olive vierge extra",
-    description: "Huile d’olive vierge extra, embouteillée par lot et expédiée depuis la Belgique.",
+    title: "Azzopardi — Huile d’olive vierge extra riche en polyphénols",
+    description: "Huile d’olive vierge extra riche en polyphénols, choisie lot par lot par une entreprise familiale.",
   },
   common: {
     skip: "Aller au contenu",
@@ -40,7 +40,7 @@ export const fr: Messages = {
   },
   footer: {
     label: "Pied de page",
-    tagline: "Une huile d’olive choisie avec soin, numérotée par lot.",
+    tagline: "Une huile d’olive riche en polyphénols, choisie avec soin et numérotée par lot.",
     shopTitle: "Boutique",
     shopAll: "Tous les produits",
     evoo: "Huile d’olive vierge extra",
@@ -112,7 +112,7 @@ export const fr: Messages = {
     added: "Ajouté au panier",
     saveFavourite: "Ajouter {name} aux favoris",
     removeFavourite: "Retirer {name} des favoris",
-    sentTracked: "Expédié depuis la Belgique, avec suivi.",
+    sentTracked: "Expédié avec suivi.",
     freeFrom: "Livraison standard gratuite à partir de {amount}.",
     harvest: "Récolte",
     origin: "Origine",
@@ -131,7 +131,7 @@ export const fr: Messages = {
     storage: "Conservation",
     howToStore: "Conseils de conservation",
     shippingReturns: "Livraison & retours",
-    shippingText: "Les commandes sont expédiées depuis la Belgique avec suivi. Les tarifs, les destinations et les conditions de retour figurent sur la {link}.",
+    shippingText: "Les commandes sont expédiées avec suivi. Les tarifs, les destinations et les conditions de retour figurent sur la {link}.",
     shippingLink: "page livraison et retours",
     dashTitle: "Pourquoi certains champs affichent un tiret",
     dashText: "L’origine, la récolte, les ingrédients, les valeurs nutritionnelles et la conservation sont saisis par lot par l’administrateur. Ils ne sont jamais remplis automatiquement : un tiret signifie que l’information n’a pas encore été saisie.",

@@ -8,8 +8,8 @@
  */
 export const en = {
   meta: {
-    title: "Azzopardi — Extra virgin olive oil",
-    description: "Extra virgin olive oil, bottled by the lot and sent from Belgium.",
+    title: "Azzopardi — High-polyphenol extra virgin olive oil",
+    description: "High-polyphenol extra virgin olive oil, chosen lot by lot by a family business.",
   },
   common: {
     skip: "Skip to content",
@@ -45,7 +45,7 @@ export const en = {
   },
   footer: {
     label: "Footer",
-    tagline: "Olive oil chosen with care, numbered by the lot.",
+    tagline: "High-polyphenol olive oil, chosen with care and numbered by the lot.",
     shopTitle: "Shop",
     shopAll: "Shop all",
     evoo: "Extra virgin olive oil",
@@ -117,7 +117,7 @@ export const en = {
     added: "Added to cart",
     saveFavourite: "Save {name} to favourites",
     removeFavourite: "Remove {name} from favourites",
-    sentTracked: "Sent from Belgium, tracked.",
+    sentTracked: "Sent with tracking.",
     freeFrom: "Free standard shipping from {amount}.",
     harvest: "Harvest",
     origin: "Origin",
@@ -136,7 +136,7 @@ export const en = {
     storage: "Storage",
     howToStore: "How to store",
     shippingReturns: "Shipping & returns",
-    shippingText: "Orders are sent from Belgium with tracking. Rates, destinations and the conditions for returns are on the {link}.",
+    shippingText: "Orders are sent with tracking. Rates, destinations and the conditions for returns are on the {link}.",
     shippingLink: "shipping and returns page",
     dashTitle: "Why some fields show a dash",
     dashText: "Origin, harvest, ingredients, nutrition and storage are recorded per lot by the administrator. They are never filled in automatically, so a dash means the information has not been entered yet.",
