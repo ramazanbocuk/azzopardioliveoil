@@ -181,7 +181,7 @@ export default function DesignSystemPage() {
               <div className="space-y-7">
                 <TextField label="Full name" name="ds-name" placeholder="Your name" autoComplete="name" />
                 <TextField label="Email address" name="ds-email" type="email" defaultValue="not-an-email" error="Enter an email address like name@example.com." />
-                <SelectField label="Country" name="ds-country" hint="We ship from Belgium." defaultValue="BE">
+                <SelectField label="Country" name="ds-country" hint="Rates are shown at checkout." defaultValue="BE">
                   <option value="BE">Belgium</option>
                   <option value="LU">Luxembourg</option>
                   <option value="NL">Netherlands</option>

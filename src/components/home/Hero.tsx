@@ -43,7 +43,7 @@ export function Hero({ scene }: { scene: ReactNode }) {
       <div className="container-page relative z-10 flex h-full flex-col pt-[calc(var(--header-h)+clamp(1.5rem,6vh,5rem))]">
         <div data-hero-copy>
           <Reveal immediate delay={0.25}>
-            <p className="text-label text-olive-900">Extra virgin olive oil, chosen lot by lot</p>
+            <p className="text-label text-olive-900">High-polyphenol extra virgin olive oil</p>
           </Reveal>
           <SplitHeading
             as="h1"

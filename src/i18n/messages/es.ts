@@ -3,8 +3,8 @@ import type { Messages } from "./en";
 /** Spanish. Written by the development team, not yet checked by a native-speaking editor. */
 export const es: Messages = {
   meta: {
-    title: "Azzopardi — Aceite de oliva virgen extra",
-    description: "Aceite de oliva virgen extra, embotellado por lote y enviado desde Bélgica.",
+    title: "Azzopardi — Aceite de oliva virgen extra rico en polifenoles",
+    description: "Aceite de oliva virgen extra rico en polifenoles, elegido lote a lote por una empresa familiar.",
   },
   common: {
     skip: "Ir al contenido",
@@ -40,7 +40,7 @@ export const es: Messages = {
   },
   footer: {
     label: "Pie de página",
-    tagline: "Aceite de oliva elegido con esmero, numerado por lote.",
+    tagline: "Aceite de oliva rico en polifenoles, elegido con esmero y numerado por lote.",
     shopTitle: "Tienda",
     shopAll: "Todos los productos",
     evoo: "Aceite de oliva virgen extra",
@@ -112,7 +112,7 @@ export const es: Messages = {
     added: "Añadido a la cesta",
     saveFavourite: "Guardar {name} en favoritos",
     removeFavourite: "Quitar {name} de favoritos",
-    sentTracked: "Enviado desde Bélgica, con seguimiento.",
+    sentTracked: "Enviado con seguimiento.",
     freeFrom: "Envío estándar gratuito a partir de {amount}.",
     harvest: "Cosecha",
     origin: "Origen",
@@ -131,7 +131,7 @@ export const es: Messages = {
     storage: "Conservación",
     howToStore: "Cómo conservar",
     shippingReturns: "Envíos y devoluciones",
-    shippingText: "Los pedidos se envían desde Bélgica con seguimiento. Las tarifas, los destinos y las condiciones de devolución están en la {link}.",
+    shippingText: "Los pedidos se envían con seguimiento. Las tarifas, los destinos y las condiciones de devolución están en la {link}.",
     shippingLink: "página de envíos y devoluciones",
     dashTitle: "Por qué algunos campos muestran un guion",
     dashText: "El origen, la cosecha, los ingredientes, la información nutricional y la conservación los registra el administrador por lote. Nunca se rellenan automáticamente: un guion significa que la información aún no se ha introducido.",
