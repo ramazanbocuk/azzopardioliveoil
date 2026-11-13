@@ -171,7 +171,8 @@ async function Gate({ children }: { children: ReactNode }) {
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${zodiak.variable} ${switzer.variable} antialiased`}>
-      <body className="flex min-h-svh flex-col">
+      {/* Browser extensions add their own classes to <body> before the page starts. That is not a fault of the page, so the difference is not reported; only this element's own attributes are exempt, not its contents. */}
+      <body className="flex min-h-svh flex-col" suppressHydrationWarning>
         <Suspense fallback={<div className="min-h-svh bg-[#f3f1ea]" />}>
           <Gate>{children}</Gate>
         </Suspense>
