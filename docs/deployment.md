@@ -22,7 +22,9 @@ Recommended setup: **Vercel** (Frankfurt, `fra1`) for the application and **Neon
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_URL` | Yes | PostgreSQL connection string. The direct one: migrations use it |
+| `DATABASE_URL_POOLED` | On Vercel | The database's pooled connection string. The running site uses it when set; without it, many server copies exhaust a managed database's direct connections ("too many connections") |
+| `DATABASE_POOL_MAX` | No | Connections per server process. Default: 5 pooled or 2 direct on Vercel, 10 elsewhere |
 | `APP_URL` | Yes | Public address, `https://…`, no trailing slash |
 | `APP_SECRET` | Yes | 32+ random characters; signs reset and newsletter links |
 | `CRON_SECRET` | Yes | 24+ random characters; protects the scheduler. Vercel Cron sends it automatically |

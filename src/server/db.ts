@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { databaseConnection } from "./environment";
 
 /**
  * One Prisma client per process. In development the instance is parked on
@@ -15,9 +16,10 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; prisma
 const MODELS = Object.keys(Prisma.ModelName).sort().join(",");
 
 function createClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
+  const { connectionString, max } = databaseConnection();
   if (!connectionString) throw new Error("DATABASE_URL is not set. Copy .env.example to .env.");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  // Idle connections are closed quickly: a paused server copy must not sit on connections others need.
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString, max, idleTimeoutMillis: 5_000 }) });
 }
 
 export function getPrisma(): PrismaClient {
