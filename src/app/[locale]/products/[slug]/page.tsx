@@ -11,12 +11,13 @@ import { countryName, fill } from "@/i18n/format";
 import { alternatesFor } from "@/i18n/seo";
 import { getI18n } from "@/i18n/server";
 import { marketOf } from "@/i18n/currency";
+import { atLeastOne, NO_RECORD_YET } from "@/lib/staticParams";
 import { getCatalogData, getFreeShippingThreshold, getMarketRules } from "@/server/storefrontData";
 import { SplitHeading } from "@/motion/SplitHeading";
 
 export async function generateStaticParams() {
   const { products } = await getCatalogData();
-  return products.map((product) => ({ slug: product.slug }));
+  return atLeastOne(products.map((product) => ({ slug: product.slug })), { slug: NO_RECORD_YET });
 }
 
 export async function generateMetadata({ params }: PageProps<"/[locale]/products/[slug]">): Promise<Metadata> {

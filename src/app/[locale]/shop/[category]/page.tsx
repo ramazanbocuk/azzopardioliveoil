@@ -6,11 +6,12 @@ import { PageHeader } from "@/components/ui/Page";
 import type { Language } from "@/i18n/config";
 import { alternatesFor } from "@/i18n/seo";
 import { getI18n } from "@/i18n/server";
+import { atLeastOne, NO_RECORD_YET } from "@/lib/staticParams";
 import { getCatalogData } from "@/server/storefrontData";
 
 export async function generateStaticParams() {
   const { categories } = await getCatalogData();
-  return categories.map((category) => ({ category: category.slug }));
+  return atLeastOne(categories.map((category) => ({ category: category.slug })), { category: NO_RECORD_YET });
 }
 
 export async function generateMetadata({ params }: PageProps<"/[locale]/shop/[category]">): Promise<Metadata> {
