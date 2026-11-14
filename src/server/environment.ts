@@ -41,3 +41,23 @@ export function adminHostRule(host: string | null, pathname: string, adminHost: 
   return isPanel || pathname.startsWith("/api/admin/") ? "not-found" : "pass";
 }
 
+
+/**
+ * Which database address the running site uses, and how many connections
+ * each server process may hold.
+ *
+ * A host such as Vercel runs many short-lived copies of the site. If each
+ * opens its own set of direct connections, a managed database soon refuses
+ * with "too many connections". Such databases give a second, pooled address
+ * for exactly this: when DATABASE_URL_POOLED is set it is used by the site,
+ * and DATABASE_URL (direct) is left to migrations, which need it.
+ * DATABASE_POOL_MAX overrides the number of connections per process.
+ */
+export function databaseConnection(env: Env = process.env): { connectionString: string | undefined; max: number; pooled: boolean } {
+  const pooledUrl = env.DATABASE_URL_POOLED?.trim();
+  const pooled = !!pooledUrl && /^postgres(ql)?:\/\//.test(pooledUrl);
+  const wanted = Number(env.DATABASE_POOL_MAX);
+  const hosted = !!env.VERCEL;
+  const max = Number.isInteger(wanted) && wanted > 0 ? wanted : hosted ? (pooled ? 5 : 2) : 10;
+  return { connectionString: pooled ? pooledUrl : env.DATABASE_URL, max, pooled };
+}
