@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { TREE } from "@/components/brand/art";
 
 type BottleProps = {
   ml: number;
@@ -37,7 +38,10 @@ export function Bottle({ ml, lot, className, style, title }: BottleProps) {
       {/* Label */}
       <rect x="48" y="292" width="104" height="168" fill="#f4efe4" />
       <rect x="54" y="298" width="92" height="156" fill="none" stroke="#1a1c16" strokeOpacity="0.35" strokeWidth="0.6" />
-      <image href="/brand/emblem.png" x="84" y="303" width="32" height="32" />
+      <svg x="80" y="304" width="40" height="30" viewBox={TREE.bold.box.join(" ")}>
+        <path fill="#1f2716" d={TREE.bold.tree} />
+        <path fill="#b08d4a" d={TREE.bold.olives} />
+      </svg>
       <text x="100" y="354" textAnchor="middle" fontSize="13.5" letterSpacing="2.2" fill="#1f2716" style={{ fontFamily: "var(--serif)" }}>
         AZZOPARDI
       </text>

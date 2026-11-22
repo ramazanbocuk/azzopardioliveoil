@@ -213,7 +213,7 @@ export function Traceability() {
         <Reveal className="lg:col-span-5 lg:col-start-8" y={48}>
           <div className="mx-auto max-w-sm -rotate-2 bg-ivory p-7 text-ink shadow-[0_30px_60px_-30px_rgb(0_0_0/0.55)] sm:p-9">
             <p className="flex items-center gap-2.5 font-serif text-[1.125rem] uppercase tracking-[0.2em]">
-              <Emblem className="h-9" />
+              <Emblem cut="bold" className="h-9" />
               Azzopardi
             </p>
             <p className="text-ticket mt-1 text-stone-700">Lot ticket</p>
