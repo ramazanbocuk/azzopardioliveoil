@@ -112,7 +112,8 @@ describe("tracking read from a carrier", () => {
     expect(await jobs()).toBe(1);
     expect(await internal(order.id)).toEqual(["delivery_problem"]);
     expect(await db.outboxJob.count({ where: { kind: { startsWith: "notify.customer" } } })).toBe(0);
-    expect((await shipmentWatchlist(packer)).attention).toMatchObject([{ number: order.number, problem: true, reasons: ["Receiver not available. A second attempt will be made."] }]);
+    // Read as of the day of the problem: the events carry fixed dates, and read "today" the same parcel is also late and silent.
+    expect((await shipmentWatchlist(packer, at("2026-11-14T12:00:00Z"))).attention).toMatchObject([{ number: order.number, problem: true, reasons: ["Receiver not available. A second attempt will be made."] }]);
     expect(await admin.dashboard(boss)).toMatchObject({ parcelsInTransit: 1, parcelProblems: 1 });
 
     // It moves again: the flag clears by itself.
@@ -121,7 +122,7 @@ describe("tracking read from a carrier", () => {
     await refreshTracking(db, later(12));
     expect((await parcel()).exceptionAt).toBeNull();
     expect(await internal(order.id)).toEqual(["delivery_problem", "delivery_problem_cleared"]);
-    expect((await shipmentWatchlist(packer)).attention).toEqual([]);
+    expect((await shipmentWatchlist(packer, at("2026-11-15T08:00:00Z"))).attention).toEqual([]);
 
     // Delivered: the parcel, then the order, since it was the last parcel.
     state.tracking = { status: "DELIVERED", deliveredAt: at("2026-11-15T11:30:00Z"), events: [picked, failed, out, { at: at("2026-11-15T11:30:00Z"), description: "Delivered", kind: "DELIVERED" as const }] };
