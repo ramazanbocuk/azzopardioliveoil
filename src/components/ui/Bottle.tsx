@@ -37,7 +37,7 @@ export function Bottle({ ml, lot, className, style, title }: BottleProps) {
       {/* Label */}
       <rect x="48" y="292" width="104" height="168" fill="#f4efe4" />
       <rect x="54" y="298" width="92" height="156" fill="none" stroke="#1a1c16" strokeOpacity="0.35" strokeWidth="0.6" />
-      <image href="/brand/emblem.png" x="84" y="303" width="32" height="32" />
+      <image href="/brand/emblem-bold.svg" x="83" y="302" width="34" height="32.5" />
       <text x="100" y="354" textAnchor="middle" fontSize="13.5" letterSpacing="2.2" fill="#1f2716" style={{ fontFamily: "var(--serif)" }}>
         AZZOPARDI
       </text>

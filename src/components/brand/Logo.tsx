@@ -1,19 +1,16 @@
 import clsx from "clsx";
+import { ART } from "./art";
 
 /**
- * The supplied logo artwork, cut from the owner's image with its paper
- * background made transparent (`public/brand/`). Two pieces: the round emblem
- * and the full lockup with the name. They are bitmaps, not vectors: fine on a
- * screen at these sizes, not for print.
+ * The owners' logo: an olive tree, traced from their picture into vector
+ * files (`public/brand/`), so it is sharp at any size. Two pieces: the tree on
+ * its own (`Emblem`) and the tree above the name (`Logo`).
  *
- * On a dark surface the artwork's dark green would disappear, so `tone` draws
- * the same shape in one colour instead (as the foil on the bottle label does).
+ * The files are drawn in the brand's olive. On a dark surface that would
+ * disappear, so `tone` draws the same shape in one colour instead (as foil on
+ * a label does). Width and height are always given, so nothing moves while
+ * the file loads.
  */
-const ART = {
-  emblem: { src: "/brand/emblem.png", width: 281, height: 278 },
-  logo: { src: "/brand/logo.png", width: 828, height: 465 },
-} as const;
-
 type Props = {
   /** "colour" for light surfaces; "current" takes the text colour; "gold" for dark surfaces. */
   tone?: "colour" | "current" | "gold";
@@ -26,9 +23,9 @@ type Props = {
 function Art({ art, tone = "colour", className, label = "" }: Props & { art: keyof typeof ART }) {
   const { src, width, height } = ART[art];
   if (tone === "colour") {
-    // A small static file: the image optimiser has nothing to add.
+    // A small vector file: the image optimiser has nothing to add.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} width={width} height={height} alt={label} className={clsx("w-auto", className)} />;
+    return <img src={src} width={width} height={height} alt={label} className={clsx("w-auto shrink-0", className)} />;
   }
   const mask = `url(${src}) center / contain no-repeat`;
   return (
@@ -36,18 +33,21 @@ function Art({ art, tone = "colour", className, label = "" }: Props & { art: key
       role={label ? "img" : undefined}
       aria-label={label || undefined}
       aria-hidden={label ? undefined : true}
-      className={clsx("inline-block", tone === "gold" ? "bg-gold-300" : "bg-current", className)}
+      className={clsx("inline-block shrink-0", tone === "gold" ? "bg-gold-300" : "bg-current", className)}
       style={{ aspectRatio: `${width} / ${height}`, mask, WebkitMask: mask }}
     />
   );
 }
 
-/** The round emblem: the letter A with an olive branch. */
-export function Emblem(props: Props) {
-  return <Art art="emblem" {...props} />;
+/**
+ * The olive tree alone. `cut="bold"` is the same tree with heavier lines:
+ * use it wherever the tree is shown small (a sidebar, a label).
+ */
+export function Emblem({ cut = "fine", ...props }: Props & { cut?: "fine" | "bold" }) {
+  return <Art art={cut === "bold" ? "emblemBold" : "emblem"} {...props} />;
 }
 
-/** The full logo: emblem, name and "Olive Oil". */
+/** The full logo: the tree above the name and "Olive Oil Company". */
 export function Logo(props: Props) {
-  return <Art art="logo" label="Azzopardi Olive Oil" {...props} />;
+  return <Art art="logo" label="Azzopardi Olive Oil Company" {...props} />;
 }
