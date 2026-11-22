@@ -47,7 +47,7 @@ export function Emblem(props: Props) {
   return <Art art="emblem" {...props} />;
 }
 
-/** The full logo: emblem, name and "Olive Oil". */
+/** The full logo: emblem, name and "Olive Oil Company". */
 export function Logo(props: Props) {
-  return <Art art="logo" label="Azzopardi Olive Oil" {...props} />;
+  return <Art art="logo" label="Azzopardi Olive Oil Company" {...props} />;
 }

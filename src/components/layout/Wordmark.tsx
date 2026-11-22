@@ -12,7 +12,7 @@ export function Wordmark({ className, mono = false }: { className?: string; mono
       <Emblem tone={mono ? "current" : "colour"} className="h-9 sm:h-11" />
       <span className="inline-flex flex-col items-center">
         <span className="font-serif text-[1.0625rem] tracking-[0.2em] uppercase sm:text-[1.375rem]">Azzopardi</span>
-        <span className="mt-1 font-sans text-[0.5rem] font-medium tracking-[0.42em] sm:mt-1.5 sm:text-[0.5625rem] uppercase opacity-75">Olive Oil</span>
+        <span className="mt-1 font-sans text-[0.5rem] font-medium tracking-[0.42em] sm:mt-1.5 sm:text-[0.5625rem] uppercase opacity-75">Olive Oil Company</span>
       </span>
     </span>
   );
