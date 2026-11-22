@@ -58,14 +58,7 @@
   --sans: var(--font-switzer), "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --page-bg: var(--color-ivory);
-  /* Tall enough for the full logo (tree above the name) to be read. */
-  --header-h: 5.75rem;
-}
-
-@media (min-width: 40rem) {
-  :root {
-    --header-h: 7rem;
-  }
+  --header-h: 4.5rem;
 }
 
 html {

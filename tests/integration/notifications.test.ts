@@ -124,7 +124,7 @@ describe("channels", () => {
     const { calls, transport } = recorder();
     const email = contactEmail({ name: "A reader", email: "reader@example.com", body: "Hello" }, "owner@example.com");
     expect(email.html).toContain('src="cid:azzopardi-logo"');
-    expect(email.html).toContain('alt="Azzopardi Olive Oil Company"');
+    expect(email.html).toContain('alt="Azzopardi Olive Oil"');
     await sendEmail(email, "job-logo", ENV, transport);
     await sendEmail({ to: "a@b.co", subject: "Hi", html: "<p>Hi</p>", text: "Hi" }, "job-plain", ENV, transport);
     const [withLogo, plain] = calls.map((call) => JSON.parse(call.body));

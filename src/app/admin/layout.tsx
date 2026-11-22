@@ -138,7 +138,7 @@ async function Gate({ children }: { children: ReactNode }) {
       <aside className="bg-olive-950 text-ivory print:hidden lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-5">
           <Link href="/admin" className="inline-flex items-center gap-2.5 font-serif text-[1.125rem] uppercase tracking-[0.2em]">
-            <Emblem cut="bold" tone="gold" className="h-8" />
+            <Emblem tone="gold" className="h-8" />
             Azzopardi
           </Link>
           <span className="text-[0.625rem] uppercase tracking-[0.2em] text-gold-300">Admin</span>
