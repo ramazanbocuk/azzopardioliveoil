@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
 import { rememberShipTo, useI18n } from "@/i18n/client";
-import { COUNTRY_COOKIE, LANGUAGE_NAME, LOCALES, LOCALE_CODES, LOCALE_COOKIE, ONE_YEAR, SHIP_COOKIE, languagesOfCountry, localeFor, localizePath, splitLocale, type Locale } from "@/i18n/config";
+import { COUNTRY_COOKIE, LANGUAGE_NAME, LOCALES, LOCALE_CODES, LOCALE_COOKIE, ONE_YEAR, SHIP_COOKIE, languagesOfCountry, localeFor, localizePath, splitLocale, suggestedLocale, type Language, type Locale } from "@/i18n/config";
 import { countryName } from "@/i18n/format";
 import { SetLanguage } from "@/lib/operations";
 
@@ -109,18 +109,49 @@ export function LocaleSelector({ countries, placement }: { countries: string[]; 
   );
 }
 
+/** The offer in each language's own words ("한국어로 쇼핑하시겠어요?"), handed over by the server so no dictionary but the page's own is sent to the browser. */
+export type LanguageOffers = Partial<Record<Language, { question: string; accept: string }>>;
+
 /**
- * Shown once to a visitor from a country with more than one language
- * (Belgium: French and Dutch) who has not chosen yet. No language is picked
- * for them; staying with the current one is also a choice and is remembered.
+ * Shown once to a visitor who has not chosen a language yet, in two cases.
+ * A country with more than one language (Belgium: French and Dutch): no
+ * language is picked for them. A visitor in Korea, mainland China or Japan
+ * reading a page in another language: they are asked, in their own language,
+ * whether they would rather read it. Nobody is redirected; staying with the
+ * current language is also a choice and is remembered, so the question is
+ * asked once.
  */
-export function LanguagePrompt() {
+export function LanguagePrompt({ offers }: { offers: LanguageOffers }) {
   const { m, locale, fill } = useI18n();
   const choose = useChooseLocale();
   const country = useSyncExternalStore(noop, () => readCookie(COUNTRY_COOKIE), () => null);
   const chosen = useSyncExternalStore(noop, () => readCookie(LOCALE_COOKIE), () => "server");
   const [dismissed, setDismissed] = useState(false);
   const offered = languagesOfCountry(country);
+  const stay = () => {
+    writeCookie(LOCALE_COOKIE, locale);
+    setDismissed(true);
+  };
+
+  const suggested = dismissed ? null : suggestedLocale({ current: locale, country, chosen });
+  const offer = suggested ? offers[LOCALES[suggested].language] : undefined;
+  if (suggested && offer) {
+    return (
+      <aside aria-labelledby="language-offer-title" className="fixed inset-x-4 bottom-4 z-[56] mx-auto max-w-md border border-ink/15 bg-ivory p-5 shadow-[0_20px_50px_-25px_rgb(0_0_0/0.5)] sm:right-6 sm:left-auto sm:mx-0">
+        <h2 id="language-offer-title" lang={LOCALES[suggested].tag} className="text-body font-medium">
+          {offer.question}
+        </h2>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button size="sm" lang={LOCALES[suggested].tag} onClick={() => choose(suggested)}>
+            {offer.accept}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={stay}>
+            {fill(m.selector.continueIn, { language: LANGUAGE_NAME[LOCALES[locale].language] })}
+          </Button>
+        </div>
+      </aside>
+    );
+  }
   if (chosen || dismissed || offered.length < 2) return null;
 
   const options = [...offered.map((language) => localeFor(language, country)), "en" as Locale].filter((code) => code !== locale);
@@ -135,13 +166,7 @@ export function LanguagePrompt() {
             {LANGUAGE_NAME[LOCALES[code].language]}
           </Button>
         ))}
-        <Button
-          size="sm"
-          onClick={() => {
-            writeCookie(LOCALE_COOKIE, locale);
-            setDismissed(true);
-          }}
-        >
+        <Button size="sm" onClick={stay}>
           {fill(m.selector.keep, { language: LANGUAGE_NAME[LOCALES[locale].language] })}
         </Button>
       </div>

@@ -12,11 +12,11 @@
  * browser all import it.
  */
 
-export const LANGUAGES = ["en", "de", "nl", "fr", "it", "es"] as const;
+export const LANGUAGES = ["en", "de", "nl", "fr", "it", "es", "ko", "zh", "ja"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 /** What each language calls itself. */
-export const LANGUAGE_NAME: Record<Language, string> = { en: "English", de: "Deutsch", nl: "Nederlands", fr: "Français", it: "Italiano", es: "Español" };
+export const LANGUAGE_NAME: Record<Language, string> = { en: "English", de: "Deutsch", nl: "Nederlands", fr: "Français", it: "Italiano", es: "Español", ko: "한국어", zh: "简体中文", ja: "日本語" };
 
 type LocaleInfo = {
   language: Language;
@@ -40,6 +40,10 @@ export const LOCALES = {
   "fr-be": { language: "fr", tag: "fr-BE", label: "Français (Belgique)", country: "BE" },
   "it-it": { language: "it", tag: "it-IT", label: "Italiano (Italia)", country: "IT" },
   "es-es": { language: "es", tag: "es-ES", label: "Español (España)", country: "ES" },
+  "ko-kr": { language: "ko", tag: "ko-KR", label: "한국어 (대한민국)", country: "KR" },
+  // Simplified Chinese, for mainland China only. Traditional Chinese is not offered (see browserLanguages).
+  "zh-cn": { language: "zh", tag: "zh-CN", label: "简体中文 (中国大陆)", country: "CN" },
+  "ja-jp": { language: "ja", tag: "ja-JP", label: "日本語 (日本)", country: "JP" },
 } as const satisfies Record<string, LocaleInfo>;
 
 export type Locale = keyof typeof LOCALES;
@@ -71,12 +75,12 @@ export const ONE_YEAR = 60 * 60 * 24 * 365;
 export function localeFor(language: Language, country: string | null): Locale {
   const regional = LOCALE_CODES.find((code) => LOCALES[code].language === language && LOCALES[code].country === country);
   if (regional) return regional;
-  const main: Record<Language, Locale> = { en: "en", de: "de-de", nl: "nl-nl", fr: "fr-fr", it: "it-it", es: "es-es" };
+  const main: Record<Language, Locale> = { en: "en", de: "de-de", nl: "nl-nl", fr: "fr-fr", it: "it-it", es: "es-es", ko: "ko-kr", zh: "zh-cn", ja: "ja-jp" };
   return main[language];
 }
 
 /** Languages a country is offered when nothing else is known. Belgium has two and no default between them. */
-const COUNTRY_LANGUAGES: Record<string, Language[]> = { US: ["en"], GB: ["en"], DE: ["de"], AT: ["de"], NL: ["nl"], BE: ["fr", "nl"], FR: ["fr"], IT: ["it"], ES: ["es"] };
+const COUNTRY_LANGUAGES: Record<string, Language[]> = { US: ["en"], GB: ["en"], DE: ["de"], AT: ["de"], NL: ["nl"], BE: ["fr", "nl"], FR: ["fr"], IT: ["it"], ES: ["es"], KR: ["ko"], CN: ["zh"], JP: ["ja"] };
 export const languagesOfCountry = (country: string | null): Language[] => (country ? (COUNTRY_LANGUAGES[country] ?? []) : []);
 
 /** Languages from an Accept-Language header, best first. */
@@ -88,7 +92,9 @@ export function browserLanguages(header: string | null | undefined): Language[] 
       const [tag, ...params] = part.trim().split(";");
       const q = params.map((param) => param.trim()).find((param) => param.startsWith("q="));
       const weight = q ? Number(q.slice(2)) : 1;
-      return { language: tag.trim().slice(0, 2).toLowerCase(), weight: Number.isFinite(weight) ? weight : 0, index };
+      // "zh" here means Simplified Chinese. A browser asking for Traditional (Taiwan, Hong Kong, Macau) is not sent to it.
+      const traditional = /^zh-(?:hant|tw|hk|mo)\b/i.test(tag.trim());
+      return { language: traditional ? "" : tag.trim().slice(0, 2).toLowerCase(), weight: Number.isFinite(weight) ? weight : 0, index };
     })
     .filter((entry) => entry.weight > 0)
     .sort((a, b) => b.weight - a.weight || a.index - b.index);
@@ -112,6 +118,25 @@ export function detectLocale(input: { saved?: string | null; acceptLanguage?: st
   const offered = languagesOfCountry(country);
   if (offered.length === 1) return localeFor(offered[0], country);
   return DEFAULT_LOCALE;
+}
+
+/**
+ * The locale to OFFER a visitor who is already reading a page in another
+ * language: a visitor in Korea on the English page is asked, in Korean,
+ * whether they would rather read Korean. Never a redirect. Null when there is
+ * nothing to offer: no country, a language already chosen, a page already in
+ * the country's language, or a country with several languages (Belgium has
+ * its own prompt).
+ *
+ * Only these markets are offered a language this way. European visitors
+ * keep the earlier rule unchanged: an English browser in Germany reads
+ * English and is not asked.
+ */
+const OFFERED: Record<string, Locale> = { KR: "ko-kr", CN: "zh-cn", JP: "ja-jp" };
+export function suggestedLocale(input: { current: Locale; country: string | null | undefined; chosen: string | null | undefined }): Locale | null {
+  if (input.chosen) return null;
+  const offer = input.country ? OFFERED[input.country.toUpperCase()] : undefined;
+  return offer && languageOf(offer) !== languageOf(input.current) ? offer : null;
 }
 
 /** Splits "/de-de/shop" into its locale and the rest ("/shop"). A path without a locale returns null for it. */

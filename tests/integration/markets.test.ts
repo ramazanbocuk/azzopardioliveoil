@@ -10,7 +10,8 @@ import { loadCatalog } from "@/server/catalogView";
 import type { Ctx } from "@/server/context";
 import { deleteMarket, marketsOverview, saveMarket, setExcludedCountries, setVariantPrice } from "@/server/markets";
 import { customerRefundEmail } from "@/server/notifications/messages";
-import { setPaymentProvider, startPayment, type PaymentProvider } from "@/server/payments";
+import { fromStripeAmount, setPaymentProvider, startPayment, toStripeAmount, type PaymentProvider } from "@/server/payments";
+import { saveDiscount, saveRate } from "@/server/admin";
 import { discountProblem, type DiscountRule } from "@/server/pricing";
 import { listBackorders } from "@/server/stock";
 import { totpCode } from "@/server/totp";
@@ -166,6 +167,50 @@ describe("shopping from another market", () => {
     // The customer's emails state dollars, in the format of the language they shopped in.
     expect(customerRefundEmail({ ...order, locale: "en-us" }, 2100, false).text).toContain("$21.00");
     expect(customerRefundEmail({ ...order, locale: "de-de" }, 2100, false).text.replace(/\s/g, " ")).toContain("21,00 $");
+  });
+
+  it("sells to Japan in whole yen: prices, shipping and discounts are refused with decimals, and the provider is asked in whole units", async () => {
+    const administrator = await as("ADMINISTRATOR");
+    await saveMarket(administrator, null, { code: "jp", name: "Japan", currency: "JPY", countries: ["JP"] });
+    const small = await db.variant.findUniqueOrThrow({ where: { sku: "t-500" } });
+    // 4,800.50 yen does not exist.
+    await refused(setVariantPrice(administrator, small.id, "JPY", 480050), "BAD_INPUT");
+    await setVariantPrice(administrator, small.id, "JPY", 480000);
+    const zone = await db.shippingZone.create({ data: { name: "Japan", countries: ["JP"], currency: "JPY" } });
+    await refused(saveRate(administrator, zone.id, null, { name: "Airmail", priceCents: 150025 }), "BAD_INPUT");
+    await saveRate(administrator, zone.id, null, { name: "Airmail", priceCents: 150000 });
+    await refused(saveDiscount(administrator, null, { code: "YEN", kind: "FIXED", value: 50050, currency: "JPY" }), "BAD_INPUT");
+    await saveDiscount(administrator, null, { code: "TENTH", kind: "PERCENT", value: 15, currency: "JPY" });
+    const rate = await db.shippingRate.findFirstOrThrow({ where: { zoneId: zone.id } });
+
+    const asked: { currency: string; totalCents: number }[] = [];
+    setPaymentProvider({ name: "STRIPE", createCheckout: async ({ order }) => (asked.push({ currency: order.currency, totalCents: order.totalCents }), { providerRef: "cs_test_jpy", url: "https://pay.example/jpy" }), parseWebhook: () => { throw new Error("unused"); } });
+
+    const customer = visitor("JP");
+    const cart = await customer.gql<{ cartAdd: { currency: string; subtotalCents: number } }>(ADD, { sku: "t-500", quantity: 3 });
+    expect(cart.data?.cartAdd).toMatchObject({ currency: "JPY", subtotalCents: 1440000 });
+    await customer.gql(`mutation { cartApplyDiscount(code: "TENTH") { discountCents } }`);
+    type Placed = { checkout: { number: string; accessToken: string; currency: string; subtotalCents: number; shippingCents: number; totalCents: number } };
+    const placed = await customer.gql<Placed>(CHECKOUT, { input: { email: "buyer@example.jp", shippingRateId: rate.id, address: address("JP"), currency: "JPY" } });
+    expect(placed.errors).toBeUndefined();
+    // 15% of 14,400 yen is 2,160 yen exactly; the total is 14,400 − 2,160 + 1,500.
+    expect(placed.data?.checkout).toMatchObject({ currency: "JPY", subtotalCents: 1440000, shippingCents: 150000, totalCents: 1374000 });
+
+    const ctx: Ctx = { db, ip: "10.1.1.2", userAgent: null, cookies: {}, setCookies: [], customer: null, admin: null };
+    await startPayment(ctx, placed.data!.checkout.number, placed.data!.checkout.accessToken);
+    expect(asked).toEqual([{ currency: "JPY", totalCents: 1374000 }]);
+    // What Stripe is told, and what it tells us back: whole yen and won, hundredths for everything else.
+    expect(toStripeAmount(1374000, "JPY")).toBe(13740);
+    expect(toStripeAmount(4500000, "krw")).toBe(45000);
+    expect(toStripeAmount(26800, "CNY")).toBe(26800);
+    expect(toStripeAmount(5700, "USD")).toBe(5700);
+    expect(() => toStripeAmount(1374050, "JPY")).toThrow();
+    expect(fromStripeAmount(13740, "jpy")).toBe(1374000);
+    expect(fromStripeAmount(5700, "usd")).toBe(5700);
+
+    const order = await db.order.findFirstOrThrow();
+    expect(customerRefundEmail({ ...order, locale: "ja-jp" }, 480000, false).text).toMatch(/[¥￥]4,800/);
+    expect(customerRefundEmail({ ...order, locale: "ja-jp" }, 480000, false).text).not.toContain("4,800.00");
   });
 
   it("refuses a cart with a size not sold there, a product excluded from the country, and a closed market", async () => {

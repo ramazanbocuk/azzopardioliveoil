@@ -1,4 +1,4 @@
-import { toCurrency } from "@/i18n/currency";
+import { CURRENCIES, isChargeable, toCurrency } from "@/i18n/currency";
 import { z } from "zod";
 import type { AdminRole, FulfilmentStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "./auth";
@@ -39,7 +39,12 @@ const optionalDate = z
   .string()
   .nullish()
   .transform((value) => (value ? new Date(`${value}T00:00:00Z`) : null));
-const cents = z.coerce.number().int().min(0).max(10_000_000);
+// Up to ten million units: a won or yen amount has two more digits than a euro one.
+const cents = z.coerce.number().int().min(0).max(1_000_000_000);
+/** Yen and won amounts must be whole units; says so in the words a person typing a price needs. */
+function wholeUnits(amountCents: number | null | undefined, currency: string, field?: string) {
+  if (amountCents && !isChargeable(amountCents, currency)) throw new AppError("BAD_INPUT", `An amount in ${currency} has no decimals: enter a whole number.`, field);
+}
 const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens.").max(120);
 
 /** Euros typed by a person ("18", "18.5", "18,50") to integer cents. */
@@ -428,10 +433,11 @@ export async function refundOrder(ctx: Ctx, orderId: string, input: unknown) {
   // A refund the bank bounced gave nothing back, so it does not use up the refundable amount.
   const already = payment.refunds.filter((refund) => refund.failedAt === null).reduce((sum, refund) => sum + refund.amountCents, 0);
   if (data.amountCents > payment.amountCents - already) throw new AppError("BAD_INPUT", "The amount is more than what remains refundable.");
+  wholeUnits(data.amountCents, payment.currency, "amountCents");
 
   const provider = getPaymentProvider();
   if (!provider?.refund) throw new AppError("PAYMENT_UNAVAILABLE", "No payment provider is connected, so a refund cannot be sent.");
-  const providerRef = await provider.refund({ providerRef: payment.providerRef, amountCents: data.amountCents, idempotencyKey: `refund:${payment.id}:${already}:${data.amountCents}` });
+  const providerRef = await provider.refund({ providerRef: payment.providerRef, amountCents: data.amountCents, currency: payment.currency, idempotencyKey: `refund:${payment.id}:${already}:${data.amountCents}` });
 
   await ctx.db.$transaction(async (tx) => {
     // The provider also reports this refund by webhook; whichever arrives first writes the row, the other finds it.
@@ -690,9 +696,9 @@ export async function exportNewsletterCsv(ctx: Ctx) {
 const discountInput = z.object({
   code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,40}$/, "Use 2–40 letters, numbers, dashes."),
   kind: z.enum(["PERCENT", "FIXED", "FREE_SHIPPING"]),
-  value: z.coerce.number().int().min(0).max(10_000_000).default(0),
+  value: z.coerce.number().int().min(0).max(1_000_000_000).default(0),
   minSubtotalCents: cents.default(0),
-  currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"),
+  currency: z.enum(CURRENCIES).default("EUR"),
   startsAt: optionalDate,
   endsAt: optionalDate,
   usageLimit: z.coerce.number().int().min(1).nullish().or(z.literal("")).transform((value) => (value ? Number(value) : null)),
@@ -703,13 +709,15 @@ export async function saveDiscount(ctx: Ctx, id: string | null, input: unknown) 
   requireAdmin(ctx, "MANAGER", "discounts");
   const data = parse(discountInput, input);
   if (data.kind === "PERCENT" && (data.value < 1 || data.value > 100)) throw new AppError("BAD_INPUT", "A percentage must be between 1 and 100.", "value");
+  if (data.kind === "FIXED") wholeUnits(data.value, data.currency, "value");
+  wholeUnits(data.minSubtotalCents, data.currency, "minSubtotalCents");
   const clash = await ctx.db.discount.findFirst({ where: { code: data.code, NOT: id ? { id } : undefined }, select: { id: true } });
   if (clash) throw new AppError("BAD_INPUT", "This code already exists.", "code");
   const discount = id ? await ctx.db.discount.update({ where: { id }, data }) : await ctx.db.discount.create({ data });
   await audit(ctx, id ? "discount.update" : "discount.create", "Discount", discount.id, { code: data.code });
 }
 
-const zoneInput = z.object({ currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"), name: z.string().trim().min(1).max(120), countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1, "Add at least one country code.").max(60), isActive: z.boolean().default(true) });
+const zoneInput = z.object({ currency: z.enum(CURRENCIES).default("EUR"), name: z.string().trim().min(1).max(120), countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1, "Add at least one country code.").max(60), isActive: z.boolean().default(true) });
 const rateInput = z.object({
   name: z.string().trim().min(1).max(120),
   carrier: optionalText(60),
@@ -731,6 +739,10 @@ export async function saveZone(ctx: Ctx, id: string | null, input: unknown) {
 export async function saveRate(ctx: Ctx, zoneId: string, id: string | null, input: unknown) {
   requireAdmin(ctx, "MANAGER", "shipping");
   const data = parse(rateInput, input);
+  const zone = await ctx.db.shippingZone.findUnique({ where: { id: zoneId }, select: { currency: true } });
+  if (!zone) throw new AppError("NOT_FOUND", "Shipping zone not found.");
+  wholeUnits(data.priceCents, zone.currency, "priceCents");
+  wholeUnits(data.freeAboveCents, zone.currency, "freeAboveCents");
   const rate = id ? await ctx.db.shippingRate.update({ where: { id }, data }) : await ctx.db.shippingRate.create({ data: { ...data, zoneId } });
   await audit(ctx, id ? "shipping.rate.update" : "shipping.rate.create", "ShippingRate", rate.id, { priceCents: data.priceCents });
 }

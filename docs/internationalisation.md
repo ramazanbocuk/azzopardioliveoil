@@ -4,7 +4,7 @@ Phase 3 of the master platform brief. Built on 2026-11-14.
 
 ## What a visitor gets
 
-Ten addresses in six languages:
+Thirteen addresses in nine languages (Korean, Simplified Chinese and Japanese were added on 2026-11-25: `docs/asia-markets.md`):
 
 | Address | Language | Default for |
 |---|---|---|
@@ -18,6 +18,9 @@ Ten addresses in six languages:
 | `/fr-be` | French | Belgium (offered) |
 | `/it-it` | Italian | Italy |
 | `/es-es` | Spanish | Spain |
+| `/ko-kr` | Korean | South Korea |
+| `/zh-cn` | Simplified Chinese | Mainland China |
+| `/ja-jp` | Japanese | Japan |
 
 **Choosing the locale.** An address without one (`/shop`) is redirected once, in this order: the language chosen before (cookie `azz_locale`; a signed-in customer's saved language is copied into it at sign-in), the browser's language, the country's language, English. An address that already has a locale is never redirected, so nobody is bounced between languages.
 
@@ -68,5 +71,4 @@ A page that is still English says so on the page, marks its content `lang="en"`,
 - Translation of the editorial and legal pages (the editorial ones are to be rewritten for the new brand positioning first).
 - Product names on stored order lines and in emails in the customer's language.
 - Adding languages, or editing interface text, from the admin panel.
-- Currencies other than EUR, and prices per market (Phase 9).
 - WhatsApp messages in the customer's language (no WhatsApp account is connected).

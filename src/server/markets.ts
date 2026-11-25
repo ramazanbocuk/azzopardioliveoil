@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { LOCALES, SHIP_COOKIE, isLocale } from "@/i18n/config";
-import { BASE_CURRENCY, CURRENCIES, isCurrency, marketOf, priceIn, type Currency, type MarketRule } from "@/i18n/currency";
+import { BASE_CURRENCY, CURRENCIES, isChargeable, isCurrency, marketOf, priceIn, type Currency, type MarketRule } from "@/i18n/currency";
 import { requireAdmin } from "./auth";
 import type { Ctx } from "./context";
 import type { Db } from "./db";
@@ -111,13 +111,14 @@ export async function deleteMarket(ctx: Ctx, id: string) {
   await audit(ctx, "market.delete", "Market", id, { code: market.code, currency: market.currency, countries: market.countries });
 }
 
-const priceInput = z.union([z.number().int().min(1, "A price must be more than zero.").max(10_000_000), z.null()]);
+const priceInput = z.union([z.number().int().min(1, "A price must be more than zero.").max(1_000_000_000), z.null()]);
 
 /** The price of one size in a currency other than euro. Null removes it, which stops that size being sold in that currency. */
 export async function setVariantPrice(ctx: Ctx, variantId: string, currency: string, input: unknown) {
   requireAdmin(ctx, "MANAGER", "catalog");
   if (!isCurrency(currency) || currency === BASE_CURRENCY) throw new AppError("BAD_INPUT", "The euro price is the size's own price; set other currencies here.");
   const priceCents = parse(priceInput, input);
+  if (priceCents !== null && !isChargeable(priceCents, currency)) throw new AppError("BAD_INPUT", `A price in ${currency} has no decimals: enter a whole number.`, `price${currency}`);
   const variant = await ctx.db.variant.findUnique({ where: { id: variantId }, select: { id: true, sku: true } });
   if (!variant) throw new AppError("NOT_FOUND", "That size no longer exists.");
   if (priceCents === null) await ctx.db.variantPrice.deleteMany({ where: { variantId, currency } });

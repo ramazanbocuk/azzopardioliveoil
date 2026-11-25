@@ -72,6 +72,9 @@ export const nl: Messages = {
     promptTitle: "Kies uw taal",
     promptText: "U kunt dit altijd onderaan de pagina wijzigen.",
     keep: "{language} behouden",
+    shopIn: "In het Nederlands winkelen?",
+    viewIn: "In het Nederlands bekijken",
+    continueIn: "Verder in het {language}",
   },
   shop: {
     metaTitle: "Alle producten",

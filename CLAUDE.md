@@ -12,6 +12,8 @@ Phase 7 (customer assistant, knowledge base, support requests) is built but has 
 
 Phase 9 (markets, fixed prices per currency, compulsory staff two-factor) is built: `docs/markets.md`.
 
+Korea, mainland China and Japan (three locales, three currencies, the language notice) are built and none is open: `docs/asia-markets.md`. The owners' brief for it arrived cut off in its SEO part.
+
 Phase 10 (system status, stored error reports, staging mode, admin host) is built: `docs/production-readiness.md`. Nothing is deployed.
 
 ## Commands
@@ -39,6 +41,8 @@ Phase 10 (system status, stored error reports, staging mode, admin host) is buil
 - Tools of one model turn run one after another, not in parallel (two calls in one turn once created two support requests).
 - Tests replace the model with `setModelProvider(script)`. They prove what the application does around the model, not how the model words an answer.
 - An amount is in one currency and is never converted. Use `priceIn(variant, currency)`, never `variant.priceCents`, for anything a customer pays; a null price means "not sold there". Never sum `totalCents` or `amountCents` across orders without filtering on one currency.
+- Every amount is stored in hundredths, yen and won included (4,800 yen is `480000`), and for those two must be a whole unit: round a calculated amount with `roundToStep(cents, currency)`, and never hand an amount to Stripe except through `toStripeAmount`.
+- Chinese is Simplified only (`zh`, `/zh-cn`). Do not add Traditional text to it or send a Traditional-Chinese browser there.
 - Format money with its currency: `money(cents, order.currency)` in the admin, `money(cents, cart.currency)` or `price(variant)` in the shop.
 - A service open to every role uses `requireStaff(ctx)`, not a bare `ctx.admin` check: it also enforces two-factor sign-in.
 - `src/server/environment.ts` is pure and imports nothing: the request proxy and the email channel depend on it. Keep it that way.

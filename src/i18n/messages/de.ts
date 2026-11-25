@@ -72,6 +72,9 @@ export const de: Messages = {
     promptTitle: "Wählen Sie Ihre Sprache",
     promptText: "Sie können dies jederzeit am Seitenende ändern.",
     keep: "{language} beibehalten",
+    shopIn: "Auf Deutsch einkaufen?",
+    viewIn: "Auf Deutsch ansehen",
+    continueIn: "Weiter auf {language}",
   },
   shop: {
     metaTitle: "Alle Produkte",

@@ -141,7 +141,7 @@ export async function activeDiscount(db: Db, cart: LoadedCart, currency: string 
   const code = found && !discountProblem(found, subtotal, new Date(), currency) ? found : null;
   if (!wholesale) return code;
   if (!code) return wholesale;
-  return discountAmount(code, subtotal).discountCents > discountAmount(wholesale, subtotal).discountCents ? code : wholesale;
+  return discountAmount(code, subtotal, currency).discountCents > discountAmount(wholesale, subtotal, currency).discountCents ? code : wholesale;
 }
 
 /** What the storefront shows for a cart. Prices come from the database, never the client. */
@@ -150,7 +150,7 @@ export async function summarise(db: Db, cart: LoadedCart | null, currency: strin
   const lines = toLines(cart, currency);
   const subtotal = subtotalCents(lines);
   const discount = await activeDiscount(db, cart, currency);
-  const { discountCents, freeShipping } = discountAmount(discount, subtotal);
+  const { discountCents, freeShipping } = discountAmount(discount, subtotal, currency);
   return {
     id: cart.id,
     /** Every amount below is in this currency. */

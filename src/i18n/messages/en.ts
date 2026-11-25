@@ -77,6 +77,10 @@ export const en = {
     promptTitle: "Choose your language",
     promptText: "You can change this at any time at the foot of the page.",
     keep: "Keep {language}",
+    /** The offer made to a visitor whose country reads this language, shown on a page in another language. Written in THIS language. */
+    shopIn: "Shop in English?",
+    viewIn: "View in English",
+    continueIn: "Continue in {language}",
   },
   shop: {
     metaTitle: "Shop all",
