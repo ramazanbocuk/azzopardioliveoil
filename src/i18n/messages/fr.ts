@@ -72,6 +72,9 @@ export const fr: Messages = {
     promptTitle: "Choisissez votre langue",
     promptText: "Vous pouvez la modifier à tout moment en bas de page.",
     keep: "Garder {language}",
+    shopIn: "Faire vos achats en français ?",
+    viewIn: "Voir en français",
+    continueIn: "Continuer en {language}",
   },
   shop: {
     metaTitle: "Tous les produits",

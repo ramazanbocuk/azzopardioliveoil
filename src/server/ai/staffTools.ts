@@ -5,9 +5,10 @@ import { inventoryOverview, salesReport } from "../backoffice";
 import { requireAdmin } from "../auth";
 import type { Ctx } from "../context";
 import { AppError } from "../errors";
+import { CURRENCIES } from "@/i18n/currency";
 import { listBackorders, openBackorder, ordersAwaitingFurtherShipment, outstanding, readyToShip } from "../stock";
 import { shipmentWatchlist } from "../tracking";
-import { findTranslatable, mergeTranslationDraft } from "../translations";
+import { TARGET_LANGUAGES, findTranslatable, mergeTranslationDraft } from "../translations";
 import type { AnyTool, Outcome } from "./engine";
 import { PROPOSAL_KINDS, createProposal, proposalReference, type ProposalKind } from "./proposals";
 import type { ToolSpec } from "./provider";
@@ -189,7 +190,7 @@ const salesSummary: Tool = {
   tier: "read",
   spec: { name: "sales_summary", description: "Sales for a period in ONE currency, counted by payment date: orders, gross, VAT, shipping charged, discounts, refunds, average order, best-selling sizes and countries. Null dates give the current month; null currency gives euro. Amounts in different currencies must never be added together: ask once per currency and report them separately.", input_schema: object({ fromDate: nullable("string", "First day, YYYY-MM-DD."), toDate: nullable("string", "Last day, YYYY-MM-DD."), currency: nullable("string", "EUR, USD or GBP. Null for euro.") }) },
   async run(input, { ctx, actions }) {
-    const data = z.object({ fromDate: dateInput, toDate: dateInput, currency: z.enum(["EUR", "USD", "GBP"]).nullable() }).parse(input);
+    const data = z.object({ fromDate: dateInput, toDate: dateInput, currency: z.enum(CURRENCIES).nullable() }).parse(input);
     const report = await salesReport(ctx, { from: data.fromDate ?? undefined, to: data.toDate ?? undefined, currency: data.currency ?? undefined });
     const euros = (cents: number) => amount(cents, report.currency);
     link(actions, "Sales report", "/admin/reports");
@@ -241,10 +242,10 @@ const translatableText: Tool = {
   spec: {
     name: "get_text_to_translate",
     description: "The English text of a product, category or journal article, with the current draft in another language and its state. Call this before draft_translation.",
-    input_schema: object({ kind: { type: "string", enum: ["product", "category", "journal"] }, slug: { type: "string", description: "The record's address name, as in its web address." }, language: { type: "string", enum: ["de", "nl", "fr", "it", "es"] } }),
+    input_schema: object({ kind: { type: "string", enum: ["product", "category", "journal"] }, slug: { type: "string", description: "The record's address name, as in its web address." }, language: { type: "string", enum: [...TARGET_LANGUAGES] } }),
   },
   async run(input, { ctx }) {
-    const data = z.object({ kind: z.enum(["product", "category", "journal"]), slug: z.string().min(1).max(160), language: z.enum(["de", "nl", "fr", "it", "es"]) }).parse(input);
+    const data = z.object({ kind: z.enum(["product", "category", "journal"]), slug: z.string().min(1).max(160), language: z.enum(TARGET_LANGUAGES as [string, ...string[]]) }).parse(input);
     const found = await findTranslatable(ctx, data.kind, data.slug, data.language);
     return {
       result: {
@@ -282,12 +283,12 @@ const draftTranslation: Tool = {
     input_schema: object({
       kind: { type: "string", enum: ["product", "category", "journal"] },
       slug: { type: "string" },
-      language: { type: "string", enum: ["de", "nl", "fr", "it", "es"] },
+      language: { type: "string", enum: [...TARGET_LANGUAGES] },
       fields: { type: "array", description: "The fields you translated.", items: { type: "object", properties: { key: { type: "string" }, text: { type: "string" } }, required: ["key", "text"], additionalProperties: false } },
     }),
   },
   async run(input, { ctx, actions }) {
-    const data = z.object({ kind: z.enum(["product", "category", "journal"]), slug: z.string().min(1).max(160), language: z.enum(["de", "nl", "fr", "it", "es"]), fields: z.array(z.object({ key: z.string().max(60), text: z.string().max(40_000) })).min(1).max(30) }).parse(input);
+    const data = z.object({ kind: z.enum(["product", "category", "journal"]), slug: z.string().min(1).max(160), language: z.enum(TARGET_LANGUAGES as [string, ...string[]]), fields: z.array(z.object({ key: z.string().max(60), text: z.string().max(40_000) })).min(1).max(30) }).parse(input);
     const saved = await mergeTranslationDraft(ctx, data.kind, data.slug, data.language, Object.fromEntries(data.fields.map((field) => [field.key, field.text])));
     const page = link(actions, `Translation of ${saved.title} (${data.language})`, `/admin/translations/${data.kind}/${saved.id}/${data.language}`);
     return { result: { savedAsDraft: saved.saved, page, note: "Saved as a draft. It is NOT published. Tell the person a manager must read it and publish it, and that it has had no native-speaker check." } };

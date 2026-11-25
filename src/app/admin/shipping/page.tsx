@@ -1,3 +1,4 @@
+import { CURRENCIES } from "@/i18n/currency";
 import { Card, Check, Field, Flash, Page, Select, Submit, Table, euros } from "@/components/admin/ui";
 import { requireAdmin } from "@/server/auth";
 import { adminCtx } from "@/server/adminSession";
@@ -45,9 +46,11 @@ export default async function ShippingPage({ searchParams }: PageProps<"/admin/s
             <Field label="Zone name" name="name" required defaultValue={zone.name} />
             <Field label="Countries" name="countries" required defaultValue={zone.countries.join(", ")} hint="Two-letter codes, separated by commas: BE, NL, LU" />
             <Select label="Rates are in" name="currency" defaultValue={zone.currency}>
-              <option value="EUR">EUR</option>
-              <option value="USD">USD</option>
-              <option value="GBP">GBP</option>
+              {CURRENCIES.map((currency) => (
+                <option key={currency} value={currency}>
+                  {currency}
+                </option>
+              ))}
             </Select>
             <Check label="Active" name="isActive" defaultChecked={zone.isActive} />
             <Submit variant="secondary">Save zone</Submit>
@@ -64,9 +67,11 @@ export default async function ShippingPage({ searchParams }: PageProps<"/admin/s
           <Field label="Zone name" name="name" required placeholder="Rest of EU" />
           <Field label="Countries" name="countries" required placeholder="ES, PT, AT" />
           <Select label="Rates are in" name="currency" defaultValue={"EUR"}>
-            <option value="EUR">EUR</option>
-            <option value="USD">USD</option>
-            <option value="GBP">GBP</option>
+            {CURRENCIES.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
           </Select>
           <Check label="Active" name="isActive" defaultChecked />
           <Submit>Create zone</Submit>

@@ -72,6 +72,9 @@ export const it: Messages = {
     promptTitle: "Scegli la tua lingua",
     promptText: "Puoi cambiarla in qualsiasi momento in fondo alla pagina.",
     keep: "Mantieni {language}",
+    shopIn: "Vuole fare acquisti in italiano?",
+    viewIn: "Vedi in italiano",
+    continueIn: "Continua in {language}",
   },
   shop: {
     metaTitle: "Tutti i prodotti",

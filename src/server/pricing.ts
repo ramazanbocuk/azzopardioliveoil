@@ -1,3 +1,5 @@
+import { roundToStep, smallestStep } from "@/i18n/currency";
+
 /**
  * Pure pricing rules. No database, no clock of its own — everything is passed
  * in, so every rule here is unit-tested directly. The server is the only
@@ -53,11 +55,12 @@ export function discountProblem(discount: DiscountRule, subtotal: number, now: D
   return null;
 }
 
-export function discountAmount(discount: DiscountRule | null, subtotal: number): { discountCents: number; freeShipping: boolean } {
+export function discountAmount(discount: DiscountRule | null, subtotal: number, currency = "EUR"): { discountCents: number; freeShipping: boolean } {
   if (!discount) return { discountCents: 0, freeShipping: false };
   switch (discount.kind) {
     case "PERCENT":
-      return { discountCents: Math.round((subtotal * Math.min(100, Math.max(0, discount.value))) / 100), freeShipping: false };
+      // A percentage of a yen or won price is rounded to a whole unit: there is nothing smaller to charge.
+      return { discountCents: roundToStep((subtotal * Math.min(100, Math.max(0, discount.value))) / 100, currency), freeShipping: false };
     case "FIXED":
       return { discountCents: Math.min(subtotal, Math.max(0, discount.value)), freeShipping: false };
     case "FREE_SHIPPING":
@@ -76,8 +79,8 @@ export function applicableRates(rates: RateRule[], weightGrams: number, goodsCen
 }
 
 /** VAT contained in a VAT-inclusive amount. `rateBps` is percent × 100 (6% = 600). */
-export function includedTaxCents(grossCents: number, rateBps: number): number {
-  return Math.round((grossCents * rateBps) / (10000 + rateBps));
+export function includedTaxCents(grossCents: number, rateBps: number, currency = "EUR"): number {
+  return roundToStep((grossCents * rateBps) / (10000 + rateBps), currency);
 }
 
 export type Totals = {
@@ -94,21 +97,22 @@ export type Totals = {
  * and VAT is the portion contained in it. One rate is applied to goods and
  * shipping alike — to be confirmed with the accountant per destination.
  */
-export function computeTotals(input: { lines: Line[]; discount: DiscountRule | null; shippingCents: number; taxRateBps: number | null }): Totals {
+export function computeTotals(input: { lines: Line[]; discount: DiscountRule | null; shippingCents: number; taxRateBps: number | null; currency?: string }): Totals {
   const subtotal = subtotalCents(input.lines);
-  const { discountCents } = discountAmount(input.discount, subtotal);
+  const { discountCents } = discountAmount(input.discount, subtotal, input.currency);
   const totalCents = subtotal - discountCents + input.shippingCents;
   return {
     subtotalCents: subtotal,
     discountCents,
     shippingCents: input.shippingCents,
-    taxCents: input.taxRateBps === null ? null : includedTaxCents(totalCents, input.taxRateBps),
+    taxCents: input.taxRateBps === null ? null : includedTaxCents(totalCents, input.taxRateBps, input.currency),
     totalCents,
   };
 }
 
-/** Splits `total` across `weights` in whole cents, so the parts always add up to the total exactly. */
-export function allocateCents(total: number, weights: number[]): number[] {
+/** Splits `total` across `weights` in whole cents (whole units for yen and won: `step` 100), so the parts always add up to the total exactly. */
+export function allocateCents(total: number, weights: number[], step = 1): number[] {
+  if (step > 1) return allocateCents(Math.round(total / step), weights).map((part) => part * step);
   const sum = weights.reduce((a, b) => a + b, 0);
   if (sum <= 0) return weights.map(() => 0);
   const exact = weights.map((weight) => (total * weight) / sum);
@@ -136,16 +140,17 @@ export type TaxBreakdown = {
  * order's `taxCents`: VAT on shipping is taken first, and the rest is shared
  * across lines by what each costs after discount.
  */
-export function taxBreakdown(input: { lines: Line[]; discountCents: number; shippingCents: number; taxRateBps: number | null }): TaxBreakdown {
+export function taxBreakdown(input: { lines: Line[]; discountCents: number; shippingCents: number; taxRateBps: number | null; currency?: string }): TaxBreakdown {
+  const step = smallestStep(input.currency ?? "EUR");
   const gross = input.lines.map((line) => line.unitPriceCents * line.quantity);
-  const discounts = allocateCents(input.discountCents, gross);
+  const discounts = allocateCents(input.discountCents, gross, step);
   const lineNetCents = gross.map((amount, index) => amount - discounts[index]);
   if (input.taxRateBps === null) return { lineNetCents, lineTaxCents: lineNetCents.map(() => null), shippingTaxCents: null };
 
   const goods = lineNetCents.reduce((a, b) => a + b, 0);
-  const totalTax = includedTaxCents(goods + input.shippingCents, input.taxRateBps);
-  const shippingTaxCents = Math.min(totalTax, includedTaxCents(input.shippingCents, input.taxRateBps));
-  return { lineNetCents, lineTaxCents: allocateCents(totalTax - shippingTaxCents, lineNetCents), shippingTaxCents };
+  const totalTax = includedTaxCents(goods + input.shippingCents, input.taxRateBps, input.currency);
+  const shippingTaxCents = Math.min(totalTax, includedTaxCents(input.shippingCents, input.taxRateBps, input.currency));
+  return { lineNetCents, lineTaxCents: allocateCents(totalTax - shippingTaxCents, lineNetCents, step), shippingTaxCents };
 }
 
 export function orderNumber(sequence: number): string {

@@ -6,7 +6,7 @@ Phase 9 of the platform plan. Built 2026-11-18. **No order has been placed in do
 
 An amount is in exactly one currency. Nothing is ever converted, and amounts in different currencies are never added together.
 
-- A **market** is a group of delivery countries sold to in one currency (`Market`: code, name, currency, countries, open or closed). Currencies: EUR, USD, GBP.
+- A **market** is a group of delivery countries sold to in one currency (`Market`: code, name, currency, countries, open or closed). Currencies: EUR, USD, GBP, KRW, CNY, JPY. Yen and won have no decimals: see `docs/asia-markets.md`.
 - **Euro is the base.** A country in no market is sold to in euro, at the price on the size (`Variant.priceCents`). The shop behaves exactly as before until a market is created.
 - **Other currencies have their own prices**, typed in by the owner per size (`VariantPrice`). A size with no price in a currency is not sold in it: it cannot be added to a cart bound for that market, and a cart that already holds it cannot be checked out there.
 - **The currency follows the delivery country, not the language.** A visitor reading German who has a parcel sent to New York pays in dollars.

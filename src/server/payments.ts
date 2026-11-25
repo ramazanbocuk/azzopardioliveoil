@@ -8,6 +8,20 @@ import { syncOrderStatus } from "./orderStatus";
 import { allocateBackorders } from "./stock";
 import { applyDisputeEvent, applyRefundEvent, type DisputeEvent, type RefundEvent, type SyncResult } from "./paymentSync";
 import { enforce } from "./rateLimit";
+import { hasNoDecimals } from "@/i18n/currency";
+
+/**
+ * Stripe counts yen and won in whole units and everything else in hundredths.
+ * This application stores hundredths for every currency, so these two
+ * functions are the only place the difference exists.
+ */
+export function toStripeAmount(cents: number, currency: string): number {
+  if (!hasNoDecimals(currency.toUpperCase())) return cents;
+  if (cents % 100 !== 0) throw new Error(`An amount in ${currency.toUpperCase()} must be a whole number of units.`);
+  return cents / 100;
+}
+export const fromStripeAmount = (amount: number, currency: string): number => (hasNoDecimals(currency.toUpperCase()) ? amount * 100 : amount);
+const fromStripe = (amount: number | null | undefined, currency: string | null | undefined): number | null => (amount === null || amount === undefined ? null : currency ? fromStripeAmount(amount, currency) : amount);
 
 /**
  * Payments.
@@ -42,7 +56,7 @@ export interface PaymentProvider {
   /** Verifies the signature and translates the event. Throws if the signature is not valid. */
   parseWebhook(rawBody: string, signature: string | null): ProviderEvent;
   /** Returns money for a paid checkout. Resolves with the provider's refund id. */
-  refund?(input: { providerRef: string; amountCents: number; idempotencyKey: string }): Promise<string>;
+  refund?(input: { providerRef: string; amountCents: number; currency: string; idempotencyKey: string }): Promise<string>;
   /** Finds the checkout a provider payment id belongs to, for payments recorded before that id was stored. */
   findCheckoutRef?(intentRef: string): Promise<string | null>;
 }
@@ -62,7 +76,7 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
           // Labels these sessions in the Stripe Dashboard so this checkout flow can be told apart from any later one.
           integration_identifier: "azzopardi-hosted-checkout-qhvxmrtk",
           // One line for the server-computed total, so Stripe can never charge a different amount than the order.
-          line_items: [{ quantity: 1, price_data: { currency: order.currency.toLowerCase(), unit_amount: order.totalCents, product_data: { name: `Azzopardi Olive Oil — order ${order.number}` } } }],
+          line_items: [{ quantity: 1, price_data: { currency: order.currency.toLowerCase(), unit_amount: toStripeAmount(order.totalCents, order.currency), product_data: { name: `Azzopardi Olive Oil — order ${order.number}` } } }],
           customer_email: order.email,
           client_reference_id: order.id,
           metadata: { orderId: order.id, orderNumber: order.number ?? "" },
@@ -76,11 +90,11 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
       return { providerRef: session.id, url: session.url };
     },
 
-    async refund({ providerRef, amountCents, idempotencyKey }) {
+    async refund({ providerRef, amountCents, currency, idempotencyKey }) {
       const session = await stripe.checkout.sessions.retrieve(providerRef);
       const paymentIntent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
       if (!paymentIntent) throw new Error("This checkout has no payment to refund.");
-      const refund = await stripe.refunds.create({ payment_intent: paymentIntent, amount: amountCents }, { idempotencyKey });
+      const refund = await stripe.refunds.create({ payment_intent: paymentIntent, amount: toStripeAmount(amountCents, currency) }, { idempotencyKey });
       return refund.id;
     },
 
@@ -100,14 +114,14 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
         const intentRef = idOf(refund.payment_intent);
         // "pending" counts: the money has left for the customer. Stripe sends refund.failed / refund.updated if it bounces.
         if (!intentRef || refund.status === "requires_action") return none;
-        return { ...base, outcome: "refund", intentRef, refundRef: refund.id, amountCents: refund.amount, currency: refund.currency.toUpperCase(), state: refund.status === "failed" || refund.status === "canceled" ? "failed" : "ok", reason: refund.reason ? refund.reason.replaceAll("_", " ") : null };
+        return { ...base, outcome: "refund", intentRef, refundRef: refund.id, amountCents: fromStripeAmount(refund.amount, refund.currency), currency: refund.currency.toUpperCase(), state: refund.status === "failed" || refund.status === "canceled" ? "failed" : "ok", reason: refund.reason ? refund.reason.replaceAll("_", " ") : null };
       }
       if (event.type === "charge.dispute.created" || event.type === "charge.dispute.updated" || event.type === "charge.dispute.closed" || event.type === "charge.dispute.funds_withdrawn" || event.type === "charge.dispute.funds_reinstated") {
         const dispute = event.data.object;
         const intentRef = idOf(dispute.payment_intent);
         if (!intentRef) return none;
         const due = dispute.evidence_details?.due_by;
-        return { ...base, outcome: "dispute", intentRef, disputeRef: dispute.id, amountCents: dispute.amount, currency: dispute.currency.toUpperCase(), reason: dispute.reason || null, status: dispute.status, evidenceDueAt: due ? new Date(due * 1000) : null, at: new Date(event.created * 1000) };
+        return { ...base, outcome: "dispute", intentRef, disputeRef: dispute.id, amountCents: fromStripeAmount(dispute.amount, dispute.currency), currency: dispute.currency.toUpperCase(), reason: dispute.reason || null, status: dispute.status, evidenceDueAt: due ? new Date(due * 1000) : null, at: new Date(event.created * 1000) };
       }
 
       if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded" && event.type !== "checkout.session.async_payment_failed" && event.type !== "checkout.session.expired") {
@@ -117,7 +131,7 @@ export function createStripeProvider(secretKey: string, webhookSecret: string): 
       // With Adaptive Pricing a customer may pay in their own currency. The session then reports that
       // currency, and the amount we actually asked for sits in currency_conversion; compare against that.
       const asked = session.currency_conversion ? { amount: session.currency_conversion.amount_total, currency: session.currency_conversion.source_currency } : { amount: session.amount_total, currency: session.currency };
-      const detail = { ...base, providerRef: session.id, amountCents: asked.amount, currency: asked.currency?.toUpperCase() ?? null, method: session.payment_method_types?.[0] ?? null, intentRef: idOf(session.payment_intent) };
+      const detail = { ...base, providerRef: session.id, amountCents: fromStripe(asked.amount, asked.currency), currency: asked.currency?.toUpperCase() ?? null, method: session.payment_method_types?.[0] ?? null, intentRef: idOf(session.payment_intent) };
 
       if (event.type === "checkout.session.expired") return { ...detail, outcome: "expired" };
       if (event.type === "checkout.session.async_payment_failed") return { ...detail, outcome: "failed" };

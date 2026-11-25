@@ -6,6 +6,7 @@ import type { Ctx } from "./context";
 import { hashToken, newToken } from "./crypto";
 import type { Db } from "./db";
 import { AppError, parse } from "./errors";
+import { isChargeable } from "@/i18n/currency";
 import { marketFor, priceIn } from "./markets";
 import { applicableRates, computeTotals, orderNumber, taxBreakdown } from "./pricing";
 import { enforce } from "./rateLimit";
@@ -117,9 +118,11 @@ export async function placeOrder(ctx: Ctx, input: unknown) {
   if (!rate) throw new AppError("SHIPPING_UNAVAILABLE", "That shipping method is not available for this address.", "shippingRateId");
 
   const tax = await ctx.db.taxRate.findFirst({ where: { countryCode: data.address.countryCode, isActive: true } });
-  const totals = computeTotals({ lines, discount, shippingCents: rate.priceCents, taxRateBps: tax?.rateBps ?? null });
+  const totals = computeTotals({ lines, discount, shippingCents: rate.priceCents, taxRateBps: tax?.rateBps ?? null, currency });
+  // Yen and won have no smaller coin. Prices and rates are refused on entry if they are not whole units; this is the last check before money is asked for.
+  if (!isChargeable(totals.totalCents, currency)) throw new AppError("BAD_INPUT", "This order's total cannot be charged in its currency. Please contact us.");
 
-  const breakdown = taxBreakdown({ lines, discountCents: totals.discountCents, shippingCents: totals.shippingCents, taxRateBps: tax?.rateBps ?? null });
+  const breakdown = taxBreakdown({ lines, discountCents: totals.discountCents, shippingCents: totals.shippingCents, taxRateBps: tax?.rateBps ?? null, currency });
   const billing = data.billing ?? { ...data.address, company: null, vatNumber: null };
 
   const accessToken = newToken();

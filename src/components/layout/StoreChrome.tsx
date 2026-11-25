@@ -12,7 +12,12 @@ import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 import { customerAssistantState } from "@/server/ai/assistant";
 import { getPrisma } from "@/server/db";
 import { connection } from "next/server";
-import { LanguagePrompt } from "./LocaleSelector";
+import { LANGUAGES } from "@/i18n/config";
+import { MESSAGES } from "@/i18n/messages";
+import { LanguagePrompt, type LanguageOffers } from "./LocaleSelector";
+
+/** Each language's own invitation to read the shop in it. Two short lines per language; the rest of a dictionary stays on the server. */
+const OFFERS: LanguageOffers = Object.fromEntries(LANGUAGES.map((language) => [language, { question: MESSAGES[language].selector.shopIn, accept: MESSAGES[language].selector.viewIn }]));
 import { MainRegion } from "./MainRegion";
 import "lenis/dist/lenis.css";
 
@@ -65,7 +70,7 @@ export async function StoreChrome({ children }: { children: ReactNode }) {
         {m.common.skip}
       </a>
       <Header countries={codes} />
-      <LanguagePrompt />
+      <LanguagePrompt offers={OFFERS} />
       {/* The address is only known per request, so anything that reads it sits behind Suspense; the fallback is the same region without the English-only marker. */}
       <Suspense
         fallback={

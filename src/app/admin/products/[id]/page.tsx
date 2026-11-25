@@ -1,3 +1,4 @@
+import { BASE_CURRENCY, CURRENCIES } from "@/i18n/currency";
 import { Card, Check, Field, Flash, LinkButton, Page, Select, Submit, TextArea, euros } from "@/components/admin/ui";
 import { getProduct } from "@/server/admin";
 import { PHOTOS_PER_PRODUCT, listProductPhotos } from "@/server/backoffice";
@@ -82,8 +83,9 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
                     <Field label="Volume (ml)" name="volumeMl" inputMode="numeric" required defaultValue={variant?.volumeMl} />
                     <Field label="Price (€)" name="priceCents" inputMode="decimal" required defaultValue={euros(variant?.priceCents)} />
                     <Field label="Was (€)" name="compareAtCents" inputMode="decimal" defaultValue={euros(variant?.compareAtCents)} />
-                    <Field label="Price (USD)" name="priceUSD" inputMode="decimal" defaultValue={euros(variant?.prices.find((price) => price.currency === "USD")?.priceCents)} />
-                    <Field label="Price (GBP)" name="priceGBP" inputMode="decimal" defaultValue={euros(variant?.prices.find((price) => price.currency === "GBP")?.priceCents)} />
+                    {CURRENCIES.filter((currency) => currency !== BASE_CURRENCY).map((currency) => (
+                      <Field key={currency} label={`Price (${currency})`} name={`price${currency}`} inputMode="decimal" defaultValue={euros(variant?.prices.find((price) => price.currency === currency)?.priceCents)} />
+                    ))}
                     <Field label="Weight (g)" name="weightGrams" inputMode="numeric" required defaultValue={variant?.weightGrams} />
                     <Field label="Low at" name="lowStockThreshold" inputMode="numeric" defaultValue={variant?.lowStockThreshold ?? 6} />
                     <Field label="Barcode" name="barcode" inputMode="numeric" defaultValue={variant?.barcode ?? ""} />

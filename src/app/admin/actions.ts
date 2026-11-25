@@ -2,6 +2,7 @@
 
 import { refresh, updateTag } from "next/cache";
 import type { AdminRole } from "@/generated/prisma/client";
+import { BASE_CURRENCY, CURRENCIES } from "@/i18n/currency";
 import * as admin from "@/server/admin";
 import * as backoffice from "@/server/backoffice";
 import * as assistantAdmin from "@/server/assistantAdmin";
@@ -170,8 +171,9 @@ export async function saveVariant(productId: string, variantId: string | null, f
   await run(`/admin/products/${productId}`, async (ctx) => {
     const variant = await admin.saveVariant(ctx, productId, variantId, formData(form, { booleans: ["isActive"], euros: ["priceCents", "compareAtCents", "costCents"] }));
     // Prices in the other currencies are typed in, never worked out. An empty field means the size is not sold in that currency.
-    const others = formData(form, { euros: ["priceUSD", "priceGBP"] });
-    for (const currency of ["USD", "GBP"] as const) if (form.has(`price${currency}`)) await markets.setVariantPrice(ctx, variant.id, currency, others[`price${currency}`]);
+    const foreign = CURRENCIES.filter((currency) => currency !== BASE_CURRENCY);
+    const others = formData(form, { euros: foreign.map((currency) => `price${currency}`) });
+    for (const currency of foreign) if (form.has(`price${currency}`)) await markets.setVariantPrice(ctx, variant.id, currency, others[`price${currency}`]);
     updateTag("catalog");
   });
 }

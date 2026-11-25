@@ -1,3 +1,4 @@
+import { CURRENCIES } from "@/i18n/currency";
 import { Badge, Card, Check, Field, Flash, Page, Select, Submit, euros, isoDay } from "@/components/admin/ui";
 import { requireAdmin } from "@/server/auth";
 import { adminCtx } from "@/server/adminSession";
@@ -21,9 +22,11 @@ export default async function DiscountsPage({ searchParams }: PageProps<"/admin/
       </Select>
       <Field label="Value" name="value" inputMode="decimal" defaultValue={discount ? (discount.kind === "FIXED" ? euros(discount.value) : discount.value) : ""} hint="Percent, or euros for an amount. Ignored for free shipping." />
       <Select label="Currency of amounts" name="currency" defaultValue={discount?.currency ?? "EUR"}>
-        <option value="EUR">EUR</option>
-        <option value="USD">USD</option>
-        <option value="GBP">GBP</option>
+        {CURRENCIES.map((currency) => (
+          <option key={currency} value={currency}>
+            {currency}
+          </option>
+        ))}
       </Select>
       <Field label="Minimum order" name="minSubtotalCents" inputMode="decimal" defaultValue={euros(discount?.minSubtotalCents ?? 0)} />
       <Field label="Starts" name="startsAt" type="date" defaultValue={isoDay(discount?.startsAt)} />

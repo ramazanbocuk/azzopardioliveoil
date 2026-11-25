@@ -61,6 +61,44 @@
   --header-h: 4.5rem;
 }
 
+/*
+   Korean, Chinese and Japanese. The two site typefaces have no such letters,
+   so each language names the fonts its readers' own devices carry: nothing is
+   downloaded, and nothing is fetched from a font service (several are not
+   reachable from mainland China). Display type loses its tight tracking, which
+   is drawn for Latin letters and crowds these scripts.
+*/
+:root:lang(ko) {
+  --serif: var(--font-zodiak), "Nanum Myeongjo", "AppleMyungjo", "Noto Serif KR", "Batang", serif;
+  --sans: var(--font-switzer), "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+:root:lang(zh) {
+  --serif: var(--font-zodiak), "Songti SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+  --sans: var(--font-switzer), "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+:root:lang(ja) {
+  --serif: var(--font-zodiak), "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif;
+  --sans: var(--font-switzer), "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
+}
+:root:lang(ko) body {
+  /* Korean breaks between words, not inside them. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+:root:lang(ja) body {
+  line-break: strict;
+}
+:root:is(:lang(ko), :lang(zh), :lang(ja)) :is(.text-display, .text-h1, .text-h2, .text-h3, .prose-azz h2) {
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+:root:is(:lang(ko), :lang(zh), :lang(ja)) .text-display {
+  font-size: clamp(2.5rem, 6.4vw, 7rem);
+}
+:root:is(:lang(ko), :lang(zh), :lang(ja)) .text-label {
+  letter-spacing: 0.08em;
+}
+
 html {
   /* Keeps the scrollbar's space when scrolling is locked (the open menu), so the header and logo do not shift sideways. */
   scrollbar-gutter: stable;
