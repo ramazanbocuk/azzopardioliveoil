@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { PasswordField } from "@/components/admin/PasswordField";
 import { SignInError } from "@/components/admin/SignInError";
+import { ResetLinkFields, SignedOut } from "@/components/admin/SignedOut";
 import { Field, Submit } from "@/components/admin/ui";
 import { Emblem, Logo } from "@/components/brand/Logo";
 import { switzer, zodiak } from "@/lib/fonts";
@@ -10,7 +11,7 @@ import { adminCtx } from "@/server/adminSession";
 import { mustEnrol } from "@/server/auth";
 import { pendingTotp } from "@/server/twoFactor";
 import "../globals.css";
-import { beginTwoFactor, confirmTwoFactor, signIn, signOut } from "./actions";
+import { beginTwoFactor, chooseNewPassword, confirmTwoFactor, forgotPassword, signIn, signOut } from "./actions";
 
 export const metadata: Metadata = {
   title: { default: "Admin", template: "%s — Azzopardi Admin" },
@@ -55,29 +56,85 @@ const NAV = [
   { href: "/admin/settings", label: "System settings" },
 ];
 
+const linkClass = "underline underline-offset-4";
+
+function SignedOutFrame({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="grid min-h-svh place-items-center bg-[#f3f1ea] px-5 py-10 font-sans text-ink">
+      <div className="w-full max-w-sm border border-ink/10 bg-white p-8">
+        <Logo className="h-24" />
+        <h1 className="mt-6 font-serif text-[1.75rem]">{title}</h1>
+        <SignInError />
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function SignIn() {
   return (
-    <div className="grid min-h-svh place-items-center bg-[#f3f1ea] px-5 font-sans text-ink">
-      <form action={signIn} className="w-full max-w-sm border border-ink/10 bg-white p-8">
-        <Logo className="h-24" />
-        <h1 className="mt-6 font-serif text-[1.75rem]">Staff sign-in</h1>
-        <Suspense>
-          <SignInError />
-        </Suspense>
+    <SignedOutFrame title="Staff sign-in">
+      <form action={signIn}>
         <div className="mt-6 space-y-4">
           <Field label="Email address" name="email" type="email" required autoComplete="username" />
           <PasswordField label="Password" name="password" required autoComplete="current-password" />
           <Field label="Authenticator code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} hint="Needed once you have set up two-factor sign-in. On your first sign-in, leave it empty: you will set it up next." />
         </div>
         <Submit className="mt-6 w-full">Sign in</Submit>
-        <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>
-        <p className="text-small mt-6 text-stone-700">
-          <Link href="/" className="underline underline-offset-4">
-            Back to the shop
-          </Link>
-        </p>
       </form>
-    </div>
+      <p className="mt-4">
+        <Link href="/admin?forgot=1" className={linkClass}>
+          Forgot my password
+        </Link>
+      </p>
+      <p className="text-small mt-4 text-stone-700">Sign-in attempts are limited and recorded.</p>
+      <p className="text-small mt-6 text-stone-700">
+        <Link href="/" className={linkClass}>
+          Back to the shop
+        </Link>
+      </p>
+    </SignedOutFrame>
+  );
+}
+
+function ForgotPassword() {
+  return (
+    <SignedOutFrame title="Forgot my password">
+      <p className="mt-4">Enter the email address of your staff account. We send it a link to choose a new password. The link works once, for 30 minutes.</p>
+      <form action={forgotPassword}>
+        <div className="mt-6">
+          <Field label="Email address" name="email" type="email" required autoComplete="username" />
+        </div>
+        <Submit className="mt-6 w-full">Send me the link</Submit>
+      </form>
+      <p className="text-small mt-4 text-stone-700">Your authenticator code is not changed by this. If you have lost your phone as well, ask an administrator to reset it under Security.</p>
+      <p className="text-small mt-6 text-stone-700">
+        <Link href="/admin" className={linkClass}>
+          Back to sign-in
+        </Link>
+      </p>
+    </SignedOutFrame>
+  );
+}
+
+function ChooseNewPassword() {
+  return (
+    <SignedOutFrame title="Choose a new password">
+      <form action={chooseNewPassword}>
+        <ResetLinkFields />
+        <div className="mt-6 space-y-4">
+          <PasswordField label="New password" name="password" required minLength={12} maxLength={128} autoComplete="new-password" />
+          <PasswordField label="Repeat new password" name="repeat" required minLength={12} maxLength={128} autoComplete="new-password" />
+        </div>
+        <p className="text-small mt-3 text-stone-700">At least 12 characters. Every device signed in to this account is signed out.</p>
+        <Submit className="mt-6 w-full">Change password</Submit>
+      </form>
+      <p className="text-small mt-6 text-stone-700">
+        <Link href="/admin" className={linkClass}>
+          Back to sign-in
+        </Link>
+      </p>
+    </SignedOutFrame>
   );
 }
 
@@ -128,7 +185,7 @@ function SetUpTwoFactor({ name, pending }: { name: string; pending: { secret: st
 /** Nothing below this renders without a valid admin session; services re-check on every call. */
 async function Gate({ children }: { children: ReactNode }) {
   const ctx = await adminCtx();
-  if (!ctx.admin) return <SignIn />;
+  if (!ctx.admin) return <SignedOut signIn={<SignIn />} forgot={<ForgotPassword />} reset={<ChooseNewPassword />} />;
   // No part of the panel is shown to a member of staff who has no second factor yet. The services refuse them too.
   if (mustEnrol(ctx.admin)) return <SetUpTwoFactor name={ctx.admin.name} pending={await pendingTotp(ctx)} />;
 

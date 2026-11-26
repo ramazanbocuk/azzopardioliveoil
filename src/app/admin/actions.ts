@@ -16,7 +16,7 @@ import * as system from "@/server/system";
 import * as twoFactor from "@/server/twoFactor";
 import { formData, run } from "@/server/adminSession";
 import { afterResponse } from "@/server/afterResponse";
-import { adminLogin, adminLogout, requireAdmin } from "@/server/auth";
+import { adminLogin, adminLogout, requestStaffPasswordReset, requireAdmin, resetStaffPassword } from "@/server/auth";
 import { getPrisma } from "@/server/db";
 import { processJobs, requeueJob } from "@/server/jobs";
 
@@ -31,6 +31,24 @@ const text = (form: FormData, key: string) => String(form.get(key) ?? "");
 
 export async function signIn(form: FormData) {
   await run("/admin", (ctx) => adminLogin(ctx, { email: text(form, "email"), password: text(form, "password"), code: text(form, "code") }).then(() => undefined), "Signed in.");
+}
+
+/** The same words whether or not the address is a member of staff. The email is sent after the answer, so timing says nothing either. */
+export async function forgotPassword(form: FormData) {
+  await run("/admin?forgot=1", async (ctx) => {
+    await requestStaffPasswordReset(ctx, text(form, "email"));
+    afterResponse(() => processJobs(getPrisma()), "run after staff reset request");
+    return "/admin";
+  }, "If that address is a staff account, a link to choose a new password is on its way. It works for 30 minutes.");
+}
+
+export async function chooseNewPassword(form: FormData) {
+  const link = new URLSearchParams({ reset: text(form, "id"), exp: text(form, "exp"), sig: text(form, "sig") });
+  await run(`/admin?${link}`, async (ctx) => {
+    await resetStaffPassword(ctx, { id: text(form, "id"), exp: text(form, "exp"), sig: text(form, "sig"), password: text(form, "password"), repeat: text(form, "repeat") });
+    afterResponse(() => processJobs(getPrisma()), "run after staff password reset");
+    return "/admin";
+  }, "Your password has been changed and every device has been signed out. Sign in with the new password.");
 }
 
 export async function signOut() {

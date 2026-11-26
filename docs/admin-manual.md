@@ -6,7 +6,7 @@ How to run the shop from the admin panel at `/admin`. For setting up accounts an
 
 Every staff account needs two-factor sign-in. The first time you sign in you are asked to set it up with an authenticator app on your phone; the panel opens once that is done. If you lose the phone, an administrator resets it for you under Security.
 
-Sign in with your email and password. If you have turned on two-factor sign-in (Security), enter the 6-digit code from your authenticator app as well. Five wrong passwords lock an address for 15 minutes. A lost phone: an administrator resets your two-factor sign-in under Security.
+Sign in with your email and password. If you have turned on two-factor sign-in (Security), enter the 6-digit code from your authenticator app as well. Five wrong passwords lock an address for 15 minutes. **Forgot your password?** Choose "Forgot my password" on the sign-in screen and enter your email address. A link arrives by email; it works once, for 30 minutes, and signs out every device. It does not change your authenticator code, which you still need to sign in. The link can only arrive if email sending is set up (and, on the test copy of the shop, if your address is on its allow-list). A lost phone: an administrator resets your two-factor sign-in under Security.
 
 ## The daily round
 
