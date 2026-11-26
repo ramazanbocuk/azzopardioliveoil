@@ -8,7 +8,7 @@ import { refreshTracking } from "./fulfilment";
 import { releaseExpiredReservations } from "./checkout";
 import type { Db } from "./db";
 import { ChannelError, NotConfigured, sendEmail, sendSms, sendWhatsAppTemplate, type Env, type Transport, Withheld } from "./notifications/channels";
-import { contactEmail, customerConfirmationEmail, customerShippedEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, passwordResetEmail, customerRefundEmail, staffAlertEmail, wholesaleApprovedEmail } from "./notifications/messages";
+import { contactEmail, customerConfirmationEmail, customerShippedEmail, newsletterConfirmEmail, ownerEmail, ownerText, ownerWhatsAppParameters, passwordResetEmail, staffPasswordResetEmail, customerRefundEmail, staffAlertEmail, wholesaleApprovedEmail } from "./notifications/messages";
 
 /**
  * Background jobs (the outbox).
@@ -104,6 +104,15 @@ const handlers: Record<string, Handler> = {
     const customer = id ? await db.customer.findUnique({ where: { id } }) : null;
     if (!customer || customer.erasedAt) throw new Skip("The account no longer exists.");
     const email = passwordResetEmail(customer, now);
+    if (!email) throw new NotConfigured("Signed links (APP_SECRET of at least 32 characters)");
+    await sendEmail(email, job.dedupeKey, env, transport);
+  },
+
+  async "email.staff.password.reset"(db, job, { env, transport, now }) {
+    const id = (job.payload as { adminUserId?: string }).adminUserId;
+    const admin = id ? await db.adminUser.findUnique({ where: { id } }) : null;
+    if (!admin || !admin.isActive) throw new Skip("The staff account no longer exists or is switched off.");
+    const email = staffPasswordResetEmail(admin, now);
     if (!email) throw new NotConfigured("Signed links (APP_SECRET of at least 32 characters)");
     await sendEmail(email, job.dedupeKey, env, transport);
   },

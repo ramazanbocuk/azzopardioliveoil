@@ -221,6 +221,31 @@ export function staffAlertEmail(to: string, alert: { subject: string; heading: s
   };
 }
 
+export const STAFF_RESET_MINUTES = 30;
+/** A staff link is signed for a different purpose than a customer's, so neither can ever be used as the other. */
+export const staffResetPurpose = (expiresAt: number, passwordHash: string): string => `staff-${resetPurpose(expiresAt, passwordHash)}`;
+
+/**
+ * The link a member of staff asks for from the sign-in screen. It changes the
+ * password and nothing else: the authenticator code is still needed to sign in.
+ * When the panel has a host of its own, the link points there.
+ */
+export function staffPasswordResetEmail(admin: { id: string; email: string; name: string; passwordHash: string }, now = new Date()): Email | null {
+  const expiresAt = now.getTime() + STAFF_RESET_MINUTES * 60_000;
+  const signature = signLink(staffResetPurpose(expiresAt, admin.passwordHash), admin.id);
+  if (!signature) return null;
+  const host = process.env.ADMIN_HOST?.trim();
+  const link = `${host ? `https://${host}` : appUrl()}/admin?reset=${admin.id}&exp=${expiresAt}&sig=${signature}`;
+  const lines = [`Hello ${admin.name},`, `Someone asked to choose a new password for your Azzopardi staff account. Use this link within ${STAFF_RESET_MINUTES} minutes:`];
+  const after = ["It works once. Your authenticator code is still needed to sign in.", "If you did not ask for this, ignore this email and tell an administrator. Your password has not changed."];
+  return {
+    to: admin.email,
+    subject: "Choose a new password for your Azzopardi staff account",
+    text: [...lines, link, "", ...after].join("\n"),
+    html: layout("Choose a new password", `${lines.map((line) => `<p>${escape(line)}</p>`).join("")}<p><a href="${link}" style="display:inline-block;background:#2f3a22;color:#f4efe4;padding:14px 24px;text-decoration:none;letter-spacing:1px;text-transform:uppercase;font-size:13px">Choose a new password</a></p>${after.map((line) => `<p style="color:#6b6558;font-size:13px">${escape(line)}</p>`).join("")}`),
+  };
+}
+
 export function customerRefundEmail(order: Order, amountCents: number, full: boolean): Email {
   const { t, cash } = speak(order.locale, order.currency);
   const r = t.refund;

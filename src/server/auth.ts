@@ -4,7 +4,7 @@ import { COOKIE, TTL, clearCookie, setCookie, type Ctx, rememberLocale } from ".
 import { LOCALE_COOKIE, isLocale } from "@/i18n/config";
 import { burnPasswordCheck, hashPassword, hashToken, newToken, verifyPassword } from "./crypto";
 import { AppError, parse } from "./errors";
-import { resetPurpose, verifyLink } from "./notifications/messages";
+import { resetPurpose, staffResetPurpose, verifyLink } from "./notifications/messages";
 import { eraseCustomerData } from "./privacy";
 import { can, type Area, type Level } from "./permissions";
 import { enforce } from "./rateLimit";
@@ -153,6 +153,48 @@ export async function adminLogin(ctx: Ctx, input: unknown): Promise<AdminUser> {
   setCookie(ctx, COOKIE.admin, token, TTL.admin, "Strict");
   ctx.admin = admin;
   return admin;
+}
+
+/**
+ * "Forgot my password" on the staff sign-in screen. Answers the same way
+ * whether or not the address belongs to a member of staff, so the form cannot
+ * be used to find out who works here. The email carries a link that works
+ * once, for thirty minutes.
+ */
+export async function requestStaffPasswordReset(ctx: Ctx, rawEmail: string): Promise<void> {
+  await enforce(ctx.db, `admin-reset:ip:${ctx.ip}`, 5, 3600);
+  const address = parse(email, rawEmail);
+  await enforce(ctx.db, `admin-reset:email:${address}`, 3, 3600);
+  const admin = await ctx.db.adminUser.findUnique({ where: { email: address }, select: { id: true, isActive: true } });
+  await ctx.db.auditLog.create({ data: { actorType: "anonymous", action: "admin.password.reset_requested", entity: "AdminUser", entityId: admin?.id ?? null, data: { email: address, known: Boolean(admin?.isActive) }, ip: ctx.ip } });
+  if (!admin || !admin.isActive) return;
+  const window = Math.floor(Date.now() / 600_000); // at most one email per account per ten minutes
+  await ctx.db.outboxJob.createMany({ data: [{ kind: "email.staff.password.reset", dedupeKey: `email.staff.password.reset:${admin.id}:${window}`, payload: { adminUserId: admin.id } }], skipDuplicates: true });
+}
+
+const staffResetInput = z.object({ id: z.string().min(1).max(60), exp: z.coerce.number().int().positive(), sig: z.string().min(1).max(200), password, repeat: z.string().max(128) });
+
+/**
+ * Sets a new staff password from an emailed link. It changes the password
+ * only: the second factor stays, so a stolen mailbox alone does not open the
+ * panel. Every device is signed out, nobody is signed in, and the owners are
+ * told it happened.
+ */
+export async function resetStaffPassword(ctx: Ctx, input: unknown): Promise<void> {
+  const data = parse(staffResetInput, input);
+  await enforce(ctx.db, `admin-reset-use:ip:${ctx.ip}`, 10, 3600);
+  if (data.password !== data.repeat) throw new AppError("BAD_INPUT", "The two passwords do not match.", "repeat");
+  const admin = await ctx.db.adminUser.findUnique({ where: { id: data.id } });
+  if (!admin || !admin.isActive || data.exp < Date.now() || !verifyLink(staffResetPurpose(data.exp, admin.passwordHash), admin.id, data.sig)) throw new AppError("BAD_INPUT", "This link is no longer valid. Ask for a new one from the sign-in screen.");
+
+  await ctx.db.$transaction([
+    ctx.db.adminUser.update({ where: { id: admin.id }, data: { passwordHash: await hashPassword(data.password) } }),
+    ctx.db.adminSession.deleteMany({ where: { adminUserId: admin.id } }),
+    ctx.db.auditLog.create({ data: { actorType: "admin", actorId: admin.id, action: "admin.password.reset", entity: "AdminUser", entityId: admin.id, ip: ctx.ip } }),
+    ctx.db.outboxJob.createMany({ data: [{ kind: "notify.owner.notice", dedupeKey: `notify.owner.notice:staff-password:${admin.id}:${Date.now()}`, payload: { subject: "A staff password was changed by email link", lines: [`The password of ${admin.name} (${admin.email}) was changed with a "forgot my password" link.`, "If this was not expected, switch the account off under Staff & permissions and reset its two-factor sign-in under Security."], path: "/admin/security" } }], skipDuplicates: true }),
+  ]);
+  clearCookie(ctx, COOKIE.admin);
+  ctx.admin = null;
 }
 
 export async function adminLogout(ctx: Ctx): Promise<void> {
