@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { assistantState } from "./ai/assistant";
-import { requireAdmin, twoFactorRequired } from "./auth";
+import { requireAdmin, twoFactorRequired, twoFactorSwitchedOff } from "./auth";
 import type { Ctx } from "./context";
 import type { Db } from "./db";
 import { appEnvironment, type AppEnvironment } from "./environment";
@@ -163,7 +163,8 @@ export async function systemChecks(db: Db, env: Env = process.env, now = new Dat
 
   // Staff sign-in.
   const withoutSecondFactor = await db.adminUser.count({ where: { isActive: true, totpEnabledAt: null } });
-  if (!twoFactorRequired(env)) add("staff", "Staff sign-in", "warning", `Two-factor sign-in is not enforced here (it always is on a production server). ${withoutSecondFactor} active account(s) have none.`);
+  if (twoFactorSwitchedOff(env)) add("staff", "Staff sign-in", "warning", "Two-factor sign-in is switched off on this test site (ADMIN_TWO_FACTOR=off): a password alone opens the admin panel. Remove that setting to make it compulsory again. The live shop cannot switch it off.");
+  else if (!twoFactorRequired(env)) add("staff", "Staff sign-in", "warning", `Two-factor sign-in is not enforced here (it always is on a production server). ${withoutSecondFactor} active account(s) have none.`);
   else add("staff", "Staff sign-in", "ok", withoutSecondFactor > 0 ? `Two-factor sign-in is compulsory. ${withoutSecondFactor} account(s) have not set it up yet and can do nothing else until they do.` : "Two-factor sign-in is compulsory and every active account has it.");
 
   // Configuration basics.
