@@ -354,6 +354,12 @@ describe("two-factor sign-in for staff", () => {
   it("is always compulsory in production, and elsewhere only when asked for", () => {
     expect(twoFactorRequired({ NODE_ENV: "production" })).toBe(true);
     expect(twoFactorRequired({ NODE_ENV: "production", ADMIN_TWO_FACTOR: "optional" })).toBe(true); // there is no off switch in production
+    expect(twoFactorRequired({ NODE_ENV: "production", ADMIN_TWO_FACTOR: "off" })).toBe(true); // nor on the live shop with the staging switch
+    expect(twoFactorRequired({ NODE_ENV: "production", APP_ENV: "production", ADMIN_TWO_FACTOR: "off" })).toBe(true);
+    // A staging copy, and only a staging copy, can switch it off; it is on unless asked otherwise.
+    expect(twoFactorRequired({ NODE_ENV: "production", APP_ENV: "staging" })).toBe(true);
+    expect(twoFactorRequired({ NODE_ENV: "production", APP_ENV: "staging", ADMIN_TWO_FACTOR: "off" })).toBe(false);
+    expect(mustEnrol({ totpEnabledAt: null }, { NODE_ENV: "production", APP_ENV: "staging", ADMIN_TWO_FACTOR: "off" })).toBe(false);
     expect(twoFactorRequired({ NODE_ENV: "development" })).toBe(false);
     expect(twoFactorRequired(required)).toBe(true);
     expect(mustEnrol({ totpEnabledAt: null }, { NODE_ENV: "production" })).toBe(true);

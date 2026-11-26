@@ -7,6 +7,7 @@ import { AppError, parse } from "./errors";
 import { resetPurpose, staffResetPurpose, verifyLink } from "./notifications/messages";
 import { eraseCustomerData } from "./privacy";
 import { can, type Area, type Level } from "./permissions";
+import { appEnvironment } from "./environment";
 import { enforce } from "./rateLimit";
 import { checkSecondFactor } from "./totp";
 
@@ -137,8 +138,9 @@ export async function adminLogin(ctx: Ctx, input: unknown): Promise<AdminUser> {
     throw new AppError("INVALID_CREDENTIALS", INVALID);
   }
   // The password was right; now the second factor, if this account has one. A wrong code counts as a failed sign-in.
+  // Where the owners have switched it off (a staging copy only), no code is asked for, even from an account that has set one up.
   try {
-    checkSecondFactor(admin, data.code);
+    if (!twoFactorSwitchedOff()) checkSecondFactor(admin, data.code);
   } catch (error) {
     if (data.code?.trim()) await ctx.db.auditLog.create({ data: { actorType: "anonymous", action: "admin.login.failed", entity: "AdminUser", entityId: admin.id, data: { email: data.email, reason: "second factor" }, ip: ctx.ip } });
     throw error;
@@ -227,12 +229,22 @@ export function requireAdmin(ctx: Ctx, minimum: Level = "STAFF", area: Area = "g
 const TWO_FACTOR_FIRST = "Set up two-factor sign-in before using the admin panel: Admin → Security.";
 
 /**
- * Two-factor sign-in is compulsory for staff. In production there is no way
- * to switch that off. Outside production (tests, a developer's own machine)
- * it applies only when ADMIN_TWO_FACTOR=required, so a fresh local database
- * is not locked before anyone has a phone enrolled.
+ * The one way two-factor sign-in can be switched off on a deployed site: a
+ * STAGING copy (APP_ENV=staging) with ADMIN_TWO_FACTOR=off. Asked for by the
+ * owners on 2026-11-26 for the test site, "for now". Staging holds test
+ * orders and takes test money only, and refuses to start with a live Stripe
+ * key. The live shop has no such switch: the same variable there does nothing.
  */
-export const twoFactorRequired = (env: Record<string, string | undefined> = process.env): boolean => env.NODE_ENV === "production" || env.ADMIN_TWO_FACTOR === "required";
+export const twoFactorSwitchedOff = (env: Record<string, string | undefined> = process.env): boolean => appEnvironment(env) === "staging" && env.ADMIN_TWO_FACTOR === "off";
+
+/**
+ * Two-factor sign-in is compulsory for staff. On the live shop there is no
+ * way to switch that off; a staging copy can (see above). Outside production
+ * (tests, a developer's own machine) it applies only when
+ * ADMIN_TWO_FACTOR=required, so a fresh local database is not locked before
+ * anyone has a phone enrolled.
+ */
+export const twoFactorRequired = (env: Record<string, string | undefined> = process.env): boolean => !twoFactorSwitchedOff(env) && (env.NODE_ENV === "production" || env.ADMIN_TWO_FACTOR === "required");
 
 /** True when this person must set up a second factor before doing anything else. */
 export const mustEnrol = (admin: Pick<AdminUser, "totpEnabledAt">, env: Record<string, string | undefined> = process.env): boolean => twoFactorRequired(env) && !admin.totpEnabledAt;

@@ -139,6 +139,23 @@ describe("a member of staff who forgot their password", () => {
     expect(await db.outboxJob.count({ where: { kind: "notify.owner.notice", dedupeKey: { startsWith: `notify.owner.notice:staff-password:${admin.id}` } } })).toBe(1);
   });
 
+  it("asks for no code on a test site where the owners switched two-factor off, and still does everywhere else", async () => {
+    const admin = await staff("ADMINISTRATOR");
+    await db.adminUser.update({ where: { id: admin.id }, data: { totpSecret: "not-a-real-secret", totpEnabledAt: new Date() } });
+    const before = { APP_ENV: process.env.APP_ENV, ADMIN_TWO_FACTOR: process.env.ADMIN_TWO_FACTOR };
+    try {
+      process.env.ADMIN_TWO_FACTOR = "off"; // without APP_ENV=staging the switch does nothing
+      expect(await outcome(adminLogin(visitor(), { email: admin.email, password: OLD }))).toBe("INVALID_CREDENTIALS");
+      process.env.APP_ENV = "staging";
+      expect(await outcome(adminLogin(visitor(), { email: admin.email, password: OLD }))).toBe("ok");
+      expect(await outcome(adminLogin(visitor(), { email: admin.email, password: "the wrong password" }))).toBe("INVALID_CREDENTIALS"); // the password is still checked
+      delete process.env.ADMIN_TWO_FACTOR;
+      expect(await outcome(adminLogin(visitor(), { email: admin.email, password: OLD }))).toBe("INVALID_CREDENTIALS"); // staging without the switch: the code is needed
+    } finally {
+      for (const [key, value] of Object.entries(before)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+
   it("limits how often it can be asked for", async () => {
     const admin = await staff("MANAGER");
     const results: string[] = [];

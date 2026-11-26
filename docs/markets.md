@@ -60,7 +60,8 @@ Sales, VAT, payments and the dashboard show **one currency at a time** (euro unl
 
 ## Compulsory two-factor sign-in for staff
 
-- **In production every staff account must have a second factor, and there is no setting that switches this off.** A signed-in member of staff without one sees a single screen, "Set up two-factor sign-in", and nothing else of the panel.
+- **Test site only, since 2026-11-26:** a staging copy (`APP_ENV=staging`) with `ADMIN_TWO_FACTOR=off` asks for no code at all, even from an account that has one. The owners asked for this "for now"; System status shows a warning while it is off. The same setting does nothing on the live shop.
+- **In production every staff account must have a second factor, and on the live shop there is no setting that switches this off.** A signed-in member of staff without one sees a single screen, "Set up two-factor sign-in", and nothing else of the panel.
 - It is enforced on the server as well as on the screen: `requireAdmin` and `requireStaff` refuse every action except setting up the second factor and managing one's own sessions. An administrator without a second factor cannot reset anyone else's.
 - Outside production (tests, a developer's machine) it is enforced only when `ADMIN_TWO_FACTOR=required`, so a fresh local database is not locked before anyone has a phone enrolled. The server prints a warning when it is not being enforced.
 - A lost phone: an administrator resets the person's second factor under Security; they are signed out and set it up again at next sign-in. If the only administrator loses theirs, `npm run admin:set-password` on the server resets the password and clears the second factor.

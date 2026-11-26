@@ -29,7 +29,7 @@ A review of the whole application was done on 2026-11-19; its checklist and resu
 
 ## Known gaps
 
-1. **Two-factor sign-in is compulsory for staff in production** (see `markets.md`). It uses authenticator-app codes only: there are no hardware keys or passkeys, and no recovery codes. A lost phone is reset by an administrator, or from the server with `npm run admin:set-password`.
+1. **Two-factor sign-in is compulsory for staff in production** (see `markets.md`). A staging copy can switch it off with `ADMIN_TWO_FACTOR=off`; the live shop cannot. It uses authenticator-app codes only: there are no hardware keys or passkeys, and no recovery codes. A lost phone is reset by an administrator, or from the server with `npm run admin:set-password`.
 2. **CSP allows inline scripts.** Statically rendered pages cannot carry a per-request nonce. The policy still blocks all third-party script origins, framing and plugins.
 3. **Rate limits are per IP address** as reported by the proxy header. Behind a host that does not set `x-forwarded-for` correctly they would be shared or bypassable; verify at deployment.
 4. **No account lockout notification or new-device email.**
